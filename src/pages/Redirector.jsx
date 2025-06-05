@@ -1,35 +1,36 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabase'
 
 export default function Redirector() {
   const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const redirectUser = async () => {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const userId = sessionData?.session?.user?.id
+    const checkAndRedirect = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
+      const userId = session?.user?.id
       if (!userId) {
         navigate('/auth')
         return
       }
 
-        console.log('🔎 userId:', userId)
+      console.log('🔎 userId:', userId)
 
-        const { data: profile, error } = await supabase
+      const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('role')
         .eq('id', userId)
         .limit(1)
         .maybeSingle()
 
-        console.log('📄 profile result:', profile)
-        console.log('❌ error (if any):', error)
-
+      console.log('📄 profile result:', profile)
+      console.log('❌ error (if any):', error)
 
       if (error || !profile) {
-        console.error('Failed to load user role:', error?.message)
         navigate('/auth')
         return
       }
@@ -43,12 +44,12 @@ export default function Redirector() {
       }
     }
 
-    redirectUser()
+    checkAndRedirect().finally(() => setLoading(false))
   }, [navigate])
 
   return (
     <div className="flex items-center justify-center h-screen text-xl text-gray-600">
-      Loading your dashboard...
+      {loading ? 'Loading your dashboard...' : 'Redirecting...'}
     </div>
   )
 }

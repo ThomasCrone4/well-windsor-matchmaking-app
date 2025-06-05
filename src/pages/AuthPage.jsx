@@ -1,19 +1,28 @@
 import { useState } from 'react'
 import { supabase } from '../utils/supabase'
+import { toast } from 'react-hot-toast'
 
 export default function AuthPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('volunteer')
+  const [name, setName] = useState('')
+  const [location, setLocation] = useState('')
+  const [dob, setDob] = useState('')
   const [isSigningUp, setIsSigningUp] = useState(false)
-  const [error, setError] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setError(null)
+
+    // ✅ Only validate extra fields if signing up
+    if (isSigningUp) {
+      if (!name || !location || (role === 'volunteer' && !dob)) {
+        toast.error('Please fill in all required fields.')
+        return
+      }
+    }
 
     let authResponse
-
     if (isSigningUp) {
       authResponse = await supabase.auth.signUp({ email, password })
     } else {
@@ -21,49 +30,37 @@ export default function AuthPage() {
     }
 
     const { data, error: authError } = authResponse
-
     if (authError) {
-      setError(authError.message)
+      toast.error(authError.message)
       return
     }
 
-    // ✅ Get user ID directly (more reliable than session wait)
     const { data: userData, error: userError } = await supabase.auth.getUser()
-
     if (userError || !userData?.user?.id) {
-      console.error('❌ Failed to get user:', userError?.message)
-      setError('Could not verify user login.')
+      toast.error('Could not verify user login.')
       return
     }
 
     const sessionUserId = userData.user.id
-    console.log('✅ Got user ID from auth:', sessionUserId)
 
     if (isSigningUp) {
-      console.log('📝 Inserting into user_profiles with:', {
+      const profileData = {
         id: sessionUserId,
         role,
-      })
-
-      const { error: insertError } = await supabase.from('user_profiles').insert([
-        {
-          id: sessionUserId,
-          role,
-        },
-      ])
-
-      if (insertError) {
-        console.error('❌ Insert failed:', insertError.message)
-        setError(insertError.message)
-        return
+        name,
+        location,
+        ...(role === 'volunteer' && { dob }),
       }
 
-      console.log('✅ Profile inserted for:', sessionUserId)
+      const { error: insertError } = await supabase.from('user_profiles').insert([profileData])
+      if (insertError) {
+        toast.error(insertError.message)
+        return
+      }
     }
-
-    alert('✅ Success! Check Supabase for the user profile.')
+    console.log('✅ Inserted user profile successfully')
+    toast.success('Success! You are now logged in.')
     window.location.href = '/'
-
   }
 
   return (
@@ -92,17 +89,43 @@ export default function AuthPage() {
         />
 
         {isSigningUp && (
-          <select
-            className="w-full p-2 mb-4 border rounded"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          >
-            <option value="volunteer">Volunteer</option>
-            <option value="organization">Organization</option>
-          </select>
-        )}
+          <>
+            <select
+              className="w-full p-2 mb-3 border rounded"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            >
+              <option value="volunteer">Volunteer</option>
+              <option value="organization">Organization</option>
+            </select>
 
-        {error && <p className="text-red-500 mb-3">{error}</p>}
+            <input
+              type="text"
+              className="w-full p-2 mb-3 border rounded"
+              placeholder="Full Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+
+            <input
+              type="text"
+              className="w-full p-2 mb-3 border rounded"
+              placeholder="Location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+            />
+
+            {role === 'volunteer' && (
+              <input
+                type="date"
+                className="w-full p-2 mb-3 border rounded"
+                placeholder="Date of Birth"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+              />
+            )}
+          </>
+        )}
 
         <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
           {isSigningUp ? 'Create Account' : 'Log In'}
