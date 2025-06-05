@@ -10,6 +10,7 @@ const OpportunitySchema = z.object({
   description: z.string().optional(),
   location: z.string().min(1, 'Location is required'),
   date: z.string().min(1, 'Date is required'),
+  contact: z.string().min(1, 'Contact information is required'),
 })
 
 export default function OrganizationDashboard() {
@@ -44,6 +45,7 @@ export default function OrganizationDashboard() {
         description: data.description,
         location: data.location,
         date_needed: data.date,
+        contact: data.contact,
       },
     ])
 
@@ -96,6 +98,17 @@ export default function OrganizationDashboard() {
             className="w-full p-2 border rounded"
           />
           {errors.date && <p className="text-red-500 text-sm">{errors.date.message}</p>}
+        </div>
+
+        <div>
+          <label className="block font-medium">Preferred Contact Method</label>
+          <input
+            type="text"
+            {...register('contact')}
+            className="w-full p-2 border rounded"
+            placeholder="e.g. Email me at org@example.com"
+          />
+          {errors.contact && <p className="text-red-500 text-sm">{errors.contact.message}</p>}
         </div>
 
         <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
