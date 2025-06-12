@@ -7,15 +7,18 @@ import { Toaster } from 'react-hot-toast'
 
 import AuthPage from './pages/AuthPage'
 import Redirector from './pages/Redirector'
-import UserList from './pages/UserList'
-import OrganizationDashboard from './pages/OrganizationDashboard'
+import UserList from './pages/AdminPages/UserList'
+import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard'
+import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard'
 import OpportunitiesPage from './pages/OpportunitiesPage'
+import VolunteerProfilePage from './pages/VolunteerPages/VolunteerProfilePage'
+import EnquiryPage from './pages/VolunteerPages/EnquiriesPage'
+import PostOpportunity from './pages/OrganizationPages/PostOpportunity'
+import EditOpportunity from './pages/OrganizationPages/EditOpportunity'
+import OrganisationProfilePage from './pages/OrganizationPages/OrganizationProfilePage'
 
 import Navbar from './components/NavBar'
 
-function VolunteerDashboard() {
-  return <h1 className="text-center mt-20 text-3xl">Volunteer Dashboard</h1>
-}
 
 const queryClient = new QueryClient()
 
@@ -32,6 +35,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/organization-dashboard" element={<OrganizationDashboard />} />
           <Route path="/users" element={<UserList />} />
           <Route path="/opportunities" element={<OpportunitiesPage />} />
+          <Route path="/volunteer/profile" element={<VolunteerProfilePage />} />
+          <Route path="/opportunities/:id/enquire" element={<EnquiryPage />} />
+          <Route path="/post-opportunity" element={<PostOpportunity />} />
+          <Route path="/edit-opportunity/:id" element={<EditOpportunity />} />
+          <Route path="/organization/profile" element={<OrganisationProfilePage />} />
         </Routes>
       </BrowserRouter>
       <ReactQueryDevtools initialIsOpen={false} />

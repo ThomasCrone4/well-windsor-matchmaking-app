@@ -1,23 +1,96 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom';
+import { UserCircle } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { supabase } from '../utils/supabase';
 
 export default function Navbar() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Refresh session state automatically when auth state changes
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      queryClient.invalidateQueries(['session']);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [queryClient]);
+
+  // Fetch the logged-in session
+  const { data: sessionData } = useQuery({
+    queryKey: ['session'],
+    queryFn: () => supabase.auth.getSession().then(res => res.data.session),
+  });
+
+  const userId = sessionData?.user?.id;
+
+  // Fetch user role from profile
+  const { data: profileData } = useQuery({
+    queryKey: ['user_profile', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId,
+  });
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
+    window.location.reload(); // Ensure clean state
+  };
+
+  const isLoggedIn = !!userId;
+  const role = profileData?.role;
+  const profileLink =
+    role === 'organization'
+      ? '/organization/profile'
+      : role === 'volunteer'
+      ? '/volunteer/profile'
+      : '/';
+
   return (
     <nav className="bg-white shadow-md py-4 px-6 flex justify-between items-center">
       <Link to="/" className="text-2xl font-bold text-blue-700">
         Well Windsor
       </Link>
 
-      <div className="space-x-50">
+      <div className="flex items-center gap-6">
         <Link to="/" className="text-gray-700 hover:text-blue-600">
           Opportunities
         </Link>
-        <Link to="/auth" className="text-gray-700 hover:text-blue-600">
-          Login / Signup
-        </Link>
-        <Link to="/redirect" className="text-gray-700 hover:text-blue-600">
-          Dashboard
-        </Link>
+
+        {!isLoggedIn ? (
+          <Link to="/auth" className="text-gray-700 hover:text-blue-600">
+            Login / Signup
+          </Link>
+        ) : (
+          <>
+            <Link to="/redirect" className="text-gray-700 hover:text-blue-600">
+              Dashboard
+            </Link>
+
+            <Link to={profileLink} className="text-gray-700 hover:text-blue-600">
+              <UserCircle className="w-6 h-6" />
+            </Link>
+
+            <button
+              onClick={handleLogout}
+              className="text-red-600 hover:underline font-medium"
+            >
+              Log Out
+            </button>
+          </>
+        )}
       </div>
     </nav>
-  )
+  );
 }

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Navigate } from 'react-router-dom'
-import { supabase } from '../utils/supabase'
+import { supabase } from '../../utils/supabase'
 
 export default function UserList() {
   // Get current user's profile
