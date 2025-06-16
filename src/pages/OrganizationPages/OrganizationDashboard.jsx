@@ -2,16 +2,17 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../utils/supabase';
 import { toast } from 'react-hot-toast';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 
 export default function OrganizationDashboard() {
   const [opportunities, setOpportunities] = useState([]);
+  const [applicationsCount, setApplicationsCount] = useState({});
   const [orgId, setOrgId] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchOrgIdAndOpportunities = async () => {
+    const fetchOrgIdAndData = async () => {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user?.id) {
         toast.error('Could not get user ID');
@@ -21,23 +22,42 @@ export default function OrganizationDashboard() {
       const uid = userData.user.id;
       setOrgId(uid);
 
-      const { data, error } = await supabase
+      const { data: ops, error: opsError } = await supabase
         .from('volunteer_opportunities')
         .select('*')
         .eq('org_id', uid)
         .order('created_at', { ascending: false });
 
-      if (error) {
+      if (opsError) {
         toast.error('Failed to load opportunities');
-        console.error(error);
+        console.error(opsError);
       } else {
-        setOpportunities(data);
+        setOpportunities(ops);
+        const ids = ops.map(op => op.id);
+
+        if (ids.length > 0) {
+          const { data: apps, error: appsError } = await supabase
+            .from('applications')
+            .select('opportunity_id');
+
+          if (appsError) {
+            console.error('Error fetching applications:', appsError.message);
+          } else {
+            const countMap = {};
+            for (const app of apps) {
+              if (ids.includes(app.opportunity_id)) {
+                countMap[app.opportunity_id] = (countMap[app.opportunity_id] || 0) + 1;
+              }
+            }
+            setApplicationsCount(countMap);
+          }
+        }
       }
 
       setLoading(false);
     };
 
-    fetchOrgIdAndOpportunities();
+    fetchOrgIdAndData();
   }, []);
 
   const handleDelete = async (id, date_needed) => {
@@ -88,14 +108,7 @@ export default function OrganizationDashboard() {
         <p>📆 <strong>Specific Times Needed:</strong></p>
         <ul className="list-disc list-inside ml-2 space-y-1">
           {blocks.map((block, idx) => {
-            const {
-              days,
-              start_time,
-              end_time,
-              start_date,
-              end_date,
-            } = block;
-
+            const { days, start_time, end_time, start_date, end_date } = block;
             return (
               <li key={idx}>
                 {days?.length > 0 && start_time && end_time ? (
@@ -105,13 +118,11 @@ export default function OrganizationDashboard() {
                 ) : (
                   'Timing info incomplete'
                 )}
-                {start_date && end_date && (
+                {start_date && end_date && isValid(new Date(start_date)) && isValid(new Date(end_date)) && (
                   <>
                     {' '}
-                    (
-                    {format(parseISO(start_date), 'MMM d')} to{' '}
-                    {format(parseISO(end_date), 'MMM d')}
-                    )
+                    ({format(parseISO(start_date), 'MMM d')} to{' '}
+                    {format(parseISO(end_date), 'MMM d')})
                   </>
                 )}
               </li>
@@ -123,7 +134,9 @@ export default function OrganizationDashboard() {
   };
 
   const renderSection = (title, filterStatus) => {
-    const filtered = opportunities.filter(op => op.status === filterStatus);
+    const filtered = opportunities.filter(
+      op => op.status?.toLowerCase() === filterStatus.toLowerCase()
+    );
 
     return (
       <div className="mb-10">
@@ -137,8 +150,14 @@ export default function OrganizationDashboard() {
                 <h3 className="text-lg font-semibold">{op.title}</h3>
                 {op.description && <p>{op.description}</p>}
                 <p className="text-sm text-gray-600">📍 {op.location}</p>
-                <p className="text-sm text-gray-600">📅 {format(new Date(op.date_needed), 'PPP')}</p>
+                {isValid(new Date(op.date_needed)) && new Date(op.date_needed).getFullYear() > 1971 && (
+                  <p className="text-sm text-gray-600">📅 {format(new Date(op.date_needed), 'PPP')}</p>
+                )}
                 <p className="text-sm text-gray-600">📧 {op.contact}</p>
+
+                <p className="text-sm text-gray-600">
+                  👥 Volunteers Needed: {op.volunteers_needed ?? 'Not specified'}
+                </p>
 
                 {op.requires_dbs && (
                   <p className="text-sm text-red-600">🔒 DBS Required</p>
@@ -150,43 +169,67 @@ export default function OrganizationDashboard() {
                   renderWhenNeeded(op.when_needed)
                 )}
 
+                {op.status !== 'draft' && (
+                  <p className="text-sm text-blue-600">
+                    📨 {applicationsCount[op.id] || 0} applicants
+                  </p>
+                )}
+
                 <div className="flex gap-6 mt-2 flex-wrap">
-                  {op.status !== 'active' && (
-                    <button
-                      onClick={() => handleStatusChange(op.id, 'active')}
-                      className="text-green-600 hover:underline"
-                    >
-                      Mark as Active
-                    </button>
+                  {op.status === 'draft' ? (
+                    <>
+                      <button
+                        onClick={() => navigate(`/edit-opportunity/${op.id}`)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(op.id, op.date_needed)}
+                        className="text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        View Applicants
+                      </button>
+
+                      {op.status !== 'active' && (
+                        <button
+                          onClick={() => handleStatusChange(op.id, 'active')}
+                          className="text-green-600 hover:underline"
+                        >
+                          Mark as Active
+                        </button>
+                      )}
+                      {op.status !== 'closed' && (
+                        <button
+                          onClick={() => handleStatusChange(op.id, 'closed')}
+                          className="text-yellow-600 hover:underline"
+                        >
+                          Mark as Closed
+                        </button>
+                      )}
+                      <button
+                        onClick={() => navigate(`/edit-opportunity/${op.id}`)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(op.id, op.date_needed)}
+                        className="text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </>
                   )}
-                  {op.status !== 'closed' && (
-                    <button
-                      onClick={() => handleStatusChange(op.id, 'closed')}
-                      className="text-yellow-600 hover:underline"
-                    >
-                      Mark as Closed
-                    </button>
-                  )}
-                  {op.status !== 'draft' && (
-                    <button
-                      onClick={() => handleStatusChange(op.id, 'draft')}
-                      className="text-gray-600 hover:underline"
-                    >
-                      Mark as Draft
-                    </button>
-                  )}
-                  <button
-                    onClick={() => navigate(`/edit-opportunity/${op.id}`)}
-                    className="text-blue-600 hover:underline"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(op.id, op.date_needed)}
-                    className="text-red-600 hover:underline"
-                  >
-                    Delete
-                  </button>
                 </div>
               </li>
             ))}

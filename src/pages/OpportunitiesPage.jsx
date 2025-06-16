@@ -1,4 +1,3 @@
-// OpportunitiesPage.jsx
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
@@ -11,6 +10,7 @@ export default function OpportunitiesPage() {
   const [filters, setFilters] = useState({ town: 'All', dbs: 'Any', start: 'Any' });
   const [matchedOnly, setMatchedOnly] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,17 +43,19 @@ export default function OpportunitiesPage() {
           date_needed,
           contact,
           requires_dbs,
-          no_longer_available,
           when_needed,
-          generally_needed
+          generally_needed,
+          volunteers_needed,
+          status
         `)
-        .eq('no_longer_available', false)
+        .eq('status', 'active') // ✅ Only show active posts
         .order('date_needed', { ascending: true });
 
       if (error) throw error;
       return data;
     },
   });
+
 
   const handleApply = async (opportunityId) => {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -103,7 +105,9 @@ export default function OpportunitiesPage() {
           (!op.requires_dbs || userProfile.dbs_checked) &&
           (!userProfile.home_town_only || op.location === userProfile.home_town));
 
-      return matchesTown && matchesDBS && matchesStart && matched;
+      const matchesSearch = op.title.toLowerCase().includes(searchTerm.toLowerCase());
+
+      return matchesTown && matchesDBS && matchesStart && matched && matchesSearch;
     });
   };
 
@@ -117,19 +121,26 @@ export default function OpportunitiesPage() {
       <h1 className="text-3xl font-bold mb-6 text-center">Volunteer Opportunities</h1>
 
       <div className="mb-4 flex flex-wrap gap-4 items-center justify-center">
+        <input
+          type="text"
+          placeholder="Search by title..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="p-2 border rounded w-64"
+        />
         <select onChange={(e) => setFilters(f => ({ ...f, town: e.target.value }))} className="p-2 border rounded">
-          <option>All</option>
+          <option>Location</option>
           <option>Windsor</option>
           <option>Maidenhead</option>
           <option>Slough</option>
         </select>
         <select onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))} className="p-2 border rounded">
-          <option>Any</option>
+          <option>DBS status</option>
           <option>DBS Required</option>
           <option>No DBS Required</option>
         </select>
         <select onChange={(e) => setFilters(f => ({ ...f, start: e.target.value }))} className="p-2 border rounded">
-          <option>Any</option>
+          <option>When</option>
           <option>This Week</option>
           <option>This Month</option>
         </select>
@@ -154,6 +165,7 @@ export default function OpportunitiesPage() {
               <h2 className="text-xl font-semibold">{opportunity.title}</h2>
               <p className="text-gray-700">{opportunity.description}</p>
               <div className="text-sm text-gray-600">📍 Location: {opportunity.location}</div>
+              <div className="text-sm text-gray-600">👥 Volunteers Needed: {opportunity.volunteers_needed ?? 'N/A'}</div>
 
               {opportunity.requires_dbs && (
                 <div className="text-sm text-red-600">🔒 DBS Required</div>

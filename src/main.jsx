@@ -1,49 +1,62 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { Toaster } from 'react-hot-toast'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { Toaster } from 'react-hot-toast';
 
-import AuthPage from './pages/AuthPage'
-import Redirector from './pages/Redirector'
-import UserList from './pages/AdminPages/UserList'
-import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard'
-import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard'
-import OpportunitiesPage from './pages/OpportunitiesPage'
-import VolunteerProfilePage from './pages/VolunteerPages/VolunteerProfilePage'
-import EnquiryPage from './pages/VolunteerPages/EnquiriesPage'
-import PostOpportunity from './pages/OrganizationPages/PostOpportunity'
-import EditOpportunity from './pages/OrganizationPages/EditOpportunity'
-import OrganisationProfilePage from './pages/OrganizationPages/OrganizationProfilePage'
+import './index.css';
 
-import Navbar from './components/NavBar'
+import AuthPage from './pages/AuthPage';
+import Redirector from './pages/Redirector';
+import UserList from './pages/AdminPages/UserList';
+import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard';
+import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard';
+import OpportunitiesPage from './pages/OpportunitiesPage';
+import VolunteerProfilePage from './pages/VolunteerPages/VolunteerProfilePage';
+import EnquiryPage from './pages/VolunteerPages/EnquiriesPage';
+import PostOpportunity from './pages/OrganizationPages/PostOpportunity';
+import EditOpportunity from './pages/OrganizationPages/EditOpportunity';
+import OrganizationProfilePage from './pages/OrganizationPages/OrganizationProfilePage';
+import OpportunityApplicantsPage from './pages/OrganizationPages/OpportunityApplicantsPage';
 
+import Navbar from './components/NavBar';
+import Footer from './components/Footer';
+import { SessionProvider } from './context/SessionContext';
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Navbar />
-        <Routes>
-          <Route path="/" element={<OpportunitiesPage />} /> {/* ✅ New homepage */}
-          <Route path="/auth" element={<AuthPage />} />
-          <Route path="/redirect" element={<Redirector />} /> {/* ✅ Moved redirect logic here */}
-          <Route path="/volunteer-dashboard" element={<VolunteerDashboard />} />
-          <Route path="/organization-dashboard" element={<OrganizationDashboard />} />
-          <Route path="/users" element={<UserList />} />
-          <Route path="/opportunities" element={<OpportunitiesPage />} />
-          <Route path="/volunteer/profile" element={<VolunteerProfilePage />} />
-          <Route path="/opportunities/:id/enquire" element={<EnquiryPage />} />
-          <Route path="/post-opportunity" element={<PostOpportunity />} />
-          <Route path="/edit-opportunity/:id" element={<EditOpportunity />} />
-          <Route path="/organization/profile" element={<OrganisationProfilePage />} />
-        </Routes>
-      </BrowserRouter>
-      <ReactQueryDevtools initialIsOpen={false} />
-      <Toaster position="top-right" />
+      <SessionProvider>
+        <BrowserRouter>
+          <div className="min-h-screen flex flex-col">
+            <Navbar />
+            <div className="flex-grow">
+              <Routes>
+                <Route path="/" element={<OpportunitiesPage />} />
+                <Route path="/auth" element={<AuthPage />} />
+                <Route path="/redirect" element={<Redirector />} />
+                <Route path="/volunteer-dashboard" element={<VolunteerDashboard />} />
+                <Route path="/organization-dashboard" element={<OrganizationDashboard />} />
+                <Route path="/users" element={<UserList />} />
+                <Route path="/opportunities" element={<OpportunitiesPage />} />
+                <Route path="/volunteer/profile" element={<VolunteerProfilePage />} />
+                <Route path="/opportunities/:id/enquire" element={<EnquiryPage />} />
+                <Route path="/post-opportunity" element={<PostOpportunity />} />
+                <Route path="/edit-opportunity/:id" element={<EditOpportunity />} />
+                <Route path="/organization/profile" element={<OrganizationProfilePage />} />
+                <Route path="/opportunity/:id/applicants" element={<OpportunityApplicantsPage />} />
+              </Routes>
+            </div>
+            <Footer />
+          </div>
+        </BrowserRouter>
+
+        <ReactQueryDevtools initialIsOpen={false} />
+        <Toaster position="top-right" />
+      </SessionProvider>
     </QueryClientProvider>
   </React.StrictMode>
-)
+);

@@ -1,4 +1,3 @@
-// EditOpportunity.jsx
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,60 +5,68 @@ import { supabase } from '../../utils/supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import AvailabilityMatrix from '../../components/AvailabilityMatrix';
+import useUnsavedChangesWarning from '../../hooks/useUnsavedWarning';
 
-const schema = z.object({
-  title: z.string().min(2),
-  description: z.string().min(10),
-  location: z.string().min(2),
-  contact: z.string().min(3),
-  skills: z.string().optional(),
-  when_needed: z
-    .array(
-      z.object({
-        days: z.array(z.string()),
-        start_time: z.string(),
-        end_time: z.string(),
-        start_date: z.string(),
-        end_date: z.string(),
-      })
-    )
-    .nullable()
-    .optional(),
-  generally_needed: z.boolean(),
-  requires_dbs: z.boolean(),
-  no_longer_available: z.boolean().optional(),
-});
+const getSchema = (isDraft) =>
+  z.object({
+    title: isDraft ? z.string().optional() : z.string().min(2, 'Title is required'),
+    description: z.string().optional(),
+    location: isDraft ? z.string().optional() : z.string().min(2, 'Location is required'),
+    contact: isDraft ? z.string().optional() : z.string().min(3, 'Contact mail is required'),
+    skills: z.string().optional(),
+    volunteers_needed: isDraft
+      ? z.coerce.number().optional()
+      : z.coerce.number().min(1, 'Must be at least 1'),
+    when_needed: z
+      .array(
+        z.object({
+          days: z.array(z.string()),
+          start_time: z.string(),
+          end_time: z.string(),
+          start_date: z.string(),
+          end_date: z.string(),
+        })
+      )
+      .nullable()
+      .optional(),
+    generally_needed: z.boolean(),
+    requires_dbs: z.boolean(),
+  });
 
 export default function EditOpportunity() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const originalData = useRef(null);
+  const [isDraft, setIsDraft] = useState(false);
 
   const {
     register,
     handleSubmit,
-    setValue,
     reset,
     watch,
     control,
-    formState: { errors, isSubmitting },
+    setError,
+    formState: { errors, isSubmitting, isDirty },
   } = useForm({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(getSchema(isDraft)),
     defaultValues: {
       title: '',
       description: '',
       location: '',
       contact: '',
       skills: '',
+      volunteers_needed: 1,
       generally_needed: true,
       when_needed: [],
       requires_dbs: false,
-      no_longer_available: false,
     },
   });
+
+  useUnsavedChangesWarning(isDirty);
 
   const { data: opportunity, isLoading } = useQuery({
     queryKey: ['opportunity', id],
@@ -78,8 +85,21 @@ export default function EditOpportunity() {
   useEffect(() => {
     if (opportunity) {
       reset(opportunity);
+      originalData.current = opportunity;
+      setIsDraft(opportunity.status === 'draft');
     }
   }, [opportunity, reset]);
+
+  useEffect(() => {
+    const beforeUnload = (e) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [isDirty]);
 
   const mutation = useMutation({
     mutationFn: async (formData) => {
@@ -101,78 +121,81 @@ export default function EditOpportunity() {
     },
   });
 
-  const generallyNeeded = watch('generally_needed');
-  const requiresDbs = watch('requires_dbs');
-
-  const onSubmit = (formData) => {
-    const cleanData = {
-      title: formData.title,
-      description: formData.description,
-      location: formData.location,
-      contact: formData.contact,
+  const handleSave = (formData, statusOverride = null) => {
+    const updateData = {
+      title: formData.title ?? '',
+      description: formData.description ?? '',
+      location: formData.location ?? '',
+      contact: formData.contact ?? '',
       skills: formData.skills || null,
+      volunteers_needed: formData.volunteers_needed,
       generally_needed: formData.generally_needed,
       when_needed: formData.generally_needed ? null : formData.when_needed,
       requires_dbs: formData.requires_dbs,
-      no_longer_available: formData.no_longer_available,
     };
 
-    console.log('Submitting clean PATCH:', cleanData);
-    mutation.mutate(cleanData);
+    if (statusOverride) updateData.status = statusOverride;
+
+    mutation.mutate(updateData);
   };
+
+  const handleDiscard = () => {
+    if (window.confirm('Are you sure you want to discard changes?')) {
+      reset(originalData.current);
+      toast('Changes discarded.');
+      navigate('/organization-dashboard');
+    }
+  };
+
+  const generallyNeeded = watch('generally_needed');
 
   return (
     <div className="max-w-3xl mx-auto mt-10 p-6 bg-white rounded shadow">
       <h1 className="text-2xl font-bold mb-6 text-blue-700">Edit Opportunity</h1>
+
       {isLoading ? (
         <p>Loading opportunity...</p>
       ) : (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <form className="space-y-5">
           <div>
             <label className="block font-semibold">Title</label>
-            <input
-              type="text"
-              {...register('title')}
-              className="w-full border rounded px-3 py-2 mt-1"
-            />
+            <input {...register('title')} className="w-full border rounded px-3 py-2 mt-1" />
             {errors.title && <p className="text-red-500 text-sm">{errors.title.message}</p>}
           </div>
 
           <div>
             <label className="block font-semibold">Description</label>
-            <textarea
-              {...register('description')}
-              className="w-full border rounded px-3 py-2 mt-1"
-            />
+            <textarea {...register('description')} className="w-full border rounded px-3 py-2 mt-1" />
             {errors.description && <p className="text-red-500 text-sm">{errors.description.message}</p>}
           </div>
 
           <div>
             <label className="block font-semibold">Location</label>
-            <input
-              type="text"
-              {...register('location')}
-              className="w-full border rounded px-3 py-2 mt-1"
-            />
+            <input {...register('location')} className="w-full border rounded px-3 py-2 mt-1" />
           </div>
 
           <div>
-            <label className="block font-semibold">Contact Method</label>
-            <input
-              type="text"
-              {...register('contact')}
-              className="w-full border rounded px-3 py-2 mt-1"
-            />
+            <label className="block font-semibold">Contact Email</label>
+            <input {...register('contact')} className="w-full border rounded px-3 py-2 mt-1" />
             {errors.contact && <p className="text-red-500 text-sm">{errors.contact.message}</p>}
           </div>
 
           <div>
             <label className="block font-semibold">Skills (optional)</label>
+            <input {...register('skills')} className="w-full border rounded px-3 py-2 mt-1" />
+          </div>
+
+          <div>
+            <label className="block font-semibold">Number of Volunteers Needed</label>
             <input
-              type="text"
-              {...register('skills')}
+              type="number"
+              min={1}
+              {...register('volunteers_needed')}
               className="w-full border rounded px-3 py-2 mt-1"
             />
+            {errors.volunteers_needed && (
+              <p className="text-red-500 text-sm">{errors.volunteers_needed.message}</p>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -199,19 +222,52 @@ export default function EditOpportunity() {
             <input type="checkbox" {...register('requires_dbs')} id="requires_dbs" />
             <label htmlFor="requires_dbs" className="font-semibold">Requires DBS Check</label>
           </div>
+          
+          <div className="flex flex-wrap gap-4 pt-4 items-center">
+            {isDraft && (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleSubmit((data) => {
+                  const requiredSchema = getSchema(false); // strict validation
+                  const result = requiredSchema.safeParse(data);
 
-          <div className="flex items-center gap-2">
-            <input type="checkbox" {...register('no_longer_available')} id="closed" />
-            <label htmlFor="closed" className="font-semibold">Mark as No Longer Available</label>
+                  if (!result.success) {
+                    const fieldErrors = result.error.flatten().fieldErrors;
+                    Object.entries(fieldErrors).forEach(([field, messages]) => {
+                      if (messages && messages.length > 0) {
+                        setError(field, { type: 'manual', message: messages[0] });
+                      }
+                    });
+                    toast.error('Please fill in all required fields before posting.');
+                    return;
+                  }
+
+                  handleSave(data, 'active');
+                })}
+                className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700"
+              >
+                Post Opportunity
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={handleSubmit((data) => handleSave(data))}
+              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+            >
+              Save Changes
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDiscard}
+              className="text-gray-700 border border-gray-400 px-6 py-2 rounded hover:bg-gray-100"
+            >
+              Discard Changes
+            </button>
           </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-          >
-            {isSubmitting ? 'Saving...' : 'Save Changes'}
-          </button>
         </form>
       )}
     </div>

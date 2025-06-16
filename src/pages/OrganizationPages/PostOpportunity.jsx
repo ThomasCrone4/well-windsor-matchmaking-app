@@ -1,24 +1,31 @@
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
 import toast from 'react-hot-toast';
 import AvailabilityMatrix from '../../components/AvailabilityMatrix';
 import { useNavigate } from 'react-router-dom';
 
-const OpportunitySchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  description: z.string().optional(),
-  location: z.string().min(1, 'Location is required'),
-  contact: z.string().min(1, 'Contact method is required'),
-  generally_needed: z.boolean(),
-  when_needed: z.any(),
-  requires_dbs: z.boolean(),
-  dbs_mandatory: z.boolean(),
-});
+const getOpportunitySchema = (isDraft) =>
+  z.object({
+    title: isDraft ? z.string().optional() : z.string().min(1, 'Title is required'),
+    description: z.string().optional(),
+    location: isDraft ? z.string().optional() : z.string().min(1, 'Location is required'),
+    contact: isDraft ? z.string().optional() : z.string().min(1, 'Contact method is required'),
+    generally_needed: z.boolean(),
+    when_needed: z.any(),
+    requires_dbs: z.boolean(),
+    volunteers_needed: z.coerce.number().min(1, 'Must be at least 1 volunteer'),
+  });
 
 export default function PostOpportunity() {
+  const navigate = useNavigate();
+  const [orgId, setOrgId] = useState(null);
+  const [isDraft, setIsDraft] = useState(false);
+
+  const schema = useMemo(() => getOpportunitySchema(isDraft), [isDraft]);
+
   const {
     register,
     handleSubmit,
@@ -27,7 +34,7 @@ export default function PostOpportunity() {
     reset,
     formState: { errors },
   } = useForm({
-    resolver: zodResolver(OpportunitySchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       title: '',
       description: '',
@@ -36,15 +43,11 @@ export default function PostOpportunity() {
       generally_needed: true,
       when_needed: [],
       requires_dbs: false,
-      dbs_mandatory: false,
+      volunteers_needed: 1,
     },
   });
 
-  const navigate = useNavigate();
-  const [orgId, setOrgId] = useState(null);
-
   const generallyNeeded = watch('generally_needed');
-  const requiresDbs = watch('requires_dbs');
 
   useEffect(() => {
     const fetchOrgId = async () => {
@@ -58,37 +61,41 @@ export default function PostOpportunity() {
     fetchOrgId();
   }, []);
 
-  const onSubmit = async (data) => {
+  const submitOpportunity = async (data, status) => {
     if (!orgId) {
       toast.error('Organization ID not loaded');
       return;
     }
 
-    if (!data.generally_needed && (!data.when_needed || data.when_needed.length === 0)) {
+    if (
+      !data.generally_needed &&
+      (!data.when_needed || data.when_needed.length === 0) &&
+      status !== 'draft'
+    ) {
       toast.error('Please specify availability schedule or mark as Generally Needed');
       return;
     }
 
     const postData = {
       org_id: orgId,
-      title: data.title,
-      description: data.description,
-      location: data.location,
-      contact: data.contact,
+      title: data.title || '',
+      description: data.description || '',
+      location: data.location || '',
+      contact: data.contact || '',
       generally_needed: data.generally_needed,
       when_needed: data.generally_needed ? null : data.when_needed,
       requires_dbs: data.requires_dbs,
-      dbs_mandatory: data.dbs_mandatory,
-      no_longer_available: false,
+      volunteers_needed: data.volunteers_needed,
+      status,
     };
 
     const { error } = await supabase.from('volunteer_opportunities').insert([postData]);
 
     if (error) {
-      toast.error(`Failed to post opportunity: ${error.message}`);
+      toast.error(`Failed to save opportunity: ${error.message}`);
     } else {
-      toast.success('Opportunity posted!');
-      setTimeout(() => navigate('/organization-dashboard'), 1000);
+      toast.success(status === 'draft' ? 'Saved as draft!' : 'Opportunity posted!');
+      navigate('/organization-dashboard');
     }
   };
 
@@ -96,7 +103,7 @@ export default function PostOpportunity() {
     <div className="max-w-2xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6 text-center">Post a New Opportunity</h1>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 bg-white p-6 rounded shadow">
+      <form className="space-y-4 bg-white p-6 rounded shadow">
         <div>
           <label className="block font-medium">Title</label>
           <input {...register('title')} className="w-full p-2 border rounded" />
@@ -115,13 +122,26 @@ export default function PostOpportunity() {
         </div>
 
         <div>
-          <label className="block font-medium">Contact Method</label>
+          <label className="block font-medium">Contact Email</label>
           <input
             {...register('contact')}
             placeholder="e.g. email@org.com"
             className="w-full p-2 border rounded"
           />
           {errors.contact && <p className="text-red-500 text-sm">{errors.contact.message}</p>}
+        </div>
+
+        <div>
+          <label className="block font-medium">Number of Volunteers Needed</label>
+          <input
+            type="number"
+            min={1}
+            {...register('volunteers_needed')}
+            className="w-full p-2 border rounded"
+          />
+          {errors.volunteers_needed && (
+            <p className="text-red-500 text-sm">{errors.volunteers_needed.message}</p>
+          )}
         </div>
 
         <label className="block">
@@ -147,19 +167,35 @@ export default function PostOpportunity() {
           {' '}Requires DBS check
         </label>
 
-        {requiresDbs && (
-          <label className="block ml-4">
-            <input type="checkbox" {...register('dbs_mandatory')} />
-            {' '}DBS is mandatory (not just preferred)
-          </label>
-        )}
+        <div className="space-y-4 pt-6">
+          <button
+            type="submit"
+            onClick={(e) => {
+              e.preventDefault();
+              setIsDraft(false);
+              setTimeout(() => {
+                handleSubmit((data) => submitOpportunity(data, 'Active'))();
+              }, 0);
+            }}
+            className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
+          >
+            Post Opportunity
+          </button>
 
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-        >
-          Post Opportunity
-        </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              setIsDraft(true);
+              setTimeout(() => {
+                handleSubmit((data) => submitOpportunity(data, 'draft'))();
+              }, 0);
+            }}
+            className="w-full bg-gray-300 text-gray-800 py-3 rounded hover:bg-gray-400"
+          >
+            Save as Draft
+          </button>
+        </div>
       </form>
     </div>
   );

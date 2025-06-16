@@ -1,11 +1,12 @@
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { supabase } from '../../utils/supabase';
 import AvailabilityMatrix from '../../components/AvailabilityMatrix';
 import toast from 'react-hot-toast';
+import useUserProfile from '../../hooks/useUserProfile';
 
 const profileSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -21,43 +22,8 @@ const profileSchema = z.object({
 });
 
 export default function VolunteerProfilePage() {
-  const [profileData, setProfileData] = useState(null);
   const [hydrated, setHydrated] = useState(false);
-
-  const sessionQuery = useQuery({
-    queryKey: ['session'],
-    queryFn: async () => {
-      const { data, error } = await supabase.auth.getUser();
-      if (error) throw error;
-      return data.user;
-    },
-  });
-
-
-  const sessionData = sessionQuery.data;
-  const userId = sessionData?.id;
-
-  const profileQuery = useQuery({
-    queryKey: ['user_profile', userId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .limit(1);
-
-      if (error) {
-        console.error('🔥 Supabase fetch error:', error.message);
-        return null;
-      }
-
-      return data?.[0] ?? null;
-    },
-    enabled: !!userId,
-    onSuccess: (data) => {
-      setProfileData(data);
-    },
-  });
+  const { userId, profile, loading } = useUserProfile();
 
   const {
     register,
@@ -74,47 +40,30 @@ export default function VolunteerProfilePage() {
   const availableAnytime = watch('available_anytime');
 
   useEffect(() => {
-    if (!hydrated && profileData !== undefined) {
-      console.log('💾 Resetting with profileData:', profileData);
-
-      if (profileData === null) {
-        // fallback defaults if no profile found
-        
-        reset({
-          name: '',
-          contact_number: '',
-          home_town: '',
-          dob: '',
-          skills: '',
-          dbs_checked: false,
-          available_anytime: true,
-          availability_matrix: [],
-          home_town_only: false,
-          auto_enquiry_opt_in: false,
-        });
-      } else {
-        reset({
-          name: profileData.name ?? '',
-          contact_number: profileData.contact_number ?? '',
-          home_town: profileData.home_town ?? '',
-          dob: profileData.dob ?? '',
-          skills: profileData.skills ?? '',
-          dbs_checked: !!profileData.dbs_checked,
-          available_anytime: profileData.available_anytime ?? true,
-          availability_matrix: profileData.available_anytime ? [] : profileData.availability_matrix ?? [],
-          home_town_only: !!profileData.home_town_only,
-          auto_enquiry_opt_in: !!profileData.auto_enquiry_opt_in,
-        });
-      }
+    if (!hydrated && profile !== undefined) {
+      reset({
+        name: profile?.name ?? '',
+        contact_number: profile?.contact_number ?? '',
+        home_town: profile?.home_town ?? '',
+        dob: profile?.dob ?? '',
+        skills: profile?.skills ?? '',
+        dbs_checked: !!profile?.dbs_checked,
+        available_anytime: profile?.available_anytime ?? true,
+        availability_matrix: profile?.available_anytime ? [] : profile?.availability_matrix ?? [],
+        home_town_only: !!profile?.home_town_only,
+        auto_enquiry_opt_in: !!profile?.auto_enquiry_opt_in,
+      });
       setHydrated(true);
     }
-  }, [profileData, hydrated, reset]);
+  }, [profile, hydrated, reset]);
 
   const mutation = useMutation({
     mutationFn: async (formData) => {
       const update = {
         ...formData,
-        availability_matrix: formData.available_anytime ? [] : formData.availability_matrix ?? [],
+        availability_matrix: formData.available_anytime
+          ? []
+          : formData.availability_matrix ?? [],
       };
 
       const { error } = await supabase
@@ -137,10 +86,7 @@ export default function VolunteerProfilePage() {
     mutation.mutate(data);
   };
 
-  const sessionLoading = sessionQuery.isLoading;
-  const profileLoading = profileQuery.isLoading;
-
-  if (sessionLoading || profileLoading || !hydrated) {
+  if (loading || !hydrated) {
     return <p className="text-center mt-8">Loading profile...</p>;
   }
 

@@ -3,15 +3,19 @@ import { UserCircle } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '../utils/supabase';
+import { useSession } from '../context/SessionContext';
 
 export default function Navbar() {
+  const { session } = useSession();
+  const userId = session?.user?.id;
+
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Refresh session state automatically when auth state changes
+  // Listen for auth changes and refresh profile query
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(() => {
-      queryClient.invalidateQueries(['session']);
+      queryClient.invalidateQueries(['user_profile']);
     });
 
     return () => {
@@ -19,21 +23,13 @@ export default function Navbar() {
     };
   }, [queryClient]);
 
-  // Fetch the logged-in session
-  const { data: sessionData } = useQuery({
-    queryKey: ['session'],
-    queryFn: () => supabase.auth.getSession().then(res => res.data.session),
-  });
-
-  const userId = sessionData?.user?.id;
-
-  // Fetch user role from profile
+  // Load full profile
   const { data: profileData } = useQuery({
     queryKey: ['user_profile', userId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('role')
+        .select('*') // 👈 load all profile fields
         .eq('id', userId)
         .single();
       if (error) throw error;
@@ -45,7 +41,7 @@ export default function Navbar() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/');
-    window.location.reload(); // Ensure clean state
+    window.location.reload();
   };
 
   const isLoggedIn = !!userId;
@@ -78,7 +74,7 @@ export default function Navbar() {
               Dashboard
             </Link>
 
-            <Link to={profileLink} className="text-gray-700 hover:text-blue-600">
+            <Link to={profileLink} className="text-gray-700 hover:text-blue-600 flex items-center gap-1">
               <UserCircle className="w-6 h-6" />
             </Link>
 

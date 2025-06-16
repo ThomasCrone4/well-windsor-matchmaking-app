@@ -1,10 +1,11 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQuery, useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
+import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 import toast from 'react-hot-toast';
+import useUserProfile from '../../hooks/useUserProfile';
 
 const orgSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -15,38 +16,7 @@ const orgSchema = z.object({
 
 export default function OrganisationProfilePage() {
   const [hydrated, setHydrated] = useState(false);
-  const [orgData, setOrgData] = useState(null);
-
-  const sessionQuery = useQuery({
-    queryKey: ['session'],
-    queryFn: () => supabase.auth.getSession().then(res => res.data.session),
-  });
-
-  const sessionData = sessionQuery.data;
-  const userId = sessionData?.user?.id;
-
-  const profileQuery = useQuery({
-    queryKey: ['org_profile', userId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .eq('role', 'organization')
-        .single();
-
-      if (error) {
-        console.error('🔥 Supabase fetch error:', error.message);
-        return null;
-      }
-
-      return data ?? null;
-    },
-    enabled: !!userId,
-    onSuccess: (data) => {
-      setOrgData(data);
-    },
-  });
+  const { userId, profile, loading } = useUserProfile();
 
   const {
     register,
@@ -59,16 +29,16 @@ export default function OrganisationProfilePage() {
   });
 
   useEffect(() => {
-    if (!hydrated && orgData !== undefined) {
+    if (!hydrated && profile && profile.role === 'organization') {
       reset({
-        name: orgData?.name ?? '',
-        town: orgData?.town ?? '',
-        contact_number: orgData?.contact_number ?? '',
-        contact_email: orgData?.contact_email ?? '',
+        name: profile.name ?? '',
+        town: profile.town ?? '',
+        contact_number: profile.contact_number ?? '',
+        contact_email: profile.contact_email ?? '',
       });
       setHydrated(true);
     }
-  }, [orgData, hydrated, reset]);
+  }, [profile, hydrated, reset]);
 
   const mutation = useMutation({
     mutationFn: async (formData) => {
@@ -76,7 +46,6 @@ export default function OrganisationProfilePage() {
         .from('user_profiles')
         .update(formData)
         .eq('id', userId)
-        .eq('role', 'organization');
 
       if (error) throw error;
     },
@@ -88,9 +57,7 @@ export default function OrganisationProfilePage() {
     mutation.mutate(data);
   };
 
-  const isLoading = sessionQuery.isLoading || profileQuery.isLoading || !hydrated;
-
-  if (isLoading) {
+  if (loading || !hydrated) {
     return <p className="text-center mt-8">Loading profile...</p>;
   }
 
@@ -125,7 +92,9 @@ export default function OrganisationProfilePage() {
           className="w-full p-2 border rounded"
           placeholder="Contact Email"
         />
-        {errors.contact_email && <p className="text-red-500 text-sm">{errors.contact_email.message}</p>}
+        {errors.contact_email && (
+          <p className="text-red-500 text-sm">{errors.contact_email.message}</p>
+        )}
 
         <button
           type="submit"
