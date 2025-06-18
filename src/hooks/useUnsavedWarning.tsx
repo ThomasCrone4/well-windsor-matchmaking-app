@@ -10,7 +10,7 @@ function useBlocker(blocker: (tx: any) => void, when: boolean = true) {
   }, []);
 
   useEffect(() => {
-    if (!when || !navigator?.block || !hasMounted.current) return;
+    if (!when || !navigator?.block || !hasMounted.current) return; // Ignore error
 
     // @ts-expect-error: 'block' is an unstable API on navigator
     const unblock = navigator.block((tx: any) => {

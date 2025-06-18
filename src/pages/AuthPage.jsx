@@ -59,6 +59,7 @@ export default function AuthPage() {
         role,
         name,
         location,
+        email,
         ...(role === 'volunteer' && {
           dob,
           contact_number: contactNumber,

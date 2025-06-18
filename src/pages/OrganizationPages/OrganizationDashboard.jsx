@@ -9,6 +9,9 @@ export default function OrganizationDashboard() {
   const [applicationsCount, setApplicationsCount] = useState({});
   const [orgId, setOrgId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showReasonDropdown, setShowReasonDropdown] = useState(null);
+  const [selectedReason, setSelectedReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -83,10 +86,15 @@ export default function OrganizationDashboard() {
     }
   };
 
-  const handleStatusChange = async (id, newStatus) => {
+  const handleStatusChange = async (id, newStatus, reason = '') => {
+    const updates = {
+      status: newStatus,
+      closed_reason: newStatus === 'closed' ? (reason || null) : null
+    };
+
     const { error } = await supabase
       .from('volunteer_opportunities')
-      .update({ status: newStatus })
+      .update(updates)
       .eq('id', id);
 
     if (error) {
@@ -94,11 +102,22 @@ export default function OrganizationDashboard() {
       console.error(error);
     } else {
       toast.success(`Marked as ${newStatus}`);
+
+      // Refresh local UI state
       setOpportunities(prev =>
-        prev.map(o => (o.id === id ? { ...o, status: newStatus } : o))
+        prev.map(o => (o.id === id ? { ...o, ...updates } : o))
       );
+      setShowReasonDropdown(null);
+      setSelectedReason('');
+      setCustomReason('');
+
+      // Redirect if set to active
+      if (newStatus === 'active') {
+        navigate(`/edit-opportunity/${id}`);
+      }
     }
   };
+
 
   const renderWhenNeeded = (blocks) => {
     if (!Array.isArray(blocks) || blocks.length === 0) return null;
@@ -175,60 +194,112 @@ export default function OrganizationDashboard() {
                   </p>
                 )}
 
-                <div className="flex gap-6 mt-2 flex-wrap">
-                  {op.status === 'draft' ? (
-                    <>
-                      <button
-                        onClick={() => navigate(`/edit-opportunity/${op.id}`)}
-                        className="text-blue-600 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(op.id, op.date_needed)}
-                        className="text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
-                        className="text-blue-600 hover:underline"
-                      >
-                        View Applicants
-                      </button>
+                <div className="mt-2">
+                  <div className="flex gap-6 flex-wrap mb-2">
+                    {op.status === 'draft' ? (
+                      <>
+                        <button
+                          onClick={() => navigate(`/edit-opportunity/${op.id}`)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(op.id, op.date_needed)}
+                          className="text-red-600 hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          View Applicants
+                        </button>
 
-                      {op.status !== 'active' && (
+                        {op.status !== 'active' && (
+                          <button
+                            onClick={() => handleStatusChange(op.id, 'active')}
+                            className="text-green-600 hover:underline"
+                          >
+                            Mark as Active
+                          </button>
+                        )}
+                        {op.status !== 'closed' && (
+                          <button
+                            onClick={() => setShowReasonDropdown(op.id)}
+                            className="text-yellow-600 hover:underline"
+                          >
+                            Mark as Closed
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleStatusChange(op.id, 'active')}
-                          className="text-green-600 hover:underline"
+                          onClick={() => navigate(`/edit-opportunity/${op.id}`)}
+                          className="text-blue-600 hover:underline"
                         >
-                          Mark as Active
+                          Edit
                         </button>
-                      )}
-                      {op.status !== 'closed' && (
                         <button
-                          onClick={() => handleStatusChange(op.id, 'closed')}
-                          className="text-yellow-600 hover:underline"
+                          onClick={() => handleDelete(op.id, op.date_needed)}
+                          className="text-red-600 hover:underline"
                         >
-                          Mark as Closed
+                          Delete
                         </button>
+                      </>
+                    )}
+                  </div>
+
+                  {showReasonDropdown === op.id && (
+                    <div className="mt-2 p-3 border rounded bg-gray-50 space-y-2">
+                      <label className="block text-sm font-medium">Why are you closing this post?</label>
+                      <select
+                        className="w-full border rounded p-2"
+                        value={selectedReason}
+                        onChange={(e) => setSelectedReason(e.target.value)}
+                      >
+                        <option value="">Select a reason</option>
+                        <option value="Position filled">Position filled</option>
+                        <option value="Event finished">Event finished</option>
+                        <option value="No longer needed">No longer needed</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                        <option value="Other">Other</option>
+                      </select>
+
+                      {selectedReason === 'Other' && (
+                        <input
+                          type="text"
+                          className="w-full border rounded p-2"
+                          placeholder="Enter custom reason"
+                          value={customReason}
+                          onChange={(e) => setCustomReason(e.target.value)}
+                        />
                       )}
-                      <button
-                        onClick={() => navigate(`/edit-opportunity/${op.id}`)}
-                        className="text-blue-600 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(op.id, op.date_needed)}
-                        className="text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </>
+
+                      <div className="flex gap-4 pt-1">
+                        <button
+                          className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
+                          onClick={() =>
+                            handleStatusChange(op.id, 'closed', selectedReason === 'Other' ? customReason : selectedReason)
+                          }
+                          disabled={!selectedReason || (selectedReason === 'Other' && !customReason.trim())}
+                        >
+                          Confirm Close
+                        </button>
+                        <button
+                          className="text-gray-600 hover:underline"
+                          onClick={() => {
+                            setShowReasonDropdown(null);
+                            setSelectedReason('');
+                            setCustomReason('');
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </li>

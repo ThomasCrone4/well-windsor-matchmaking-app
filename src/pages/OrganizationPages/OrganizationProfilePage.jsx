@@ -6,17 +6,19 @@ import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
+import { useNavigate } from 'react-router-dom';
 
 const orgSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  town: z.string().min(1, 'Select a town'),
+  home_town: z.string().min(1, 'Select a town'),
   contact_number: z.string().optional(),
-  contact_email: z.string().email('Must be a valid email').optional(),
+  email: z.string().email('Must be a valid email').optional(),
 });
 
 export default function OrganisationProfilePage() {
   const [hydrated, setHydrated] = useState(false);
   const { userId, profile, loading } = useUserProfile();
+  const navigate = useNavigate();
 
   const {
     register,
@@ -32,9 +34,9 @@ export default function OrganisationProfilePage() {
     if (!hydrated && profile && profile.role === 'organization') {
       reset({
         name: profile.name ?? '',
-        town: profile.town ?? '',
+        home_town: profile.home_town ?? '',
         contact_number: profile.contact_number ?? '',
-        contact_email: profile.contact_email ?? '',
+        email: profile.email ?? '',
       });
       setHydrated(true);
     }
@@ -49,7 +51,10 @@ export default function OrganisationProfilePage() {
 
       if (error) throw error;
     },
-    onSuccess: () => toast.success('Profile updated!'),
+    onSuccess: () => {
+      toast.success('Profile updated!'),
+      navigate('/organization-dashboard'); 
+    },
     onError: () => toast.error('Failed to update profile.'),
   });
 
@@ -72,13 +77,13 @@ export default function OrganisationProfilePage() {
         />
         {errors.name && <p className="text-red-500 text-sm">{errors.name.message}</p>}
 
-        <select {...register('town')} className="w-full p-2 border rounded">
+        <select {...register('home_town')} className="w-full p-2 border rounded">
           <option value="">Select your town</option>
           <option value="Windsor">Windsor</option>
           <option value="Maidenhead">Maidenhead</option>
           <option value="Slough">Slough</option>
         </select>
-        {errors.town && <p className="text-red-500 text-sm">{errors.town.message}</p>}
+        {errors.home_town && <p className="text-red-500 text-sm">{errors.home_town.message}</p>}
 
         <input
           {...register('contact_number')}
@@ -87,13 +92,13 @@ export default function OrganisationProfilePage() {
         />
 
         <input
-          {...register('contact_email')}
+          {...register('email')}
           type="email"
           className="w-full p-2 border rounded"
           placeholder="Contact Email"
         />
-        {errors.contact_email && (
-          <p className="text-red-500 text-sm">{errors.contact_email.message}</p>
+        {errors.email && (
+          <p className="text-red-500 text-sm">{errors.email.message}</p>
         )}
 
         <button

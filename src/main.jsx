@@ -14,11 +14,13 @@ import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboa
 import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard';
 import OpportunitiesPage from './pages/OpportunitiesPage';
 import VolunteerProfilePage from './pages/VolunteerPages/VolunteerProfilePage';
-import EnquiryPage from './pages/VolunteerPages/EnquiriesPage';
+import EnquireOpportunities from './pages/VolunteerPages/EnquireOpportunities';
 import PostOpportunity from './pages/OrganizationPages/PostOpportunity';
 import EditOpportunity from './pages/OrganizationPages/EditOpportunity';
 import OrganizationProfilePage from './pages/OrganizationPages/OrganizationProfilePage';
 import OpportunityApplicantsPage from './pages/OrganizationPages/OpportunityApplicantsPage';
+import LookingForVolunteersPage from './pages/OrganizationPages/LookingForVolunteers';
+import EnquireVolunteerPage from './pages/OrganizationPages/EnquireVolunteers';
 
 import Navbar from './components/NavBar';
 import Footer from './components/Footer';
@@ -43,11 +45,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="/users" element={<UserList />} />
                 <Route path="/opportunities" element={<OpportunitiesPage />} />
                 <Route path="/volunteer/profile" element={<VolunteerProfilePage />} />
-                <Route path="/opportunities/:id/enquire" element={<EnquiryPage />} />
+                <Route path="/opportunities/:id/enquire" element={<EnquireOpportunities />} />
                 <Route path="/post-opportunity" element={<PostOpportunity />} />
                 <Route path="/edit-opportunity/:id" element={<EditOpportunity />} />
                 <Route path="/organization/profile" element={<OrganizationProfilePage />} />
                 <Route path="/opportunity/:id/applicants" element={<OpportunityApplicantsPage />} />
+                <Route path="/volunteers" element={<LookingForVolunteersPage />} />
+                <Route path="/volunteers/:id/enquire" element={<EnquireVolunteerPage />} />
               </Routes>
             </div>
             <Footer />

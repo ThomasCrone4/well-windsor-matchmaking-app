@@ -7,6 +7,7 @@ import { supabase } from '../../utils/supabase';
 import AvailabilityMatrix from '../../components/AvailabilityMatrix';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
+import { useNavigate } from 'react-router-dom';
 
 const profileSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -24,6 +25,7 @@ const profileSchema = z.object({
 export default function VolunteerProfilePage() {
   const [hydrated, setHydrated] = useState(false);
   const { userId, profile, loading } = useUserProfile();
+  const navigate = useNavigate();
 
   const {
     register,
@@ -73,7 +75,10 @@ export default function VolunteerProfilePage() {
 
       if (error) throw error;
     },
-    onSuccess: () => toast.success('Profile updated!'),
+    onSuccess: () => {
+      toast.success('Profile updated!');
+            navigate('/volunteer-dashboard');
+    },  
     onError: () => toast.error('Failed to update profile.'),
   });
 
