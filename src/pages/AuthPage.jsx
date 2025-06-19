@@ -9,6 +9,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('volunteer');
   const [name, setName] = useState('');
+  const [bio, setBio] = useState('');
   const [location, setLocation] = useState('');
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
@@ -62,6 +63,7 @@ export default function AuthPage() {
         email,
         ...(role === 'volunteer' && {
           dob,
+          bio: bio,
           contact_number: contactNumber,
           home_town: homeTown,
           dbs_checked: dbsChecked,
@@ -130,6 +132,13 @@ export default function AuthPage() {
               placeholder="Full Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+            />,
+              <input
+              type="text"
+              className="w-full p-2 border rounded"
+              placeholder="Bio (optional)"
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
             />
             )} 
 

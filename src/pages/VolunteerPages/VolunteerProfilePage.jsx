@@ -14,13 +14,24 @@ const profileSchema = z.object({
   contact_number: z.string().optional(),
   home_town: z.string().min(1, 'Select a home town'),
   dob: z.string().optional(),
+  bio: z.string().optional(),
   skills: z.string().optional(),
   dbs_checked: z.boolean(),
   available_anytime: z.boolean(),
   availability_matrix: z.any(),
   home_town_only: z.boolean(),
   auto_enquiry_opt_in: z.boolean(),
+  public_profile: z.boolean(),
+}).refine(data => {
+  if (data.public_profile) {
+    return data.bio?.trim() && data.skills?.trim();
+  }
+  return true;
+}, {
+  message: 'Bio and skills are required to appear publicly',
+  path: ['public_profile'],
 });
+
 
 export default function VolunteerProfilePage() {
   const [hydrated, setHydrated] = useState(false);
@@ -48,12 +59,14 @@ export default function VolunteerProfilePage() {
         contact_number: profile?.contact_number ?? '',
         home_town: profile?.home_town ?? '',
         dob: profile?.dob ?? '',
+        bio: profile?.bio ?? '',
         skills: profile?.skills ?? '',
         dbs_checked: !!profile?.dbs_checked,
         available_anytime: profile?.available_anytime ?? true,
         availability_matrix: profile?.available_anytime ? [] : profile?.availability_matrix ?? [],
         home_town_only: !!profile?.home_town_only,
         auto_enquiry_opt_in: !!profile?.auto_enquiry_opt_in,
+        public_profile: !!profile?.public_profile,
       });
       setHydrated(true);
     }
@@ -129,6 +142,12 @@ export default function VolunteerProfilePage() {
         />
 
         <textarea
+          {...register('bio')}
+          placeholder="Bio"
+          className="w-full p-2 border rounded"
+        />
+
+        <textarea
           {...register('skills')}
           placeholder="Skills / Experience"
           className="w-full p-2 border rounded"
@@ -159,6 +178,13 @@ export default function VolunteerProfilePage() {
         <label className="block">
           <input type="checkbox" {...register('auto_enquiry_opt_in')} /> Auto-enquiry opt-in
         </label>
+        
+        <label className="block">
+          <input type="checkbox" {...register('public_profile')} /> Show my profile publicly on the volunteer page
+        </label>
+        {errors.public_profile && (
+          <p className="text-red-500 text-sm">{errors.public_profile.message}</p>
+        )}
 
         <button
           type="submit"

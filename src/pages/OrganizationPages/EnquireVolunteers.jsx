@@ -37,26 +37,37 @@ export default function SendVolunteerEnquiry() {
 
   const onSubmit = async ({ message }) => {
     const confirm = window.confirm(
-      'Are you sure you want to send this enquiry?\n\nAn email will be sent to the volunteer and this cannot be undone.'
+      'Are you sure you want to send this enquiry to the volunteer?\n\nThis will be logged and cannot be undone.'
     )
     if (!confirm) return
 
     const { data: sessionData } = await supabase.auth.getSession()
-    const user = sessionData?.session?.user
-    if (!user) {
-      toast.error('You must be logged in to contact a volunteer.')
+    const orgUser = sessionData?.session?.user
+    if (!orgUser) {
+      toast.error('You must be logged in to send an enquiry.')
       return
     }
 
-    // ✅ For Phase 1: just send email
-    if (!volunteer?.contact) {
-      toast.error('No contact information available for this volunteer.')
+    const { error } = await supabase.from('applications').insert([
+      {
+        org_id: orgUser.id,
+        volunteer_id: volunteerId,
+        message: message || null,
+        direction: 'to_volunteer',
+      },
+    ])
+
+    if (error) {
+      toast.error('Failed to send enquiry')
+      console.error('Insert error:', error)
       return
     }
 
-    window.location.href = `mailto:${volunteer.contact}?subject=Volunteer Opportunity&body=${encodeURIComponent(
-      message || 'Hi, we’d like to connect with you about a role!'
-    )}`
+    toast.success('Enquiry sent!')
+
+    setTimeout(() => {
+      navigate('/organization-dashboard')
+    }, 1200)
   }
 
   if (!volunteer) {

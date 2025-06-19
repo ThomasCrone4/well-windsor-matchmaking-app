@@ -15,7 +15,8 @@ export default function LookingForVolunteersPage() {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('id, name, home_town, dbs_checked, skills, available_anytime, availability_matrix, bio')
-        .eq('role', 'volunteer');
+        .eq('role', 'volunteer')
+        .eq('public_profile', true);
 
       if (error) throw error;
       return data;
@@ -50,7 +51,7 @@ export default function LookingForVolunteersPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6 text-center">Looking for Volunteers</h1>
+      <h1 className="text-3xl font-bold mb-6 text-center">Volunteers</h1>
 
       <div className="mb-4 flex flex-wrap gap-4 items-center justify-center">
         <input
