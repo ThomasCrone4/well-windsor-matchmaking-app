@@ -10,27 +10,39 @@ export default function AuthPage() {
   const [role, setRole] = useState('volunteer');
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
-  const [location, setLocation] = useState('');
+  const [postcode, setPostcode] = useState('');
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [homeTown, setHomeTown] = useState('');
   const [dbsChecked, setDbsChecked] = useState(false);
   const [availableAnytime, setAvailableAnytime] = useState(true);
   const [availabilityMatrix, setAvailabilityMatrix] = useState([]);
-  const [homeTownOnly, setHomeTownOnly] = useState(false);
-  const [autoEnquiryOptIn, setAutoEnquiryOptIn] = useState(false);
+  const [publicProfile, setPublicProfile] = useState(true);
   const [isSigningUp, setIsSigningUp] = useState(false);
 
+  const [errors, setErrors] = useState({});
   const navigate = useNavigate();
+
+  const validateFields = () => {
+    const newErrors = {};
+    if (!email) newErrors.email = 'Email is required';
+    if (!password) newErrors.password = 'Password is required';
+    if (!name) newErrors.name = 'Name is required';
+    if (role === 'volunteer') {
+      if (!dob) newErrors.dob = 'Date of birth is required';
+      if (!homeTown) newErrors.homeTown = 'Home town is required';
+    }
+    if (role === 'organization' && !postcode) newErrors.postcode = 'Postcode is required';
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (isSigningUp) {
-      if (!name || !location || (role === 'volunteer' && (!dob || !homeTown))) {
-        toast.error('Please fill in all required fields.');
-        return;
-      }
+    if (isSigningUp && !validateFields()) {
+      return;
     }
 
     let authResponse;
@@ -59,18 +71,16 @@ export default function AuthPage() {
         id: sessionUserId,
         role,
         name,
-        location,
-        email,
+        ...(role === 'organization' && { postcode }),
         ...(role === 'volunteer' && {
           dob,
-          bio: bio,
+          bio,
           contact_number: contactNumber,
           home_town: homeTown,
           dbs_checked: dbsChecked,
           available_anytime: availableAnytime,
           availability_matrix: availableAnytime ? null : availabilityMatrix,
-          home_town_only: homeTownOnly,
-          auto_enquiry_opt_in: autoEnquiryOptIn,
+          public_profile: publicProfile,
         }),
       };
 
@@ -84,163 +94,106 @@ export default function AuthPage() {
       }
     }
 
-    console.log('✅ Inserted user profile successfully');
     toast.success('Success! You are now logged in.');
     navigate('/');
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded shadow w-full max-w-lg space-y-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white p-8 rounded shadow w-full max-w-lg space-y-4"
+      >
         <h2 className="text-2xl font-bold text-center">
           {isSigningUp ? 'Sign Up' : 'Log In'}
         </h2>
 
-        <input
-          type="email"
-          className="w-full p-2 border rounded"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+        <div>
+          <label className="block text-sm font-medium mb-1">Email <span className="text-red-500">*</span></label>
+          <input type="email" className="w-full p-2 border rounded" value={email} onChange={(e) => setEmail(e.target.value)} />
+          {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+        </div>
 
-        <input
-          type="password"
-          className="w-full p-2 border rounded"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        <div>
+          <label className="block text-sm font-medium mb-1">Password <span className="text-red-500">*</span></label>
+          <input type="password" className="w-full p-2 border rounded" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+        </div>
 
         {isSigningUp && (
           <>
-            <select
-              className="w-full p-2 border rounded"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-            >
-              <option value="volunteer">Volunteer</option>
-              <option value="organization">Organization</option>
-            </select>
+            <div>
+              <label className="block text-sm font-medium mb-1">Role <span className="text-red-500">*</span></label>
+              <select className="w-full p-2 border rounded" value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="volunteer">Volunteer</option>
+                <option value="organization">Organization</option>
+              </select>
+            </div>
 
-            {role === 'volunteer' && (
-              <input
-              type="text"
-              className="w-full p-2 border rounded"
-              placeholder="Full Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />,
-              <input
-              type="text"
-              className="w-full p-2 border rounded"
-              placeholder="Bio (optional)"
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-            />
-            )} 
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {role === 'organization' ? 'Organisation Name' : 'Full Name'} <span className="text-red-500">*</span>
+              </label>
+              <input type="text" className="w-full p-2 border rounded" value={name} onChange={(e) => setName(e.target.value)} />
+              {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+            </div>
 
             {role === 'organization' && (
-              <>
-                <input
-                  type="text"
-                  className="w-full p-2 border rounded"
-                  placeholder="Organization Name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-
-                <select
-                  className="w-full p-2 border rounded"
-                  value={homeTown}
-                  onChange={(e) => setHomeTown(e.target.value)}
-                >
-                  <option value="">Select your organizations town</option>
-                  <option value="Windsor">Windsor</option>
-                  <option value="Maidenhead">Maidenhead</option>
-                  <option value="Slough">Slough</option>
-                </select>
-              </>
-            )} 
-            
-
-            
+              <div>
+                <label className="block text-sm font-medium mb-1">Postcode <span className="text-red-500">*</span></label>
+                <input type="text" className="w-full p-2 border rounded" value={postcode} onChange={(e) => setPostcode(e.target.value)} />
+                {errors.postcode && <p className="text-red-500 text-sm mt-1">{errors.postcode}</p>}
+              </div>
+            )}
 
             {role === 'volunteer' && (
               <>
-                <select
-                  className="w-full p-2 border rounded"
-                  value={homeTown}
-                  onChange={(e) => setHomeTown(e.target.value)}
-                >
-                  <option value="">Select your home town</option>
-                  <option value="Windsor">Windsor</option>
-                  <option value="Maidenhead">Maidenhead</option>
-                  <option value="Slough">Slough</option>
-                </select>
-                
-                <input
-                  type="date"
-                  className="w-full p-2 border rounded"
-                  placeholder="Date of Birth"
-                  value={dob}
-                  onChange={(e) => setDob(e.target.value)}
-                />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Home Town <span className="text-red-500">*</span></label>
+                  <select className="w-full p-2 border rounded" value={homeTown} onChange={(e) => setHomeTown(e.target.value)}>
+                    <option value="">Select your home town</option>
+                    <option value="Windsor">Windsor</option>
+                    <option value="Maidenhead">Maidenhead</option>
+                    <option value="Slough">Slough</option>
+                  </select>
+                  {errors.homeTown && <p className="text-red-500 text-sm mt-1">{errors.homeTown}</p>}
+                </div>
 
-                <input
-                  type="text"
-                  className="w-full p-2 border rounded"
-                  placeholder="Contact Number"
-                  value={contactNumber}
-                  onChange={(e) => setContactNumber(e.target.value)}
-                />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Date of Birth <span className="text-red-500">*</span></label>
+                  <input type="date" className="w-full p-2 border rounded" value={dob} onChange={(e) => setDob(e.target.value)} />
+                  {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob}</p>}
+                </div>
 
-                
+                <div>
+                  <label className="block text-sm font-medium mb-1">Contact Number <span className="text-gray-400">(optional)</span></label>
+                  <input type="text" className="w-full p-2 border rounded" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
+                </div>
 
-                <label className="block">
-                  <input
-                    type="checkbox"
-                    checked={dbsChecked}
-                    onChange={(e) => setDbsChecked(e.target.checked)}
-                  />
-                  {' '}DBS Checked
+                <label className="block text-sm font-medium">
+                  <input type="checkbox" checked={dbsChecked} onChange={(e) => setDbsChecked(e.target.checked)} className="mr-2" />
+                  DBS Checked
                 </label>
 
-                <label className="block">
-                  <input
-                    type="checkbox"
-                    checked={availableAnytime}
-                    onChange={(e) => setAvailableAnytime(e.target.checked)}
-                  />
-                  {' '}Generally Available (all times)
+                <label className="block text-sm font-medium">
+                  <input type="checkbox" checked={availableAnytime} onChange={(e) => setAvailableAnytime(e.target.checked)} className="mr-2" />
+                  Generally Available (all times)
                 </label>
 
                 {!availableAnytime && (
-                  <AvailabilityMatrix
-                    value={availabilityMatrix}
-                    onChange={setAvailabilityMatrix}
-                  />
+                  <AvailabilityMatrix value={availabilityMatrix} onChange={setAvailabilityMatrix} />
                 )}
 
-                <label className="block">
+                <label className="block text-sm font-medium">
                   <input
                     type="checkbox"
-                    checked={homeTownOnly}
-                    onChange={(e) => setHomeTownOnly(e.target.checked)}
+                    checked={publicProfile}
+                    onChange={(e) => setPublicProfile(e.target.checked)}
+                    className="mr-2"
                   />
-                  {' '}Only match me to opportunities in my home town
+                  Show my profile publicly on the volunteer page
                 </label>
 
-                <label className="block">
-                  <input
-                    type="checkbox"
-                    checked={autoEnquiryOptIn}
-                    onChange={(e) => setAutoEnquiryOptIn(e.target.checked)}
-                  />
-                  {' '}Auto-enquiry opt-in
-                </label>
               </>
             )}
           </>
@@ -254,7 +207,10 @@ export default function AuthPage() {
           {isSigningUp ? 'Already have an account?' : 'Need to create an account?'}{' '}
           <button
             type="button"
-            onClick={() => setIsSigningUp(!isSigningUp)}
+            onClick={() => {
+              setIsSigningUp(!isSigningUp);
+              setErrors({});
+            }}
             className="text-blue-600 underline"
           >
             {isSigningUp ? 'Log In' : 'Sign Up'}

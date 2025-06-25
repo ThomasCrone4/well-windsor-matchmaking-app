@@ -1,14 +1,14 @@
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { supabase } from '../../utils/supabase';
+import { supabase } from '../../../utils/supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { useEffect, useRef, useState } from 'react';
 
-import AvailabilityMatrix from '../../components/AvailabilityMatrix';
-import useUnsavedChangesWarning from '../../hooks/useUnsavedWarning';
+import AvailabilityMatrix from '../../../components/AvailabilityMatrix';
+import useUnsavedChangesWarning from '../../../hooks/useUnsavedWarning';
 
 const getSchema = (isDraft) =>
   z.object({

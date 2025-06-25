@@ -1,3 +1,4 @@
+// OrganizationDashboard.jsx
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../utils/supabase';
@@ -41,16 +42,18 @@ export default function OrganizationDashboard() {
         if (ids.length > 0) {
           const { data: apps, error: appsError } = await supabase
             .from('applications')
-            .select('opportunity_id');
+            .select('opportunity_id')
+            .in('opportunity_id', ids); // Filter server-side
+
+          console.log('apps:', apps);
+          console.log('appsError:', appsError);
 
           if (appsError) {
             console.error('Error fetching applications:', appsError.message);
           } else {
             const countMap = {};
             for (const app of apps) {
-              if (ids.includes(app.opportunity_id)) {
-                countMap[app.opportunity_id] = (countMap[app.opportunity_id] || 0) + 1;
-              }
+              countMap[app.opportunity_id] = (countMap[app.opportunity_id] || 0) + 1;
             }
             setApplicationsCount(countMap);
           }
@@ -103,7 +106,6 @@ export default function OrganizationDashboard() {
     } else {
       toast.success(`Marked as ${newStatus}`);
 
-      // Refresh local UI state
       setOpportunities(prev =>
         prev.map(o => (o.id === id ? { ...o, ...updates } : o))
       );
@@ -111,13 +113,11 @@ export default function OrganizationDashboard() {
       setSelectedReason('');
       setCustomReason('');
 
-      // Redirect if set to active
       if (newStatus === 'active') {
         navigate(`/edit-opportunity/${id}`);
       }
     }
   };
-
 
   const renderWhenNeeded = (blocks) => {
     if (!Array.isArray(blocks) || blocks.length === 0) return null;
@@ -139,9 +139,7 @@ export default function OrganizationDashboard() {
                 )}
                 {start_date && end_date && isValid(new Date(start_date)) && isValid(new Date(end_date)) && (
                   <>
-                    {' '}
-                    ({format(parseISO(start_date), 'MMM d')} to{' '}
-                    {format(parseISO(end_date), 'MMM d')})
+                    {' '}({format(parseISO(start_date), 'MMM d')} to {format(parseISO(end_date), 'MMM d')})
                   </>
                 )}
               </li>

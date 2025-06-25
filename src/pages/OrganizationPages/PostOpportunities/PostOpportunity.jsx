@@ -2,9 +2,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '../../utils/supabase';
+import { supabase } from '../../../utils/supabase';
 import toast from 'react-hot-toast';
-import AvailabilityMatrix from '../../components/AvailabilityMatrix';
+import AvailabilityMatrix from '../../../components/AvailabilityMatrix';
 import { useNavigate } from 'react-router-dom';
 
 const getOpportunitySchema = (isDraft) =>

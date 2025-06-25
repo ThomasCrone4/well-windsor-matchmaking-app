@@ -56,7 +56,6 @@ export default function OpportunitiesPage() {
     },
   });
 
-
   const handleApply = async (opportunityId) => {
     const { data: sessionData } = await supabase.auth.getSession();
     const user = sessionData?.session?.user;
@@ -64,6 +63,17 @@ export default function OpportunitiesPage() {
     if (!user) {
       toast.error('Please log in to enquire.');
       navigate('/auth');
+      return;
+    }
+
+    const { data: profile, error } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (error || profile?.role !== 'volunteer') {
+      toast.error('Only volunteers can make enquiries.');
       return;
     }
 
@@ -177,7 +187,6 @@ export default function OpportunitiesPage() {
           Clear Filters
         </button>
       </div>
-
 
       {filtered.length === 0 ? (
         <p className="text-center text-gray-600">No opportunities available right now.</p>

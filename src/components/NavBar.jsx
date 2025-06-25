@@ -12,7 +12,6 @@ export default function Navbar() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Listen for auth changes and refresh profile query
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(() => {
       queryClient.invalidateQueries(['user_profile']);
@@ -23,13 +22,12 @@ export default function Navbar() {
     };
   }, [queryClient]);
 
-  // Load full profile
   const { data: profileData } = useQuery({
     queryKey: ['user_profile', userId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('*') // 👈 load all profile fields
+        .select('*')
         .eq('id', userId)
         .single();
       if (error) throw error;
@@ -55,15 +53,19 @@ export default function Navbar() {
 
   return (
     <nav className="bg-white shadow-md py-4 px-6 flex justify-between items-center">
-      <Link to="/" className="text-2xl font-bold text-blue-700">
-         <img src="/WellWindsorLogo.png" alt="Well Windsor Logo" className="h-25 w-auto" />
+      <Link to='/'
+        className="text-2xl font-bold text-blue-700"
+      >
+        <img src="/WellWindsorLogo.png" alt="Well Windsor Logo" className="h-25 w-auto" />
       </Link>
 
+
       <div className="flex items-center gap-6">
-        <Link to="/" className="text-gray-700 hover:text-blue-600">
+        <Link to="/opportunities" className="text-gray-700 hover:text-blue-600">
           Opportunities
         </Link>
-
+      
+        {/* Show Looking for Volunteers only for organizations */}
         {isLoggedIn && role === 'organization' && (
           <Link to="/volunteers" className="text-gray-700 hover:text-blue-600">
             Looking for Volunteers
