@@ -53,22 +53,26 @@ export default function Navbar() {
 
   return (
     <nav className="bg-white shadow-md py-4 px-6 flex justify-between items-center">
-      <Link to='/'
-        className="text-2xl font-bold text-blue-700"
-      >
+      <Link to="/" className="text-2xl font-bold text-blue-700">
         <img src="/WellWindsorLogo.png" alt="Well Windsor Logo" className="h-25 w-auto" />
       </Link>
-
 
       <div className="flex items-center gap-6">
         <Link to="/opportunities" className="text-gray-700 hover:text-blue-600">
           Opportunities
         </Link>
-      
+
         {/* Show Looking for Volunteers only for organizations */}
         {isLoggedIn && role === 'organization' && (
           <Link to="/volunteers" className="text-gray-700 hover:text-blue-600">
             Looking for Volunteers
+          </Link>
+        )}
+
+        {/* Show Log Hours only for volunteers */}
+        {isLoggedIn && role === 'volunteer' && (
+          <Link to="/volunteer/log-hours" className="text-gray-700 hover:text-blue-600">
+            Log Hours
           </Link>
         )}
 

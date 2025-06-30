@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../utils/supabase';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { Link, useNavigate } from 'react-router-dom';
-
 
 export default function LookingForVolunteersPage() {
   const [filters, setFilters] = useState({ town: 'All', dbs: 'Any' });
@@ -26,24 +25,65 @@ export default function LookingForVolunteersPage() {
 
   const filterVolunteers = (vols) => {
     return vols.filter(v => {
-      const matchesTown =
-        filters.town === 'All' || v.home_town === filters.town;
-
+      const matchesTown = filters.town === 'All' || v.home_town === filters.town;
       const matchesDBS =
         filters.dbs === 'Any' ||
         (filters.dbs === 'DBS Required' ? v.dbs_checked : !v.dbs_checked);
-
       const matchesSearch =
         v.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.skills?.toLowerCase().includes(searchTerm.toLowerCase());
-
       return matchesTown && matchesDBS && matchesSearch;
     });
   };
 
   const handleEnquire = (volunteerId) => {
-    navigate(`/volunteers/${volunteerId}/enquire`);  
+    navigate(`/volunteers/${volunteerId}/enquire`);
   };
+
+  const renderAvailability = (vol) => {
+    if (vol.available_anytime) return <span className="text-green-700 font-medium">Anytime</span>;
+    if (!vol.availability_matrix?.length) return <span className="text-gray-500 italic">Unavailable</span>;
+
+    return (
+      <ul className="space-y-1 text-sm text-gray-700 list-disc list-inside mt-1">
+        {vol.availability_matrix.map((block, i) => {
+          const dayList = block.days?.length
+            ? `Every ${block.days.join(', ')}`
+            : 'Unspecified days';
+
+          const timeRange =
+            block.start_time && block.end_time
+              ? `${block.start_time} to ${block.end_time}`
+              : 'unspecified times';
+
+          const dateRange =
+            block.start_date && block.end_date
+              ? `between ${formatDate(block.start_date)} and ${formatDate(block.end_date)}`
+              : '';
+
+          return (
+            <li key={i}>
+              {dayList}, {timeRange} {dateRange && `(${dateRange})`}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
+  const formatDate = (dateStr) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
 
   if (isLoading) return <p className="text-center mt-20">Loading volunteers...</p>;
   if (error) return <p className="text-center text-red-500 mt-20">Failed to load volunteers.</p>;
@@ -59,7 +99,7 @@ export default function LookingForVolunteersPage() {
           to="/organization/sent-enquiries"
           className="inline-block bg-emerald-600 text-white font-semibold px-6 py-2 rounded-lg shadow hover:bg-emerald-700 transition"
         >
-         Sent Enquiries
+          Sent Enquiries
         </Link>
       </div>
 
@@ -71,13 +111,21 @@ export default function LookingForVolunteersPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="p-2 border rounded w-64"
         />
-        <select onChange={(e) => setFilters(f => ({ ...f, town: e.target.value }))} className="p-2 border rounded" value={filters.town}>
+        <select
+          onChange={(e) => setFilters(f => ({ ...f, town: e.target.value }))}
+          className="p-2 border rounded"
+          value={filters.town}
+        >
           <option value="All">Location</option>
           <option value="Windsor">Windsor</option>
           <option value="Maidenhead">Maidenhead</option>
           <option value="Slough">Slough</option>
         </select>
-        <select onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))} className="p-2 border rounded" value={filters.dbs}>
+        <select
+          onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))}
+          className="p-2 border rounded"
+          value={filters.dbs}
+        >
           <option value="Any">DBS status</option>
           <option value="DBS Required">DBS Required</option>
           <option value="No DBS Required">No DBS Required</option>
@@ -94,7 +142,6 @@ export default function LookingForVolunteersPage() {
         </button>
       </div>
 
-
       {filtered.length === 0 ? (
         <p className="text-center text-gray-600">No volunteers found.</p>
       ) : (
@@ -106,7 +153,7 @@ export default function LookingForVolunteersPage() {
               <div className="text-sm text-gray-600">🏠 Home Town: {vol.home_town}</div>
               <div className="text-sm text-gray-600">🛠️ Skills: {vol.skills}</div>
               <div className="text-sm text-gray-600">
-                📋 Availability: {vol.available_anytime ? 'Anytime' : 'See profile'}
+                📋 Availability: {renderAvailability(vol)}
               </div>
               {vol.dbs_checked && (
                 <div className="text-sm text-red-600">🔒 DBS Checked</div>

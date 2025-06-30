@@ -81,7 +81,7 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
         </div>
       ))}
       <button type="button" className="bg-blue-500 text-white px-3 py-1 rounded" onClick={addBlock}>
-        Add Availability Block
+        Add Worked Block
       </button>
     </div>
   );

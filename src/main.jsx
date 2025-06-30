@@ -23,7 +23,12 @@ import OpportunityApplicantsPage from './pages/OrganizationPages/PostOpportuniti
 import LookingForVolunteersPage from './pages/OrganizationPages/FindVolunteers/LookingForVolunteers';
 import EnquireVolunteerPage from './pages/OrganizationPages/FindVolunteers/EnquireVolunteers';
 import SentEnquiriesOrg from './pages/OrganizationPages/FindVolunteers/SentEnquiriesOrg';
+import PostLoggedHours from './pages/OrganizationPages/LogHours/PostLoggedHours';
+
 import SentEnquiriesVol from './pages/VolunteerPages/FindOpportunities/SentEnquiriesVol';
+import ListLogHours from './pages/VolunteerPages/LogHours/ListLogHours';
+import NewLogHours from './pages/VolunteerPages/LogHours/NewLogHours';
+import EditLogHours from './pages/VolunteerPages/LogHours/EditLogHours';
 
 import Navbar from './components/NavBar';
 import Footer from './components/Footer';
@@ -57,12 +62,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="/volunteers" element={<ProtectedRoute allowedRoles={['organization']}><LookingForVolunteersPage /></ProtectedRoute>} />
                 <Route path="/volunteers/:id/enquire" element={<ProtectedRoute allowedRoles={['organization']}><EnquireVolunteerPage /></ProtectedRoute>} />
                 <Route path="/organization/sent-enquiries" element={<ProtectedRoute allowedRoles={['organization']}><SentEnquiriesOrg /></ProtectedRoute>} />
-
+                <Route path="/opportunity/:id/logged-hours" element={<ProtectedRoute allowedRoles={['organization']}><PostLoggedHours /></ProtectedRoute>} />
+                
                 {/* Volunteer pages */}
                 <Route path="/volunteer-dashboard" element={<ProtectedRoute allowedRoles={['volunteer']}><VolunteerDashboard /></ProtectedRoute>} />
                 <Route path="/volunteer/profile" element={<ProtectedRoute allowedRoles={['volunteer']}><VolunteerProfilePage /></ProtectedRoute>} />
                 <Route path="/opportunities/:id/enquire" element={<ProtectedRoute allowedRoles={['volunteer']}><EnquireOpportunities /></ProtectedRoute>} />
                 <Route path="/volunteer/sent-enquiries" element={<ProtectedRoute allowedRoles={['volunteer']}><SentEnquiriesVol /></ProtectedRoute>} />
+                <Route path="/volunteer/log-hours" element={<ProtectedRoute allowedRoles={['volunteer']}><ListLogHours /></ProtectedRoute>} />
+                <Route path="/volunteer/log-hours/new"element={<ProtectedRoute allowedRoles={['volunteer']}><NewLogHours /></ProtectedRoute>} />
+                <Route path="/volunteer/log-hours/edit/:id" element={<ProtectedRoute allowedRoles={['volunteer']}><EditLogHours /></ProtectedRoute>} />
 
                 {/* Admin pages */}
                 <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserList /></ProtectedRoute>} />

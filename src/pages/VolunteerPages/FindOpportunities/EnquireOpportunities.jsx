@@ -69,6 +69,7 @@ export default function EnquiryPage() {
         subject: subject.trim(),
         message: message.trim(),
         direction: 'to_opportunity',
+        opportunity_title: opportunity?.title || null, // ✅ include title
       },
     ]);
 

@@ -43,10 +43,7 @@ export default function OrganizationDashboard() {
           const { data: apps, error: appsError } = await supabase
             .from('applications')
             .select('opportunity_id')
-            .in('opportunity_id', ids); // Filter server-side
-
-          console.log('apps:', apps);
-          console.log('appsError:', appsError);
+            .in('opportunity_id', ids);
 
           if (appsError) {
             console.error('Error fetching applications:', appsError.message);
@@ -105,14 +102,12 @@ export default function OrganizationDashboard() {
       console.error(error);
     } else {
       toast.success(`Marked as ${newStatus}`);
-
       setOpportunities(prev =>
         prev.map(o => (o.id === id ? { ...o, ...updates } : o))
       );
       setShowReasonDropdown(null);
       setSelectedReason('');
       setCustomReason('');
-
       if (newStatus === 'active') {
         navigate(`/edit-opportunity/${id}`);
       }
@@ -138,9 +133,7 @@ export default function OrganizationDashboard() {
                   'Timing info incomplete'
                 )}
                 {start_date && end_date && isValid(new Date(start_date)) && isValid(new Date(end_date)) && (
-                  <>
-                    {' '}({format(parseISO(start_date), 'MMM d')} to {format(parseISO(end_date), 'MMM d')})
-                  </>
+                  <> ({format(parseISO(start_date), 'MMM d')} to {format(parseISO(end_date), 'MMM d')})</>
                 )}
               </li>
             );
@@ -171,135 +164,111 @@ export default function OrganizationDashboard() {
                   <p className="text-sm text-gray-600">📅 {format(new Date(op.date_needed), 'PPP')}</p>
                 )}
                 <p className="text-sm text-gray-600">📧 {op.contact}</p>
-
-                <p className="text-sm text-gray-600">
-                  👥 Volunteers Needed: {op.volunteers_needed ?? 'Not specified'}
-                </p>
-
-                {op.requires_dbs && (
-                  <p className="text-sm text-red-600">🔒 DBS Required</p>
-                )}
-
+                <p className="text-sm text-gray-600">👥 Volunteers Needed: {op.volunteers_needed ?? 'Not specified'}</p>
+                {op.requires_dbs && <p className="text-sm text-red-600">🔒 DBS Required</p>}
                 {op.generally_needed ? (
                   <p className="text-sm text-gray-600">📌 Available anytime</p>
                 ) : (
                   renderWhenNeeded(op.when_needed)
                 )}
-
                 {op.status !== 'draft' && (
                   <p className="text-sm text-blue-600">
                     📨 {applicationsCount[op.id] || 0} applicants
                   </p>
                 )}
 
-                <div className="mt-2">
-                  <div className="flex gap-6 flex-wrap mb-2">
-                    {op.status === 'draft' ? (
-                      <>
-                        <button
-                          onClick={() => navigate(`/edit-opportunity/${op.id}`)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(op.id, op.date_needed)}
-                          className="text-red-600 hover:underline"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          View Applicants
-                        </button>
-
-                        {op.status !== 'active' && (
-                          <button
-                            onClick={() => handleStatusChange(op.id, 'active')}
-                            className="text-green-600 hover:underline"
-                          >
-                            Mark as Active
-                          </button>
-                        )}
-                        {op.status !== 'closed' && (
-                          <button
-                            onClick={() => setShowReasonDropdown(op.id)}
-                            className="text-yellow-600 hover:underline"
-                          >
-                            Mark as Closed
-                          </button>
-                        )}
-                        <button
-                          onClick={() => navigate(`/edit-opportunity/${op.id}`)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(op.id, op.date_needed)}
-                          className="text-red-600 hover:underline"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  {showReasonDropdown === op.id && (
-                    <div className="mt-2 p-3 border rounded bg-gray-50 space-y-2">
-                      <label className="block text-sm font-medium">Why are you closing this post?</label>
-                      <select
-                        className="w-full border rounded p-2"
-                        value={selectedReason}
-                        onChange={(e) => setSelectedReason(e.target.value)}
-                      >
-                        <option value="">Select a reason</option>
-                        <option value="Position filled">Position filled</option>
-                        <option value="Event finished">Event finished</option>
-                        <option value="No longer needed">No longer needed</option>
-                        <option value="Prefer not to say">Prefer not to say</option>
-                        <option value="Other">Other</option>
-                      </select>
-
-                      {selectedReason === 'Other' && (
-                        <input
-                          type="text"
-                          className="w-full border rounded p-2"
-                          placeholder="Enter custom reason"
-                          value={customReason}
-                          onChange={(e) => setCustomReason(e.target.value)}
-                        />
-                      )}
-
-                      <div className="flex gap-4 pt-1">
-                        <button
-                          className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
-                          onClick={() =>
-                            handleStatusChange(op.id, 'closed', selectedReason === 'Other' ? customReason : selectedReason)
-                          }
-                          disabled={!selectedReason || (selectedReason === 'Other' && !customReason.trim())}
-                        >
-                          Confirm Close
-                        </button>
-                        <button
-                          className="text-gray-600 hover:underline"
-                          onClick={() => {
-                            setShowReasonDropdown(null);
-                            setSelectedReason('');
-                            setCustomReason('');
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
+                <div className="mt-2 flex flex-wrap gap-4">
+                  <button
+                    onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
+                    className="text-blue-600 hover:underline"
+                  >
+                    View Applicants
+                  </button>
+                  <button
+                    onClick={() => navigate(`/opportunity/${op.id}/logged-hours`)}
+                    className="text-purple-600 hover:underline"
+                  >
+                    Logged Hours
+                  </button>
+                  {op.status !== 'active' && (
+                    <button
+                      onClick={() => handleStatusChange(op.id, 'active')}
+                      className="text-green-600 hover:underline"
+                    >
+                      Mark as Active
+                    </button>
                   )}
+                  {op.status !== 'closed' && (
+                    <button
+                      onClick={() => setShowReasonDropdown(op.id)}
+                      className="text-yellow-600 hover:underline"
+                    >
+                      Mark as Closed
+                    </button>
+                  )}
+                  <button
+                    onClick={() => navigate(`/edit-opportunity/${op.id}`)}
+                    className="text-blue-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(op.id, op.date_needed)}
+                    className="text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
                 </div>
+
+                {showReasonDropdown === op.id && (
+                  <div className="mt-2 p-3 border rounded bg-gray-50 space-y-2">
+                    <label className="block text-sm font-medium">Why are you closing this post?</label>
+                    <select
+                      className="w-full border rounded p-2"
+                      value={selectedReason}
+                      onChange={(e) => setSelectedReason(e.target.value)}
+                    >
+                      <option value="">Select a reason</option>
+                      <option value="Position filled">Position filled</option>
+                      <option value="Event finished">Event finished</option>
+                      <option value="No longer needed">No longer needed</option>
+                      <option value="Prefer not to say">Prefer not to say</option>
+                      <option value="Other">Other</option>
+                    </select>
+
+                    {selectedReason === 'Other' && (
+                      <input
+                        type="text"
+                        className="w-full border rounded p-2"
+                        placeholder="Enter custom reason"
+                        value={customReason}
+                        onChange={(e) => setCustomReason(e.target.value)}
+                      />
+                    )}
+
+                    <div className="flex gap-4 pt-1">
+                      <button
+                        className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
+                        onClick={() =>
+                          handleStatusChange(op.id, 'closed', selectedReason === 'Other' ? customReason : selectedReason)
+                        }
+                        disabled={!selectedReason || (selectedReason === 'Other' && !customReason.trim())}
+                      >
+                        Confirm Close
+                      </button>
+                      <button
+                        className="text-gray-600 hover:underline"
+                        onClick={() => {
+                          setShowReasonDropdown(null);
+                          setSelectedReason('');
+                          setCustomReason('');
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -312,11 +281,18 @@ export default function OrganizationDashboard() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Organization Dashboard</h1>
-        <Link to="/post-opportunity">
-          <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-            + New Post
-          </button>
-        </Link>
+        <div className="flex gap-4">
+          <Link to="/organization/sent-enquiries">
+            <button className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700">
+              Sent Enquiries
+            </button>
+          </Link>
+          <Link to="/post-opportunity">
+            <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+              + New Post
+            </button>
+          </Link>
+        </div>
       </div>
 
       {loading ? (
