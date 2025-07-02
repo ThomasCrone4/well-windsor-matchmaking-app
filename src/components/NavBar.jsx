@@ -64,9 +64,15 @@ export default function Navbar() {
 
         {/* Show Looking for Volunteers only for organizations */}
         {isLoggedIn && role === 'organization' && (
+          <>
           <Link to="/volunteers" className="text-gray-700 hover:text-blue-600">
             Looking for Volunteers
           </Link>
+
+          <Link to="/organization/logged-hours" className="text-gray-700 hover:text-blue-600">
+            Logged Hours
+          </Link>
+          </>
         )}
 
         {/* Show Log Hours only for volunteers */}

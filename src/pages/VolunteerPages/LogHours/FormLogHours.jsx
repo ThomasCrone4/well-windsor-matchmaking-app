@@ -32,22 +32,24 @@ export default function FormLogHours({ isEdit }) {
     fetchUser();
   }, []);
 
-  const { isLoading: loadingApps } = useQuery({
+  const { isLoading: loadingApps, data: acceptedApps = [] } = useQuery({
     queryKey: ['acceptedApplications', userId],
     enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
-        .select('opportunity_id, org_id, opportunity_title, subject')
+        .select('id, opportunity_id, opportunity_title, subject, direction')
         .eq('volunteer_id', userId)
         .eq('status', 'accepted');
 
       if (error) throw error;
 
       const apps = (data ?? []).map((app) => ({
-        opportunity_id: app.opportunity_id,
-        org_id: app.org_id,
-        label: app.opportunity_title || app.subject || 'Untitled Opportunity',
+        id: app.id,
+        label:
+          app.direction === 'to_volunteer'
+            ? app.subject || 'Untitled Opportunity'
+            : app.opportunity_title || 'Untitled Opportunity',
       }));
 
       setApplications(apps);
@@ -55,31 +57,31 @@ export default function FormLogHours({ isEdit }) {
     },
   });
 
-  useEffect(() => {
-    if (!editIdParam || !isEdit || !userId) return;
-    const fetchEditEntry = async () => {
+  const { data: editEntryData } = useQuery({
+    queryKey: ['editLogEntry', editIdParam],
+    enabled: !!editIdParam && isEdit,
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('volunteer_hours')
         .select('*')
         .eq('id', editIdParam)
-        .eq('volunteer_id', userId)
         .single();
 
-      if (error) return toast.error('Failed to load entry');
+      if (error) throw error;
+      return data;
+    },
+  });
 
-      const matchIndex = applications.findIndex(
-        (a) =>
-          a.opportunity_id === data.opportunity_id &&
-          a.org_id === data.org_id
-      );
-      if (matchIndex !== -1) setValue('opportunity_id', matchIndex);
-      setValue('notes', data.notes || '');
-      setHourBlocks(data.logged_hours || []);
-      setEditEntry(data);
-    };
+  useEffect(() => {
+    if (!isEdit || !editEntryData || !applications.length) return;
 
-    fetchEditEntry();
-  }, [editIdParam, applications, isEdit, userId]);
+    setEditEntry(editEntryData);
+    setHourBlocks(editEntryData.logged_hours || []);
+    setValue('notes', editEntryData.notes || '');
+
+    const index = applications.findIndex(app => app.id === editEntryData.application_id);
+    if (index !== -1) setValue('application_id', index.toString());
+  }, [editEntryData, applications, isEdit, setValue]);
 
   const mutation = useMutation({
     mutationFn: async (payload) => {
@@ -89,7 +91,9 @@ export default function FormLogHours({ isEdit }) {
           .update(payload)
           .eq('id', editEntry.id);
       } else {
-        return await supabase.from('volunteer_hours').insert([payload]);
+        return await supabase
+          .from('volunteer_hours')
+          .insert([payload]);
       }
     },
     onSuccess: () => {
@@ -104,17 +108,17 @@ export default function FormLogHours({ isEdit }) {
     if (!userId) return toast.error('No user ID');
     if (!hourBlocks.length) return toast.error('Please add at least one hour block');
 
-    const selectedIndex = Number(data.opportunity_id);
+    const selectedIndex = Number(data.application_id);
     const selectedApp = applications[selectedIndex];
-    if (!selectedApp) return toast.error('Invalid opportunity selected');
+    if (!selectedApp?.id) return toast.error('Invalid application selected');
 
     const payload = {
-      volunteer_id: userId,
-      notes: data.notes?.trim() || '',
+      application_id: selectedApp.id,
       logged_hours: hourBlocks,
-      confirmed_by: false,
-      opportunity_id: selectedApp.opportunity_id,
-      org_id: selectedApp.org_id,
+      notes: data.notes?.trim() || '',
+      vol_confirmed: true,
+      org_confirmed: false,
+      finalized: false,
     };
 
     mutation.mutate(payload);
@@ -144,18 +148,18 @@ export default function FormLogHours({ isEdit }) {
           <div>
             <label className="block font-medium text-sm mb-1">Opportunity</label>
             <select
-              {...register('opportunity_id', { required: 'Select an opportunity' })}
+              {...register('application_id', { required: 'Select an opportunity' })}
               className="w-full p-2 border rounded"
             >
               <option value="">Select one</option>
               {applications.map((app, index) => (
-                <option key={`${app.opportunity_id}-${app.org_id}`} value={index}>
+                <option key={app.id} value={index}>
                   {app.label}
                 </option>
               ))}
             </select>
-            {errors.opportunity_id && (
-              <p className="text-red-500 text-sm mt-1">{errors.opportunity_id.message}</p>
+            {errors.application_id && (
+              <p className="text-red-500 text-sm mt-1">{errors.application_id.message}</p>
             )}
           </div>
 

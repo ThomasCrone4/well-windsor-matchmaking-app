@@ -7,7 +7,6 @@ import { format, parseISO } from 'date-fns';
 
 export default function ListLogHours() {
   const [userId, setUserId] = useState(null);
-  const [applications, setApplications] = useState([]);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -23,38 +22,33 @@ export default function ListLogHours() {
     fetchUser();
   }, []);
 
-  const { data: loggedHours = [], isLoading: loadingLogged } = useQuery({
+  const { data: loggedHours = [], isLoading } = useQuery({
     queryKey: ['loggedHours', userId],
     enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('volunteer_hours')
-        .select('id, opportunity_id, org_id, notes, logged_hours, created_at, confirmed_by')
-        .eq('volunteer_id', userId)
+        .select(`
+          id,
+          application_id,
+          notes,
+          logged_hours,
+          created_at,
+          vol_confirmed,
+          org_confirmed,
+          finalized,
+          application:applications (
+            opportunity_title,
+            subject,
+            direction,
+            volunteer_id
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data;
-    },
-  });
 
-  useQuery({
-    queryKey: ['acceptedApplications', userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('applications')
-        .select('opportunity_id, org_id, opportunity_title, subject')
-        .eq('volunteer_id', userId)
-        .eq('status', 'accepted');
-      if (error) throw error;
-      const apps = (data ?? []).map((app) => ({
-        opportunity_id: app.opportunity_id,
-        org_id: app.org_id,
-        label: app.opportunity_title || app.subject || 'Untitled Opportunity',
-      }));
-      setApplications(apps);
-      return apps;
+      return data.filter((entry) => entry.application?.volunteer_id === userId);
     },
   });
 
@@ -72,9 +66,7 @@ export default function ListLogHours() {
     try {
       const [sh, sm] = start.split(':').map(Number);
       const [eh, em] = end.split(':').map(Number);
-      const startMins = sh * 60 + sm;
-      const endMins = eh * 60 + em;
-      return Math.max(endMins - startMins, 0);
+      return Math.max((eh * 60 + em) - (sh * 60 + sm), 0);
     } catch {
       return 0;
     }
@@ -84,6 +76,38 @@ export default function ListLogHours() {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return `${h}h ${m}m`;
+  };
+
+  const getStatusBadge = (entry) => {
+    if (entry.finalized) {
+      return (
+        <span className="text-xs font-medium px-2 py-1 rounded bg-green-100 text-green-700">
+          Finalised
+        </span>
+      );
+    }
+
+    if (!entry.org_confirmed) {
+      return (
+        <span className="text-xs font-medium px-2 py-1 rounded bg-yellow-100 text-yellow-700">
+          Awaiting Organisation
+        </span>
+      );
+    }
+
+    if (!entry.vol_confirmed) {
+      return (
+        <span className="text-xs font-medium px-2 py-1 rounded bg-orange-100 text-orange-700">
+          Needs Your Confirmation
+        </span>
+      );
+    }
+
+    return (
+      <span className="text-xs font-medium px-2 py-1 rounded bg-gray-100 text-gray-700">
+        Pending Finalisation
+      </span>
+    );
   };
 
   return (
@@ -98,17 +122,16 @@ export default function ListLogHours() {
         </button>
       </div>
 
-      {loadingLogged ? (
+      {isLoading ? (
         <p>Loading...</p>
       ) : loggedHours.length === 0 ? (
         <p className="text-gray-500 italic">No hours logged yet.</p>
       ) : (
         loggedHours.map((entry) => {
-          const opportunity = applications.find(
-            (a) =>
-              a.opportunity_id === entry.opportunity_id &&
-              a.org_id === entry.org_id
-          );
+          const title =
+            entry.application?.direction === 'to_volunteer'
+              ? entry.application?.subject || 'Untitled Opportunity'
+              : entry.application?.opportunity_title || 'Untitled Opportunity';
 
           const totalMinutes = (entry.logged_hours || []).reduce((acc, block) => {
             return acc + getBlockDurationMinutes(block.start_time, block.end_time);
@@ -120,18 +143,8 @@ export default function ListLogHours() {
               className="bg-white p-4 rounded border shadow-sm space-y-2 mb-4"
             >
               <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-lg">
-                  {opportunity?.label || 'Untitled Opportunity'}
-                </h3>
-                <span
-                  className={`text-xs font-medium px-2 py-1 rounded ${
-                    entry.confirmed_by
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-yellow-100 text-yellow-700'
-                  }`}
-                >
-                  {entry.confirmed_by ? 'Confirmed by Organisation' : 'Pending Confirmation'}
-                </span>
+                <h3 className="font-semibold text-lg">{title}</h3>
+                {getStatusBadge(entry)}
               </div>
 
               <p className="text-sm text-gray-500">
@@ -165,13 +178,15 @@ export default function ListLogHours() {
                 <p className="italic text-gray-600">“{entry.notes}”</p>
               )}
 
-              {!entry.confirmed_by && (
+              {!entry.finalized && (
                 <div className="flex gap-4 text-sm mt-2">
                   <button
                     className="text-blue-600 hover:underline"
                     onClick={() => navigate(`/volunteer/log-hours/edit/${entry.id}`)}
                   >
-                    Edit
+                    {entry.org_confirmed && !entry.vol_confirmed
+                      ? 'Confirm & Edit'
+                      : 'Edit'}
                   </button>
                   <button
                     className="text-red-600 hover:underline"

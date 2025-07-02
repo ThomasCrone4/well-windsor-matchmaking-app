@@ -1,23 +1,33 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../utils/supabase';
-import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import WorkedMatrix from '../../../components/WorkedMatrix';
 
-export default function OpportunityLoggedHoursPage() {
-  const { id: opportunityId } = useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+export default function OrgLoggedHoursPage() {
+  const [orgId, setOrgId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editedBlocks, setEditedBlocks] = useState({});
   const [editedNotes, setEditedNotes] = useState({});
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  
-  
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data?.user) {
+        toast.error('Not logged in');
+        return;
+      }
+      setOrgId(data.user.id);
+    };
+    fetchUser();
+  }, []);
 
   const { data: logs = [], isLoading, error } = useQuery({
-    queryKey: ['loggedHoursByOpportunity', opportunityId],
+    queryKey: ['orgAllLoggedHours', orgId],
+    enabled: !!orgId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('volunteer_hours')
@@ -25,41 +35,31 @@ export default function OpportunityLoggedHoursPage() {
           id,
           logged_hours,
           notes,
-          confirmed_by,
           created_at,
+          vol_confirmed,
+          org_confirmed,
+          finalized,
           application:applications (
             id,
             opportunity_id,
+            org_id,
+            subject,
             volunteer:user_profiles!applications_volunteer_id_fkey1 (
-              name,
-              email
+              id, name, email
+            ),
+            opportunity:volunteer_opportunities!applications_opportunity_id_fkey (
+              id, title
             )
           )
         `)
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('❌ Supabase error fetching logs:', error);
+        console.error('❌ Supabase fetch error:', error);
         throw error;
       }
 
-      const filtered = data.filter((log) => {
-        const appOppId = log.application?.opportunity_id?.replaceAll('-', '') || '';
-        const urlOppId = opportunityId?.replaceAll('-', '') || '';
-        const match = appOppId === urlOppId;
-
-        
-
-        return match;
-      });
-
-      if (filtered.length === 0) {
-        console.warn('⚠️ No logs matched after filtering — falling back to raw logs for debugging');
-        return data;
-      }
-
-      console.log('✅ Filtered logs for this opportunity:', filtered);
-      return filtered;
+      return (data ?? []).filter((log) => log.application?.org_id === orgId);
     },
   });
 
@@ -70,7 +70,9 @@ export default function OpportunityLoggedHoursPage() {
         .update({
           logged_hours,
           notes,
-          confirmed_by: false,
+          org_confirmed: true,
+          vol_confirmed: false,
+          finalized: false,
         })
         .eq('id', id);
 
@@ -78,7 +80,7 @@ export default function OpportunityLoggedHoursPage() {
     },
     onSuccess: () => {
       toast.success('Hours updated — awaiting volunteer confirmation');
-      queryClient.invalidateQueries(['loggedHoursByOpportunity', opportunityId]);
+      queryClient.invalidateQueries(['orgAllLoggedHours', orgId]);
       setEditingId(null);
     },
     onError: () => toast.error('Failed to update hours'),
@@ -114,25 +116,29 @@ export default function OpportunityLoggedHoursPage() {
     return `${h}h ${m}m`;
   };
 
+  const getStatus = (log) => {
+    if (log.finalized) {
+      return <span className="text-green-700 font-medium">Finalised</span>;
+    }
+    if (!log.vol_confirmed) {
+      return <span className="text-orange-600 font-medium">Pending Volunteer Confirmation</span>;
+    }
+    if (!log.org_confirmed) {
+      return <span className="text-yellow-600 font-medium">Needs Your Confirmation</span>;
+    }
+    return <span className="text-gray-600">Pending Finalisation</span>;
+  };
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded shadow-sm transition"
-        >
-          ← Back
-        </button>
-        <h1 className="text-2xl font-bold text-center flex-1">Logged Hours</h1>
-        <div className="w-20" />
-      </div>
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">All Logged Hours</h1>
 
       {isLoading ? (
-        <p>Loading logged hours...</p>
+        <p>Loading...</p>
       ) : error ? (
-        <p className="text-red-600 text-center">Failed to load logs.</p>
-      ) : logs?.length === 0 ? (
-        <p className="text-gray-500 italic text-center">No hours logged yet for this opportunity.</p>
+        <p className="text-red-600">Failed to load logged hours.</p>
+      ) : logs.length === 0 ? (
+        <p className="text-gray-500 italic">No volunteer hours logged yet.</p>
       ) : (
         <ul className="space-y-6">
           {logs.map((log) => {
@@ -140,13 +146,22 @@ export default function OpportunityLoggedHoursPage() {
               return acc + getDuration(block.start_time, block.end_time);
             }, 0);
 
+            const volunteer = log.application?.volunteer;
+            const opportunity = log.application?.opportunity;
+
             return (
-              <li key={log.id} className="border rounded shadow-sm bg-white p-4 space-y-2">
+              <li key={log.id} className="bg-white p-4 rounded border shadow-sm space-y-1">
                 <h3 className="text-lg font-semibold text-blue-800">
-                  {log.application?.volunteer?.name || 'Unknown Volunteer'}
+                  {volunteer?.name || 'Unknown'} — {opportunity?.title || log.application?.subject || 'Untitled'}
                 </h3>
-                <p className="text-sm text-gray-600">
-                  📧 {log.application?.volunteer?.email || 'No contact'}
+
+                <p className="text-sm text-gray-600">📧 {volunteer?.email || 'No email'}</p>
+                <p className="text-sm">
+                  <strong>Status:</strong> {getStatus(log)}
+                </p>
+                <p className="text-sm">
+                  <strong>Total Time:</strong>{' '}
+                  <span className="text-blue-700">{formatTime(totalMins)}</span>
                 </p>
 
                 {editingId === log.id ? (
@@ -189,46 +204,25 @@ export default function OpportunityLoggedHoursPage() {
                   </>
                 ) : (
                   <>
-                    <p className="text-sm text-gray-700">
-                      <strong>Status:</strong>{' '}
-                      {log.confirmed_by ? (
-                        <span className="text-green-700 font-medium">Confirmed</span>
-                      ) : (
-                        <span className="text-orange-600 font-medium">
-                          Pending Volunteer Confirmation
-                        </span>
-                      )}
-                    </p>
-
-                    <p className="text-sm">
-                      <strong>Total Time:</strong>{' '}
-                      <span className="font-medium text-blue-700">
-                        {formatTime(totalMins)}
-                      </span>
-                    </p>
-
                     <div className="text-sm">
                       <strong>Notes:</strong>{' '}
                       {log.notes ? (
                         <span>{log.notes}</span>
                       ) : (
-                        <span className="italic text-gray-500">No notes provided</span>
+                        <span className="italic text-gray-500">No notes</span>
                       )}
                     </div>
 
-                    <div className="text-sm">
-                      <strong>Worked Blocks:</strong>
-                      <ul className="pl-4 list-disc text-xs mt-1">
-                        {log.logged_hours?.map((block, i) => (
-                          <li key={i}>
-                            {block.days?.join(', ') || 'N/A'} — {block.start_date} to {block.end_date},{' '}
-                            {block.start_time}–{block.end_time}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    <ul className="text-xs mt-2 space-y-0.5">
+                      {log.logged_hours?.map((block, i) => (
+                        <li key={i}>
+                          🗓 {block.days?.join(', ') || 'N/A'} | {block.start_date} → {block.end_date} |{' '}
+                          {block.start_time}–{block.end_time}
+                        </li>
+                      ))}
+                    </ul>
 
-                    {!log.confirmed_by && (
+                    {!log.finalized && (
                       <button
                         onClick={() => handleEdit(log)}
                         className="text-blue-600 text-sm underline mt-1"
