@@ -18,7 +18,6 @@ export default function FormLogHours({ isEdit }) {
   const {
     register,
     handleSubmit,
-    reset,
     setValue,
     formState: { errors },
   } = useForm();
@@ -72,16 +71,20 @@ export default function FormLogHours({ isEdit }) {
     },
   });
 
+  // First: store edit entry once available
   useEffect(() => {
-    if (!isEdit || !editEntryData || !applications.length) return;
-
+    if (!isEdit || !editEntryData) return;
     setEditEntry(editEntryData);
     setHourBlocks(editEntryData.logged_hours || []);
     setValue('notes', editEntryData.notes || '');
+  }, [editEntryData, isEdit, setValue]);
 
-    const index = applications.findIndex(app => app.id === editEntryData.application_id);
+  // Then: once apps are ready, populate dropdown selection
+  useEffect(() => {
+    if (!isEdit || !editEntry) return;
+    const index = applications.findIndex(app => app.id === editEntry.application_id);
     if (index !== -1) setValue('application_id', index.toString());
-  }, [editEntryData, applications, isEdit, setValue]);
+  }, [applications, editEntry, isEdit, setValue]);
 
   const mutation = useMutation({
     mutationFn: async (payload) => {
