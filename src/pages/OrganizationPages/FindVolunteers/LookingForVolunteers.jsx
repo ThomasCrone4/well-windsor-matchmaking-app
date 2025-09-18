@@ -29,9 +29,11 @@ export default function LookingForVolunteersPage() {
       const matchesDBS =
         filters.dbs === 'Any' ||
         (filters.dbs === 'DBS Required' ? v.dbs_checked : !v.dbs_checked);
+      const q = searchTerm.toLowerCase();
       const matchesSearch =
-        v.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.skills?.toLowerCase().includes(searchTerm.toLowerCase());
+        (v.name || '').toLowerCase().includes(q) ||
+        (v.skills || '').toLowerCase().includes(q) ||
+        (v.bio || '').toLowerCase().includes(q);
       return matchesTown && matchesDBS && matchesSearch;
     });
   };
@@ -84,87 +86,119 @@ export default function LookingForVolunteersPage() {
     }
   };
 
-
   if (isLoading) return <p className="text-center mt-20">Loading volunteers...</p>;
-  if (error) return <p className="text-center text-red-500 mt-20">Failed to load volunteers.</p>;
+  if (error) return <p className="text-center text-red-600 mt-20">Failed to load volunteers.</p>;
 
   const filtered = filterVolunteers(data || []);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6 text-center">Find Volunteers</h1>
+      <div className="page-header">
+        <h1 className="title">Find Volunteers</h1>
 
-      <div className="flex justify-center mb-6">
-        <Link
-          to="/organization/sent-enquiries"
-          className="inline-block bg-emerald-600 text-white font-semibold px-6 py-2 rounded-lg shadow hover:bg-emerald-700 transition"
-        >
-          Sent Enquiries
-        </Link>
+        <div className="flex justify-center mb-6">
+          <Link to="/organization/sent-enquiries" className="btn-success">
+            Sent Enquiries
+          </Link>
+        </div>
+      </div>
+      {/* Filters */}
+      <div className="card mb-6">
+        <div className="form-grid md:grid-cols-4">
+          {/* Search */}
+          <div className="form-row">
+            <label htmlFor="search" className="label">Search</label>
+            <input
+              id="search"
+              type="text"
+              placeholder="Name, skills, bio…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input"
+            />
+          </div>
+
+          {/* Town */}
+          <div className="form-row">
+            <label htmlFor="town" className="label">Town</label>
+            <select
+              id="town"
+              value={filters.town}
+              onChange={(e) => setFilters(f => ({ ...f, town: e.target.value }))}
+              className="select"
+            >
+              <option value="All">All</option>
+              <option value="Windsor">Windsor</option>
+              <option value="Maidenhead">Maidenhead</option>
+              <option value="Slough">Slough</option>
+            </select>
+          </div>
+
+          {/* DBS */}
+          <div className="form-row">
+            <label htmlFor="dbs" className="label">DBS</label>
+            <select
+              id="dbs"
+              value={filters.dbs}
+              onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))}
+              className="select"
+            >
+              <option value="Any">Any</option>
+              <option value="DBS Required">DBS Required</option>
+              <option value="No DBS Required">No DBS Required</option>
+            </select>
+          </div>
+
+          {/* Clear */}
+          <div className="form-row">
+            <label className="label">&nbsp;</label>
+            <button
+              type="button"
+              onClick={() => {
+                setFilters({ town: 'All', dbs: 'Any' });
+                setSearchTerm('');
+              }}
+              className="btn-secondary"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-4 items-center justify-center">
-        <input
-          type="text"
-          placeholder="Search by name or skills..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="p-2 border rounded w-64"
-        />
-        <select
-          onChange={(e) => setFilters(f => ({ ...f, town: e.target.value }))}
-          className="p-2 border rounded"
-          value={filters.town}
-        >
-          <option value="All">Location</option>
-          <option value="Windsor">Windsor</option>
-          <option value="Maidenhead">Maidenhead</option>
-          <option value="Slough">Slough</option>
-        </select>
-        <select
-          onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))}
-          className="p-2 border rounded"
-          value={filters.dbs}
-        >
-          <option value="Any">DBS status</option>
-          <option value="DBS Required">DBS Required</option>
-          <option value="No DBS Required">No DBS Required</option>
-        </select>
-
-        <button
-          onClick={() => {
-            setFilters({ town: 'All', dbs: 'Any' });
-            setSearchTerm('');
-          }}
-          className="text-sm text-gray-600 underline hover:text-gray-800"
-        >
-          Clear Filters
-        </button>
-      </div>
-
+      {/* Results */}
       {filtered.length === 0 ? (
         <p className="text-center text-gray-600">No volunteers found.</p>
       ) : (
         <ul className="space-y-6">
           {filtered.map((vol) => (
-            <li key={vol.id} className="p-6 border rounded-lg shadow-sm bg-white space-y-2">
-              <h2 className="text-xl font-semibold">{vol.name}</h2>
-              <p className="text-gray-700">{vol.bio}</p>
-              <div className="text-sm text-gray-600">🏠 Home Town: {vol.home_town}</div>
-              <div className="text-sm text-gray-600">🛠️ Skills: {vol.skills}</div>
+            <li key={vol.id} className="card p-6 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold">{vol.name}</h2>
+                  <p className="text-gray-700">{vol.bio}</p>
+                </div>
+                {vol.dbs_checked && (
+                  <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">
+                    DBS Checked
+                  </span>
+                )}
+              </div>
+
+              <div className="text-sm text-gray-600">🏠 Home Town: {vol.home_town || '—'}</div>
+              <div className="text-sm text-gray-600">🛠️ Skills: {vol.skills || '—'}</div>
               <div className="text-sm text-gray-600">
                 📋 Availability: {renderAvailability(vol)}
               </div>
-              {vol.dbs_checked && (
-                <div className="text-sm text-red-600">🔒 DBS Checked</div>
-              )}
 
-              <button
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mt-2"
-                onClick={() => handleEnquire(vol.id)}
-              >
-                Contact Volunteer
-              </button>
+              <div className="pt-2">
+                <button
+                  className="btn-primary"
+                  onClick={() => handleEnquire(vol.id)}
+                >
+                  Contact Volunteer
+                </button>
+              </div>
             </li>
           ))}
         </ul>

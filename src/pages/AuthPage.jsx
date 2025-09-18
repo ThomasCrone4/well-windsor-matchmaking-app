@@ -9,7 +9,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('volunteer');
   const [name, setName] = useState('');
-  const [bio, setBio] = useState('');
+  const [bio, setBio] = useState(''); // kept if you want to re-introduce later
   const [postcode, setPostcode] = useState('');
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
@@ -99,119 +99,201 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded shadow w-full max-w-lg space-y-4"
-      >
-        <h2 className="text-2xl font-bold text-center">
-          {isSigningUp ? 'Sign Up' : 'Log In'}
-        </h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <form onSubmit={handleSubmit} className="card w-full max-w-lg form">
+        <h2 className="title">{isSigningUp ? 'Sign Up' : 'Log In'}</h2>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Email <span className="text-red-500">*</span></label>
-          <input type="email" className="w-full p-2 border rounded" value={email} onChange={(e) => setEmail(e.target.value)} />
-          {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+        {/* Email */}
+        <div className="form-row">
+          <label className="label">
+            Email <span className="required" />
+          </label>
+          <input
+            type="email"
+            className="input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={!!errors.email}
+          />
+          {errors.email && <p className="error-text">{errors.email}</p>}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Password <span className="text-red-500">*</span></label>
-          <input type="password" className="w-full p-2 border rounded" value={password} onChange={(e) => setPassword(e.target.value)} />
-          {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+        {/* Password */}
+        <div className="form-row">
+          <label className="label">
+            Password <span className="required" />
+          </label>
+          <input
+            type="password"
+            className="input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={!!errors.password}
+          />
+          {errors.password && <p className="error-text">{errors.password}</p>}
         </div>
 
         {isSigningUp && (
           <>
-            <div>
-              <label className="block text-sm font-medium mb-1">Role <span className="text-red-500">*</span></label>
-              <select className="w-full p-2 border rounded" value={role} onChange={(e) => setRole(e.target.value)}>
+            {/* Role */}
+            <div className="form-row">
+              <label className="label">
+                Role <span className="required" />
+              </label>
+              <select
+                className="select"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              >
                 <option value="volunteer">Volunteer</option>
                 <option value="organization">Organization</option>
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                {role === 'organization' ? 'Organisation Name' : 'Full Name'} <span className="text-red-500">*</span>
+            {/* Name */}
+            <div className="form-row">
+              <label className="label">
+                {role === 'organization' ? 'Organisation Name' : 'Full Name'}{' '}
+                <span className="required" />
               </label>
-              <input type="text" className="w-full p-2 border rounded" value={name} onChange={(e) => setName(e.target.value)} />
-              {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+              <input
+                type="text"
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                aria-invalid={!!errors.name}
+              />
+              {errors.name && <p className="error-text">{errors.name}</p>}
             </div>
 
+            {/* Org-only: Postcode */}
             {role === 'organization' && (
-              <div>
-                <label className="block text-sm font-medium mb-1">Postcode <span className="text-red-500">*</span></label>
-                <input type="text" className="w-full p-2 border rounded" value={postcode} onChange={(e) => setPostcode(e.target.value)} />
-                {errors.postcode && <p className="text-red-500 text-sm mt-1">{errors.postcode}</p>}
+              <div className="form-row">
+                <label className="label">
+                  Postcode <span className="required" />
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  value={postcode}
+                  onChange={(e) => setPostcode(e.target.value)}
+                  aria-invalid={!!errors.postcode}
+                />
+                {errors.postcode && <p className="error-text">{errors.postcode}</p>}
               </div>
             )}
 
+            {/* Volunteer-only fields */}
             {role === 'volunteer' && (
               <>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Home Town <span className="text-red-500">*</span></label>
-                  <select className="w-full p-2 border rounded" value={homeTown} onChange={(e) => setHomeTown(e.target.value)}>
+                {/* Home Town */}
+                <div className="form-row">
+                  <label className="label">
+                    Home Town <span className="required" />
+                  </label>
+                <select
+                    className={`select ${errors.homeTown ? 'select-invalid' : ''}`}
+                    value={homeTown}
+                    onChange={(e) => setHomeTown(e.target.value)}
+                    aria-invalid={!!errors.homeTown}
+                  >
                     <option value="">Select your home town</option>
                     <option value="Windsor">Windsor</option>
                     <option value="Maidenhead">Maidenhead</option>
                     <option value="Slough">Slough</option>
                   </select>
-                  {errors.homeTown && <p className="text-red-500 text-sm mt-1">{errors.homeTown}</p>}
+                  {errors.homeTown && <p className="error-text">{errors.homeTown}</p>}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Date of Birth <span className="text-red-500">*</span></label>
-                  <input type="date" className="w-full p-2 border rounded" value={dob} onChange={(e) => setDob(e.target.value)} />
-                  {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob}</p>}
+                {/* Date of Birth */}
+                <div className="form-row">
+                  <label className="label">
+                    Date of Birth <span className="required" />
+                  </label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    aria-invalid={!!errors.dob}
+                  />
+                  {errors.dob && <p className="error-text">{errors.dob}</p>}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Contact Number <span className="text-gray-400">(optional)</span></label>
-                  <input type="text" className="w-full p-2 border rounded" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
+                {/* Contact Number */}
+                <div className="form-row">
+                  <label className="label">
+                    Contact Number <span className="help-text">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={contactNumber}
+                    onChange={(e) => setContactNumber(e.target.value)}
+                  />
                 </div>
 
-                <label className="block text-sm font-medium">
-                  <input type="checkbox" checked={dbsChecked} onChange={(e) => setDbsChecked(e.target.checked)} className="mr-2" />
-                  DBS Checked
-                </label>
+                {/* Inline checkboxes */}
+                <div className="check-row">
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={dbsChecked}
+                      onChange={(e) => setDbsChecked(e.target.checked)}
+                      className="check"
+                    />
+                    DBS Checked
+                  </label>
 
-                <label className="block text-sm font-medium">
-                  <input type="checkbox" checked={availableAnytime} onChange={(e) => setAvailableAnytime(e.target.checked)} className="mr-2" />
-                  Generally Available (all times)
-                </label>
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={availableAnytime}
+                      onChange={(e) => setAvailableAnytime(e.target.checked)}
+                      className="check"
+                    />
+                    Generally Available (all times)
+                  </label>
+
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={publicProfile}
+                      onChange={(e) => setPublicProfile(e.target.checked)}
+                      className="check"
+                    />
+                    Show my profile publicly on the volunteer page
+                  </label>
+                </div>
 
                 {!availableAnytime && (
-                  <AvailabilityMatrix value={availabilityMatrix} onChange={setAvailabilityMatrix} />
-                )}
-
-                <label className="block text-sm font-medium">
-                  <input
-                    type="checkbox"
-                    checked={publicProfile}
-                    onChange={(e) => setPublicProfile(e.target.checked)}
-                    className="mr-2"
+                  <AvailabilityMatrix
+                    value={availabilityMatrix}
+                    onChange={setAvailabilityMatrix}
                   />
-                  Show my profile publicly on the volunteer page
-                </label>
-
+                )}
               </>
             )}
           </>
         )}
 
-        <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+        {/* Submit */}
+        <button type="submit" className="btn btn-primary btn-block">
           {isSigningUp ? 'Create Account' : 'Log In'}
         </button>
 
-        <p className="text-sm text-center">
-          {isSigningUp ? 'Already have an account?' : 'Need to create an account?'}{' '}
+        {/* Switch mode */}
+        <p className="text-center">
+          <span className="text-sm">
+            {isSigningUp ? 'Already have an account?' : 'Need to create an account?'}{' '}
+          </span>
           <button
             type="button"
             onClick={() => {
               setIsSigningUp(!isSigningUp);
               setErrors({});
             }}
-            className="text-blue-600 underline"
+            className="underline text-brand-teal"
           >
             {isSigningUp ? 'Log In' : 'Sign Up'}
           </button>

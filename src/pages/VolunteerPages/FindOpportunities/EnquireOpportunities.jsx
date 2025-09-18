@@ -91,55 +91,52 @@ export default function EnquiryPage() {
 
   return (
     <div className="max-w-xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+       <div className="page-header">
         <button
           onClick={() => navigate(-1)}
-          className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded shadow-sm transition"
+          className="btn btn-secondary btn-sm"
         >
           ← Back
         </button>
-        <h1 className="text-2xl font-bold">Send Enquiry</h1>
-        <div className="w-20" />
+        <h1 className="title">Send Enquiry</h1>
+        <div className="spacer" />
       </div>
 
-      <p className="mb-4 text-gray-700">
+      <p className="muted mb-4">
         You're sending an enquiry to{' '}
         <strong>{opportunity.title || 'Unnamed Role'}</strong> – {opportunity.location || 'Unknown Location'}
       </p>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 bg-white p-6 rounded shadow">
-        <div>
-          <label className="block font-medium text-sm mb-1">
-            Subject <span className="text-red-500">*</span>
+      <form onSubmit={handleSubmit(onSubmit)} className="card form space-y-4">
+        <div className="field">
+          <label className="label">
+            Subject <span className="required"></span>
           </label>
           <textarea
             {...register('subject', { required: 'Subject is required' })}
             placeholder="Enter your subject"
-            className="w-full p-2 border rounded min-h-[50px]"
+            className="input textarea textarea-sm"
           />
           {errors.subject && (
-            <p className="text-red-500 text-sm mt-1">{errors.subject.message}</p>
+            <p className="error">{errors.subject.message}</p>
           )}
         </div>
 
-        <div>
-          <label className="block font-medium text-sm mb-1">
-            Message <span className="text-red-500">*</span>
+        <div className="field">
+          <label className="label">
+            Message <span className="required"></span>
           </label>
           <textarea
             {...register('message', { required: 'Message is required' })}
             placeholder="Write your message"
-            className="w-full p-2 border rounded min-h-[120px]"
+            className="input textarea textarea-lg"
           />
           {errors.message && (
-            <p className="text-red-500 text-sm mt-1">{errors.message.message}</p>
+            <p className="error">{errors.message.message}</p>
           )}
         </div>
 
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-        >
+        <button type="submit" className="btn btn-primary btn-block">
           Send Enquiry
         </button>
       </form>

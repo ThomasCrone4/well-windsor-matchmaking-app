@@ -101,73 +101,113 @@ export default function PostOpportunity() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6 text-center">Post a New Opportunity</h1>
+      <h1 className="title">Post a New Opportunity</h1>
 
-      <form className="space-y-4 bg-white p-6 rounded shadow">
-        <div>
-          <label className="block font-medium">Title</label>
-          <input {...register('title')} className="w-full p-2 border rounded" />
-          {errors.title && <p className="text-red-500 text-sm">{errors.title.message}</p>}
-        </div>
+      <form className="card-post">
+        <div className="form-grid">
+          {/* Title */}
+          <div className="form-row">
+            <label htmlFor="title" className="label required">Title</label>
+            <input
+              id="title"
+              {...register('title')}
+              className={`input ${errors.title ? 'input-invalid' : ''}`}
+              aria-invalid={!!errors.title}
+              placeholder="e.g. After School Reading Support"
+            />
+            {errors.title
+              ? <p className="error-text">{errors.title.message}</p>
+              : <p className="help-text">Clear, descriptive titles help volunteers find you.</p>}
+          </div>
 
-        <div>
-          <label className="block font-medium">Description</label>
-          <textarea {...register('description')} className="w-full p-2 border rounded" />
-        </div>
-
-        <div>
-          <label className="block font-medium">Location</label>
-          <input {...register('location')} className="w-full p-2 border rounded" />
-          {errors.location && <p className="text-red-500 text-sm">{errors.location.message}</p>}
-        </div>
-
-        <div>
-          <label className="block font-medium">Contact Email</label>
-          <input
-            {...register('contact')}
-            placeholder="e.g. email@org.com"
-            className="w-full p-2 border rounded"
-          />
-          {errors.contact && <p className="text-red-500 text-sm">{errors.contact.message}</p>}
-        </div>
-
-        <div>
-          <label className="block font-medium">Number of Volunteers Needed</label>
-          <input
-            type="number"
-            min={1}
-            {...register('volunteers_needed')}
-            className="w-full p-2 border rounded"
-          />
-          {errors.volunteers_needed && (
-            <p className="text-red-500 text-sm">{errors.volunteers_needed.message}</p>
-          )}
-        </div>
-
-        <label className="block">
-          <input type="checkbox" {...register('generally_needed')} />
-          {' '}Generally Needed (any time)
-        </label>
-
-        {!generallyNeeded && (
-          <div>
-            <label className="block font-medium">Specific Times Needed</label>
-            <Controller
-              name="when_needed"
-              control={control}
-              render={({ field }) => (
-                <AvailabilityMatrix value={field.value} onChange={field.onChange} />
-              )}
+          {/* Description */}
+          <div className="form-row">
+            <label htmlFor="description" className="label">Description</label>
+            <textarea
+              id="description"
+              {...register('description')}
+              className={`textarea ${errors.description ? 'textarea-invalid' : ''}`}
+              placeholder="Brief outline of the role, tasks, and impact."
             />
           </div>
-        )}
 
-        <label className="block mt-4">
-          <input type="checkbox" {...register('requires_dbs')} />
-          {' '}Requires DBS check
-        </label>
+          {/* Location */}
+          <div className="form-row">
+            <label htmlFor="location" className="label required">Location</label>
+            <input
+              id="location"
+              {...register('location')}
+              className={`input ${errors.location ? 'input-invalid' : ''}`}
+              aria-invalid={!!errors.location}
+              placeholder="e.g. Windsor"
+            />
+            {errors.location && <p className="error-text">{errors.location.message}</p>}
+          </div>
 
-        <div className="space-y-4 pt-6">
+          {/* Contact */}
+          <div className="form-row">
+            <label htmlFor="contact" className="label required">Contact Email</label>
+            <input
+              id="contact"
+              {...register('contact')}
+              className={`input ${errors.contact ? 'input-invalid' : ''}`}
+              aria-invalid={!!errors.contact}
+              placeholder="e.g. email@org.com"
+              type="email"
+            />
+            {errors.contact && <p className="error-text">{errors.contact.message}</p>}
+          </div>
+
+          {/* Volunteers Needed */}
+          <div className="form-row">
+            <label htmlFor="volunteers_needed" className="label">Number of Volunteers Needed</label>
+            <input
+              id="volunteers_needed"
+              type="number"
+              min={1}
+              {...register('volunteers_needed')}
+              className={`input ${errors.volunteers_needed ? 'input-invalid' : ''}`}
+              aria-invalid={!!errors.volunteers_needed}
+            />
+            {errors.volunteers_needed && (
+              <p className="error-text">{errors.volunteers_needed.message}</p>
+            )}
+          </div>
+
+          {/* Generally Needed */}
+          <div className="form-row">
+            <label className="check-label">
+              <input type="checkbox" {...register('generally_needed')} className="check" />
+              Generally Needed (any time)
+            </label>
+            <p className="help-text">Tick if this role can be done at flexible times.</p>
+          </div>
+
+          {/* Specific Times Needed */}
+          {!generallyNeeded && (
+            <div className="form-row">
+              <label className="label">Specific Times Needed</label>
+              <Controller
+                name="when_needed"
+                control={control}
+                render={({ field }) => (
+                  <AvailabilityMatrix value={field.value} onChange={field.onChange} />
+                )}
+              />
+            </div>
+          )}
+
+          {/* DBS */}
+          <div className="form-row">
+            <label className="check-label">
+              <input type="checkbox" {...register('requires_dbs')} className="check" />
+              Requires DBS check
+            </label>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="space-y-3 pt-6">
           <button
             type="submit"
             onClick={(e) => {
@@ -177,7 +217,7 @@ export default function PostOpportunity() {
                 handleSubmit((data) => submitOpportunity(data, 'Active'))();
               }, 0);
             }}
-            className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
+            className="btn-primary w-full"
           >
             Post Opportunity
           </button>
@@ -191,7 +231,7 @@ export default function PostOpportunity() {
                 handleSubmit((data) => submitOpportunity(data, 'draft'))();
               }, 0);
             }}
-            className="w-full bg-gray-300 text-gray-800 py-3 rounded hover:bg-gray-400"
+            className="btn-secondary w-full"
           >
             Save as Draft
           </button>

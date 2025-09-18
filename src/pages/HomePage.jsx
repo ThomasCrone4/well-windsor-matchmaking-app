@@ -1,8 +1,8 @@
+// src/pages/HomePage.jsx
 import { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import Footer from '../components/Footer';
 import { Link } from 'react-router-dom';
 
 export default function HomePage() {
@@ -11,24 +11,35 @@ export default function HomePage() {
   // Fetch real-time stats
   useEffect(() => {
     const fetchStats = async () => {
-      const { data: hoursData } = await supabase
+      // Sum hours from applications.logged_hours (adjust table/column if different)
+      const { data: hoursRows, error: hoursErr } = await supabase
         .from('applications')
-        .select('logged_hours', { count: 'exact' });
+        .select('logged_hours');
 
-      const { data: volunteerData } = await supabase
+      // Volunteers count
+      const { data: volunteersRows, error: volErr } = await supabase
         .from('user_profiles')
-        .select('id', { count: 'exact' })
+        .select('id')
         .eq('role', 'volunteer');
 
-      const { data: youthData } = await supabase
+      // Crude example for youth-related skills
+      const { data: youthRows, error: youthErr } = await supabase
         .from('user_profiles')
-        .select('id', { count: 'exact' })
-        .ilike('skills', '%mentoring%'); // crude example for youth-related filter
+        .select('id')
+        .ilike('skills', '%mentoring%');
+
+      if (hoursErr || volErr || youthErr) {
+        // swallow errors silently for the hero; you could toast.error here
+      }
+
+      const totalHours = (hoursRows || [])
+        .map(r => Number(r.logged_hours) || 0)
+        .reduce((a, b) => a + b, 0);
 
       setStats({
-        hours: hoursData?.length ? hoursData.reduce((acc, row) => acc + row.logged_hours, 0) : 0,
-        volunteers: volunteerData?.length || 0,
-        youth: youthData?.length || 0,
+        hours: totalHours,
+        volunteers: volunteersRows?.length || 0,
+        youth: youthRows?.length || 0,
       });
     };
     fetchStats();
@@ -50,86 +61,98 @@ export default function HomePage() {
   });
 
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col">
-
-      <main className="flex-1 px-6 py-12 max-w-6xl mx-auto">
-        <section className="text-center mb-12">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-800">
-            Connect with volunteer opportunities in the Windsor community
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      {/* HERO */}
+      <section className="bg-gradient-to-br from-brand-heroFrom to-brand-heroTo">
+        <div className="container py-12 text-center">
+          <h1 className="text-3xl md:text-5xl font-bold text-brand-blue mb-3">
+            Connect with volunteer opportunities in Windsor
           </h1>
-          <p className="text-gray-600 mb-6">
-            Sign up to support local schools and organisations.
+          <p className="text-gray-700 mb-6 max-w-2xl mx-auto">
+            Sign up to support local schools and organisations. Find roles that match your skills, location, and availability.
           </p>
           <Link
             to="/auth"
-            className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-2 rounded shadow transition"
+            className="btn-primary px-6 py-3 rounded-2xl shadow-card"
           >
             Get Started
           </Link>
-        </section>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
-          <div className="border p-6 rounded shadow bg-white">
-            <h2 className="text-xl font-semibold mb-2">For Volunteers</h2>
+          {/* Impact quick stats in the hero */}
+          <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
+            <div className="card">
+              <p className="text-3xl font-bold text-brand-blue">{stats.hours.toLocaleString()}</p>
+              <p className="text-sm text-gray-600">Volunteer Hours</p>
+            </div>
+            <div className="card">
+              <p className="text-3xl font-bold text-brand-blue">{stats.volunteers.toLocaleString()}</p>
+              <p className="text-sm text-gray-600">Volunteers Engaged</p>
+            </div>
+            <div className="card">
+              <p className="text-3xl font-bold text-brand-blue">{stats.youth.toLocaleString()}</p>
+              <p className="text-sm text-gray-600">Youth Mentored</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <main className="flex-1">
+        {/* Two-up cards */}
+        <div className="container grid md:grid-cols-2 gap-6 py-10">
+          <div className="card">
+            <h2 className="text-xl font-semibold mb-2 text-gray-900">For Volunteers</h2>
             <ul className="text-gray-700 list-disc list-inside space-y-1">
               <li>Browse opportunities</li>
               <li>Sign up to volunteer</li>
               <li>Track your impact</li>
             </ul>
-            <Link to="/opportunities" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+            <Link
+              to="/opportunities"
+              className="mt-4 inline-block btn-primary rounded-xl"
+            >
               Find Opportunities
             </Link>
           </div>
 
-          <div className="border p-6 rounded shadow bg-white">
-            <h2 className="text-xl font-semibold mb-2">For Schools/Orgs</h2>
+          <div className="card">
+            <h2 className="text-xl font-semibold mb-2 text-gray-900">For Schools/Orgs</h2>
             <ul className="text-gray-700 list-disc list-inside space-y-1">
-              <li> Browse public volunteer profiles</li>
+              <li>Browse public volunteer profiles</li>
               <li>Submit volunteer needs</li>
               <li>Engage with the community</li>
             </ul>
-            <Link to="/organization-dashboard" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+            <Link
+              to="/organization-dashboard"
+              className="mt-4 inline-block btn-primary rounded-xl"
+            >
               Submit Needs
             </Link>
           </div>
         </div>
 
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold mb-4">📅 Upcoming Opportunities</h2>
-          {isLoading ? (
-            <p>Loading...</p>
-          ) : opportunities?.length > 0 ? (
-            <ul className="divide-y">
-              {opportunities.map((op) => (
-                <li key={op.id} className="py-4 flex justify-between">
-                  <div>
-                    <p className="text-lg font-medium">{op.title}</p>
-                    <p className="text-sm text-gray-600">{op.location}</p>
-                  </div>
-                  <p className="text-sm text-gray-500">{format(new Date(op.date_needed), 'MMM d')}</p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>No upcoming opportunities.</p>
-          )}
-        </section>
-
-        <section className="text-center">
-          <h2 className="text-2xl font-bold mb-6">⚡ Our Impact</h2>
-          <div className="grid grid-cols-3 gap-4 text-center text-xl text-gray-700">
-            <div>
-              <p className="text-3xl font-bold text-blue-600">{stats.hours.toLocaleString()}</p>
-              <p className="text-sm">Volunteer Hours</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-blue-600">{stats.volunteers.toLocaleString()}</p>
-              <p className="text-sm">Volunteers Engaged</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-blue-600">{stats.youth.toLocaleString()}</p>
-              <p className="text-sm">Youth Mentored</p>
-            </div>
+        {/* Upcoming opportunities */}
+        <section className="container pb-12">
+          <h2 className="text-2xl font-bold mb-4 text-gray-900">📅 Upcoming Opportunities</h2>
+          <div className="bg-white rounded-2xl shadow-card">
+            {isLoading ? (
+              <p className="p-6 text-gray-600">Loading...</p>
+            ) : opportunities?.length > 0 ? (
+              <ul className="divide-y">
+                {opportunities.map((op) => (
+                  <li key={op.id} className="py-4 px-6 flex items-center justify-between">
+                    <div>
+                      <p className="text-lg font-medium text-gray-900">{op.title}</p>
+                      <p className="text-sm text-gray-600">{op.location}</p>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      {op.date_needed ? format(new Date(op.date_needed), 'MMM d') : 'TBC'}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="p-6 text-gray-600">No upcoming opportunities.</p>
+            )}
           </div>
         </section>
       </main>

@@ -130,56 +130,106 @@ export default function VolunteerProfilePage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-4">Edit Your Volunteer Profile</h1>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <h1 className="title">Edit Your Volunteer Profile</h1>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Full Name <span className="text-red-500">*</span></label>
-          <input {...register('name')} className="w-full p-2 border rounded" placeholder="Your full name" />
-          {errors.name && <p className="text-red-500 text-sm">{errors.name.message}</p>}
+      <form onSubmit={handleSubmit(onSubmit)} className="form">
+        {/* Full Name */}
+        <div className="form-row">
+          <label className="label">
+            Full Name <span className="required" />
+          </label>
+          <input
+            {...register('name')}
+            className="input"
+            placeholder="Your full name"
+            aria-invalid={!!errors.name}
+          />
+          {errors.name && <p className="error-text">{errors.name.message}</p>}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Contact Number <span className="text-gray-400">(optional)</span></label>
-          <input {...register('contact_number')} className="w-full p-2 border rounded" placeholder="e.g. 07123 456789" />
+        {/* Contact Number */}
+        <div className="form-row">
+          <label className="label">
+            Contact Number <span className="help-text">(optional)</span>
+          </label>
+          <input
+            {...register('contact_number')}
+            className="input"
+            placeholder="e.g. 07123 456789"
+          />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Home Town <span className="text-red-500">*</span></label>
-          <select {...register('home_town')} className="w-full p-2 border rounded">
+        {/* Home Town */}
+        <div className="form-row">
+          <label className="label">
+            Home Town <span className="required" />
+          </label>
+          <select
+            {...register('home_town')}
+            className={`select ${errors.home_town ? 'select-invalid' : ''}`}
+            aria-invalid={!!errors.home_town}
+          >
             <option value="">Select your home town</option>
             <option value="Windsor">Windsor</option>
             <option value="Maidenhead">Maidenhead</option>
             <option value="Slough">Slough</option>
           </select>
-          {errors.home_town && <p className="text-red-500 text-sm">{errors.home_town.message}</p>}
+          {errors.home_town && <p className="error-text">{errors.home_town.message}</p>}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Date of Birth <span className="text-gray-400">(optional)</span></label>
-          <input type="date" {...register('dob')} className="w-full p-2 border rounded" />
+        {/* Date of Birth */}
+        <div className="form-row">
+          <label className="label">
+            Date of Birth <span className="help-text">(optional)</span>
+          </label>
+          <input type="date" {...register('dob')} className="input" />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Bio <span className="text-gray-400">(optional unless public)</span></label>
-          <textarea {...register('bio')} className="w-full p-2 border rounded" placeholder="Tell us about yourself..." />
+        {/* Bio */}
+        <div className="form-row">
+          <label className="label">
+            Bio <span className="help-text">(optional unless public)</span>
+          </label>
+          <textarea
+            {...register('bio')}
+            className="textarea"
+            placeholder="Tell us about yourself..."
+          />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Skills / Experience <span className="text-gray-400">(optional unless public)</span></label>
-          <textarea {...register('skills')} className="w-full p-2 border rounded" placeholder="e.g. Working with children, first aid, cooking" />
+        {/* Skills */}
+        <div className="form-row">
+          <label className="label">
+            Skills / Experience <span className="help-text">(optional unless public)</span>
+          </label>
+          <textarea
+            {...register('skills')}
+            className="textarea"
+            placeholder="e.g. Working with children, first aid, cooking"
+          />
         </div>
 
-        <label className="block text-sm font-medium">
-          <input type="checkbox" {...register('dbs_checked')} className="mr-2" />
-          DBS Checked
-        </label>
+        <div className="check-row">
+          {/* DBS Checked */}
+          <label className="check-label">
+            <input type="checkbox" {...register('dbs_checked')} className="check" />
+            DBS Checked
+          </label>
 
-        <label className="block text-sm font-medium">
-          <input type="checkbox" {...register('available_anytime')} className="mr-2" />
-          Generally Available (all times)
-        </label>
+          {/* Generally Available */}
+          <label className="check-label">
+            <input type="checkbox" {...register('available_anytime')} className="check" />
+            Generally Available (all times)
+          </label>
 
+          {/* Public Profile */}
+          <label className="check-label">
+            <input type="checkbox" {...register('public_profile')} className="check" />
+            Show my profile publicly on the volunteer page
+          </label>
+        </div>
+
+        {/* Availability Matrix */}
         {!availableAnytime && (
           <Controller
             name="availability_matrix"
@@ -190,19 +240,16 @@ export default function VolunteerProfilePage() {
           />
         )}
 
-
-        <label className="block text-sm font-medium">
-          <input type="checkbox" {...register('public_profile')} className="mr-2" />
-          Show my profile publicly on the volunteer page
-        </label>
         {errors.public_profile && (
-          <p className="text-red-500 text-sm">{errors.public_profile.message}</p>
+          <p className="error-text">{errors.public_profile.message}</p>
         )}
+        
 
+        {/* Actions */}
         <div className="flex gap-4 pt-2">
           <button
             type="submit"
-            className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            className="btn btn-primary flex-1"
             disabled={!isDirty}
           >
             Save Profile
@@ -210,7 +257,7 @@ export default function VolunteerProfilePage() {
           <button
             type="button"
             onClick={handleDiscard}
-            className="flex-1 border border-gray-300 text-gray-700 py-2 rounded hover:bg-gray-100"
+            className="btn btn-outline flex-1"
             disabled={!isDirty}
           >
             Discard Changes

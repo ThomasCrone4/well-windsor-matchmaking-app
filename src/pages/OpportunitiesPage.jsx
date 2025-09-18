@@ -127,111 +127,148 @@ export default function OpportunitiesPage() {
   const filtered = filterOpportunities(data || []);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6 text-center">Volunteer Opportunities</h1>
-
-      <div className="mb-4 flex flex-wrap gap-4 items-center justify-center">
-        <input
-          type="text"
-          placeholder="Search by title..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="p-2 border rounded w-64"
-        />
-        <select
-          value={filters.town}
-          onChange={(e) => setFilters(f => ({ ...f, town: e.target.value }))}
-          className="p-2 border rounded"
-        >
-          <option value="All">Location</option>
-          <option value="Windsor">Windsor</option>
-          <option value="Maidenhead">Maidenhead</option>
-          <option value="Slough">Slough</option>
-        </select>
-        <select
-          value={filters.dbs}
-          onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))}
-          className="p-2 border rounded"
-        >
-          <option value="Any">DBS status</option>
-          <option value="DBS Required">DBS Required</option>
-          <option value="No DBS Required">No DBS Required</option>
-        </select>
-        <select
-          value={filters.start}
-          onChange={(e) => setFilters(f => ({ ...f, start: e.target.value }))}
-          className="p-2 border rounded"
-        >
-          <option value="Any">When</option>
-          <option value="This Week">This Week</option>
-          <option value="This Month">This Month</option>
-        </select>
-        {userProfile?.role === 'volunteer' && (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={matchedOnly}
-              onChange={() => setMatchedOnly(!matchedOnly)}
-            />
-            Show Matches Only
-          </label>
-        )}
-        <button
-          onClick={() => {
-            setFilters({ town: 'All', dbs: 'Any', start: 'Any' });
-            setSearchTerm('');
-            setMatchedOnly(false);
-          }}
-          className="text-sm text-gray-600 underline hover:text-gray-800"
-        >
-          Clear Filters
-        </button>
-      </div>
-
-      {filtered.length === 0 ? (
-        <p className="text-center text-gray-600">No opportunities available right now.</p>
-      ) : (
-        <ul className="space-y-6">
-          {filtered.map((opportunity) => (
-            <li key={opportunity.id} className="p-6 border rounded-lg shadow-sm bg-white space-y-2">
-              <h2 className="text-xl font-semibold">{opportunity.title}</h2>
-              <p className="text-gray-700">{opportunity.description}</p>
-              <div className="text-sm text-gray-600">📍 Location: {opportunity.location}</div>
-              <div className="text-sm text-gray-600">👥 Volunteers Needed: {opportunity.volunteers_needed ?? 'N/A'}</div>
-
-              {opportunity.requires_dbs && (
-                <div className="text-sm text-red-600">🔒 DBS Required</div>
-              )}
-
-              {opportunity.generally_needed ? (
-                <p className="text-sm text-green-600">🕒 Available anytime</p>
-              ) : opportunity.when_needed?.length > 0 ? (
-                <div className="text-sm text-gray-700 mt-2 space-y-1">
-                  <p className="font-semibold">🕒 Times Needed:</p>
-                  <ul className="list-disc list-inside">
-                    {opportunity.when_needed.map((block, idx) => (
-                      <li key={idx}>
-                        {block.days?.join(', ') || 'Days unknown'} &mdash;{' '}
-                        {block.start_time || '??'} to {block.end_time || '??'}
-                        {block.start_date && block.end_date && (
-                          <> ({block.start_date} to {block.end_date})</>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <button
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mt-2"
-                onClick={() => handleApply(opportunity.id)}
-              >
-                Enquire
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+  <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="page-header">
+      <h1 className="title">Volunteer Opportunities</h1>
     </div>
-  );
+    {/* Filters */}
+    <div className="card mb-6">
+      <div className="form-grid md:grid-cols-5">
+        {/* Search */}
+        <div className="form-row">
+          <label htmlFor="search" className="label">Search</label>
+          <input
+            id="search"
+            type="text"
+            placeholder="Search by title…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="input"
+          />
+        </div>
+
+        {/* Town */}
+        <div className="form-row">
+          <label htmlFor="town" className="label">Town</label>
+          <select
+            id="town"
+            value={filters.town}
+            onChange={(e) => setFilters(f => ({ ...f, town: e.target.value }))}
+            className="select"
+          >
+            <option value="All">All</option>
+            <option value="Windsor">Windsor</option>
+            <option value="Maidenhead">Maidenhead</option>
+            <option value="Slough">Slough</option>
+          </select>
+        </div>
+
+        {/* DBS */}
+        <div className="form-row">
+          <label htmlFor="dbs" className="label">DBS</label>
+          <select
+            id="dbs"
+            value={filters.dbs}
+            onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))}
+            className="select"
+          >
+            <option value="Any">Any</option>
+            <option value="DBS Required">DBS Required</option>
+            <option value="No DBS Required">No DBS Required</option>
+          </select>
+        </div>
+
+        {/* When */}
+        <div className="form-row">
+          <label htmlFor="when" className="label">When</label>
+          <select
+            id="when"
+            value={filters.start}
+            onChange={(e) => setFilters(f => ({ ...f, start: e.target.value }))}
+            className="select"
+          >
+            <option value="Any">Any</option>
+            <option value="This Week">This Week</option>
+            <option value="This Month">This Month</option>
+          </select>
+        </div>
+
+        {/* Clear / Match toggle */}
+        <div className="form-row">
+          {userProfile?.role === 'volunteer' ? (
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={matchedOnly}
+                onChange={() => setMatchedOnly(!matchedOnly)}
+                className="check"
+              />
+              Show Matches Only
+            </label>
+          ) : (
+            <span className="label">&nbsp;</span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setFilters({ town: 'All', dbs: 'Any', start: 'Any' });
+              setSearchTerm('');
+              setMatchedOnly(false);
+            }}
+            className="btn-secondary mt-1"
+          >
+            Clear Filters
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* Results */}
+    {filtered.length === 0 ? (
+      <p className="text-center text-gray-600">No opportunities available right now.</p>
+    ) : (
+      <ul className="space-y-6">
+        {filtered.map((opportunity) => (
+          <li key={opportunity.id} className="card p-6 space-y-2">
+            <h2 className="text-xl font-semibold">{opportunity.title}</h2>
+            <p className="text-gray-700">{opportunity.description}</p>
+            <div className="text-sm text-gray-600">📍 Location: {opportunity.location}</div>
+            <div className="text-sm text-gray-600">👥 Volunteers Needed: {opportunity.volunteers_needed ?? 'N/A'}</div>
+
+            {opportunity.requires_dbs && (
+              <span className="badge-danger">DBS Required</span>
+            )}
+
+            {opportunity.generally_needed ? (
+              <p className="text-sm text-green-700 font-medium">🕒 Available anytime</p>
+            ) : opportunity.when_needed?.length > 0 ? (
+              <div className="text-sm text-gray-700 mt-2 space-y-1">
+                <p className="font-semibold">🕒 Times Needed:</p>
+                <ul className="list-disc list-inside">
+                  {opportunity.when_needed.map((block, idx) => (
+                    <li key={idx}>
+                      {(block.days?.length ? block.days.join(', ') : 'Days unknown')} —{' '}
+                      {block.start_time || '??'} to {block.end_time || '??'}
+                      {block.start_date && block.end_date && (
+                        <> ({block.start_date} to {block.end_date})</>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <button
+              className="btn-primary mt-2"
+              onClick={() => handleApply(opportunity.id)}
+            >
+              Enquire
+            </button>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+);
 }

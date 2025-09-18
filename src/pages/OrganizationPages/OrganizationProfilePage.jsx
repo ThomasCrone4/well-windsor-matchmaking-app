@@ -80,72 +80,77 @@ export default function OrganisationProfilePage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-4">Edit Organisation Profile</h1>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <h1 className="title">Edit Organisation Profile</h1>
 
-        <div>
-          <label className="block font-medium text-sm mb-1">
-            Organisation Name <span className="text-red-500">*</span>
+      <form onSubmit={handleSubmit(onSubmit)} className="form">
+        {/* Organisation Name */}
+        <div className="form-row">
+          <label className="label">
+            Organisation Name <span className="required" />
           </label>
           <input
             {...register('name')}
-            className="w-full p-2 border rounded"
+            className="input"
             placeholder="e.g. Windsor Primary School"
+            aria-invalid={!!errors.name}
           />
-          {errors.name && <p className="text-red-500 text-sm">{errors.name.message}</p>}
+          {errors.name && <p className="error-text">{errors.name.message}</p>}
         </div>
 
-        <div>
-          <label className="block font-medium text-sm mb-1">
-            Town <span className="text-red-500">*</span>
+        {/* Town */}
+        <div className="form-row">
+          <label className="label">
+            Town <span className="required" />
           </label>
-          <select {...register('home_town')} className="w-full p-2 border rounded">
+          <select
+            {...register('home_town')}
+            className={`select ${errors.home_town ? 'select-invalid' : ''}`}
+            aria-invalid={!!errors.home_town}
+          >
             <option value="">Select your town</option>
             <option value="Windsor">Windsor</option>
             <option value="Maidenhead">Maidenhead</option>
             <option value="Slough">Slough</option>
           </select>
-          {errors.home_town && <p className="text-red-500 text-sm">{errors.home_town.message}</p>}
+          {errors.home_town && <p className="error-text">{errors.home_town.message}</p>}
         </div>
 
-        <div>
-          <label className="block font-medium text-sm mb-1">
-            Contact Number <span className="text-gray-400">(optional)</span>
+        {/* Contact Number */}
+        <div className="form-row">
+          <label className="label">
+            Contact Number <span className="help-text">(optional)</span>
           </label>
           <input
             {...register('contact_number')}
-            className="w-full p-2 border rounded"
+            className="input"
             placeholder="e.g. 01753 123456"
           />
         </div>
 
-        <div>
-          <label className="block font-medium text-sm mb-1">
-            Contact Email <span className="text-gray-400">(optional)</span>
+        {/* Contact Email */}
+        <div className="form-row">
+          <label className="label">
+            Contact Email <span className="help-text">(optional)</span>
           </label>
           <input
             {...register('email')}
             type="email"
-            className="w-full p-2 border rounded"
+            className={`input ${errors.email ? 'input-invalid' : ''}`}
             placeholder="e.g. admin@windsorprimary.org.uk"
+            aria-invalid={!!errors.email}
           />
-          {errors.email && (
-            <p className="text-red-500 text-sm">{errors.email.message}</p>
-          )}
+          {errors.email && <p className="error-text">{errors.email.message}</p>}
         </div>
 
+        {/* Actions */}
         <div className="flex gap-4 pt-2">
-          <button
-            type="submit"
-            className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-            disabled={!isDirty}
-          >
+          <button type="submit" className="btn btn-primary flex-1" disabled={!isDirty}>
             Save Profile
           </button>
           <button
             type="button"
             onClick={handleDiscard}
-            className="flex-1 border border-gray-300 text-gray-700 py-2 rounded hover:bg-gray-100"
+            className="btn btn-outline flex-1"
             disabled={!isDirty}
           >
             Discard Changes

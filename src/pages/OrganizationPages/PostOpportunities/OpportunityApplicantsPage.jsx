@@ -42,7 +42,7 @@ export default function OpportunityApplicantsPage() {
 
       if (error) throw error;
 
-      return (data ?? []).map(app => {
+      return (data ?? []).map((app) => {
         const isVolunteer = app.volunteer?.role === 'volunteer';
         return {
           id: app.id,
@@ -77,15 +77,16 @@ export default function OpportunityApplicantsPage() {
   });
 
   const handleAction = (appId, status) => {
-    const defaultMsg = status === 'accepted'
-      ? 'Congratulations! We’d love to have you join us.'
-      : 'Hi, unfortunately we have decided not to work with you.';
+    const defaultMsg =
+      status === 'accepted'
+        ? 'Congratulations! We’d love to have you join us.'
+        : 'Hi, unfortunately we have decided not to work with you.';
     setDraftStatus({ ...draftStatus, [appId]: status });
-    setMessages(prev => ({ ...prev, [appId]: prev[appId] ?? defaultMsg }));
+    setMessages((prev) => ({ ...prev, [appId]: prev[appId] ?? defaultMsg }));
   };
 
   const cancelDraft = (appId) => {
-    setDraftStatus(prev => {
+    setDraftStatus((prev) => {
       const copy = { ...prev };
       delete copy[appId];
       return copy;
@@ -104,7 +105,7 @@ export default function OpportunityApplicantsPage() {
   };
 
   const toggleMessage = (id) => {
-    setExpandedMessages(prev => ({ ...prev, [id]: !prev[id] }));
+    setExpandedMessages((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const grouped = { pending: [], accepted: [], denied: [] };
@@ -116,104 +117,89 @@ export default function OpportunityApplicantsPage() {
 
   const renderList = (title, list, statusKey) => (
     <div>
-      <h2 className="text-lg font-semibold mt-6 mb-2">{title}</h2>
+      <h2 className="section-title mt-6 mb-2 text-left">{title}</h2>
       {list.length === 0 ? (
-        <p className="text-gray-500 italic">No {title.toLowerCase()} applicants.</p>
+        <p className="muted italic">No {title.toLowerCase()} applicants.</p>
       ) : (
         <ul className="space-y-4">
-          {list.map(app => {
+          {list.map((app) => {
             const age = app.dob ? differenceInYears(new Date(), new Date(app.dob)) : 'N/A';
             const isExpanded = expandedMessages[app.id];
             const isLong = app.message.length > 200;
-            const displayedMessage = isExpanded || !isLong
-              ? app.message
-              : app.message.slice(0, 200) + '...';
+            const displayedMessage = isExpanded || !isLong ? app.message : app.message.slice(0, 200) + '...';
             const draft = draftStatus[app.id];
             const msg = messages[app.id] || '';
 
             return (
-              <li key={app.id} className="bg-white border p-4 rounded shadow-sm space-y-2">
-                <h3 className="font-bold text-lg">{app.name}</h3>
-                <p className="text-sm text-gray-600">🎂 Age: {age}</p>
-                <p className="text-sm text-gray-600">
-                  {app.dbs_checked ? '✅ DBS Checked' : '❌ No DBS Check'}
+              <li key={app.id} className="card space-y-2">
+                {/* Name + optional DBS badge */}
+                <h3 className="card-title flex items-center gap-2">
+                  {app.name}
+                  {app.dbs_checked && <span className="badge badge-success">DBS</span>}
+                </h3>
+
+                {/* Meta */}
+                <p className="muted">🎂 Age: {age}</p>
+                <p className="caption">
+                  Applied on: {format(new Date(app.created_at), 'd MMM yyyy')}
                 </p>
-                <p className="text-sm">
-                  <strong>Applied on:</strong> {format(new Date(app.created_at), 'd MMM yyyy')}
-                </p>
-                <p className="text-sm"><strong>Subject:</strong> {app.subject}</p>
-                <p className="text-sm whitespace-pre-line">
+
+                {/* Subject + message */}
+                <div className="text whitespace-pre-line bold"> Subject: {app.subject || 'No subject'}</div>
+                <p className="text whitespace-pre-line">
                   <strong>Message:</strong> {displayedMessage}
                 </p>
                 {isLong && (
-                  <button
-                    onClick={() => toggleMessage(app.id)}
-                    className="text-blue-600 text-sm underline"
-                  >
+                  <button onClick={() => toggleMessage(app.id)} className="underline text-blue-600 text-sm">
                     {isExpanded ? 'Show less' : 'Show more'}
                   </button>
                 )}
-                <p className="text-sm">
-                  <strong>Status:</strong>{' '}
-                  <span className={
-                    statusKey === 'accepted' ? 'text-green-700 font-medium'
-                    : statusKey === 'denied' ? 'text-red-600 font-medium'
-                    : 'text-gray-700'
-                  }>
-                    {statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}
-                  </span>
-                </p>
 
+              
+
+                {/* Pending action buttons */}
                 {statusKey === 'pending' && !draft && (
                   <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={() => handleAction(app.id, 'accepted')}
-                      className="bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700"
-                    >
+                    <button onClick={() => handleAction(app.id, 'accepted')} className="btn btn-success btn-sm">
                       Accept
                     </button>
-                    <button
-                      onClick={() => handleAction(app.id, 'denied')}
-                      className="bg-red-600 text-white px-4 py-1.5 rounded hover:bg-red-700"
-                    >
+                    <button onClick={() => handleAction(app.id, 'denied')} className="btn btn-danger btn-sm">
                       Reject
                     </button>
                   </div>
                 )}
 
+                {/* Draft confirmation UI */}
                 {statusKey === 'pending' && draft && (
-                  <div className="space-y-2">
+                  <div className="stack">
                     <p className="text-sm font-medium">
-                      You’ve chosen to <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>{draft}</span> this applicant.
+                      You’ve chosen to{' '}
+                      <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>{draft}</span> this applicant.
                     </p>
+
                     <textarea
-                      className="w-full p-2 border rounded text-sm"
+                      className="input textarea textarea-sm text-sm"
                       value={msg}
-                      onChange={e =>
-                        setMessages({ ...messages, [app.id]: e.target.value })
-                      }
+                      onChange={(e) => setMessages({ ...messages, [app.id]: e.target.value })}
                     />
+
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleSend(app.id)}
                         disabled={loadingId === app.id}
-                        className="bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700"
+                        className="btn btn-primary btn-sm"
                       >
-                        Send
+                        {loadingId === app.id ? 'Sending…' : 'Send'}
                       </button>
-                      <button
-                        onClick={() => cancelDraft(app.id)}
-                        className="text-sm text-gray-600 underline hover:text-gray-900"
-                      >
+                      <button onClick={() => cancelDraft(app.id)} className="btn btn-ghost btn-sm">
                         Cancel
                       </button>
                     </div>
-                    <div className="text-sm text-gray-500 italic">
+
+                    <div className="caption italic">
                       Changed your mind? You can switch to{' '}
                       <button
-                        onClick={() =>
-                          handleAction(app.id, draft === 'accepted' ? 'denied' : 'accepted')
-                        }
+                        onClick={() => handleAction(app.id, draft === 'accepted' ? 'denied' : 'accepted')}
                         className="underline text-blue-600"
                       >
                         {draft === 'accepted' ? 'Reject' : 'Accept'}
@@ -223,11 +209,14 @@ export default function OpportunityApplicantsPage() {
                   </div>
                 )}
 
+                {/* Final states */}
                 {statusKey === 'accepted' && (
                   <>
-                    <p className="text-sm text-green-700">
-                      📧 Email: <a href={`mailto:${app.email}`} className="underline">{app.email}</a>
-                    </p>
+                    {app.email && (
+                      <p className="text-sm text-green-700">
+                        📧 Email: <a href={`mailto:${app.email}`} className="underline">{app.email}</a>
+                      </p>
+                    )}
                     <p className="text-sm text-green-700">
                       ✅ Message sent: {app.rejection_message}
                     </p>
@@ -235,9 +224,7 @@ export default function OpportunityApplicantsPage() {
                 )}
 
                 {statusKey === 'denied' && (
-                  <p className="text-sm text-red-600">
-                    ❌ Rejection message: {app.rejection_message}
-                  </p>
+                  <p className="text-sm text-red-600">❌ Rejection message: {app.rejection_message}</p>
                 )}
               </li>
             );
@@ -251,21 +238,20 @@ export default function OpportunityApplicantsPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded shadow-sm transition"
-        >
+      <div className="page-header">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="text-xl font-bold text-center flex-1">Applicants for {opportunityTitle}</h1>
-        <div className="w-20" />
+        <h1 className="title">Applicants for {opportunityTitle}</h1>
+        <div className="spacer" />
       </div>
 
       {isLoading ? (
         <p className="text-center">Loading applicants...</p>
       ) : error ? (
-        <p className="text-center text-red-600">Error loading applicants</p>
+        <div className="text-center text-red-600">
+          <p>⚠️ Error loading applicants</p>
+        </div>
       ) : (
         <>
           {renderList('Pending', grouped.pending, 'pending')}

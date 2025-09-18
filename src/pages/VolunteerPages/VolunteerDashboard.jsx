@@ -71,15 +71,16 @@ export default function VolunteerDashboard() {
   });
 
   const handleAction = (id, status) => {
-    const defaultMsg = status === 'accepted'
-      ? 'Thank you! I’m happy to volunteer.'
-      : 'Thanks for reaching out, but I won’t be able to volunteer.';
+    const defaultMsg =
+      status === 'accepted'
+        ? 'Thank you! I’m happy to volunteer.'
+        : 'Thanks for reaching out, but I won’t be able to volunteer.';
     setDraftStatus({ ...draftStatus, [id]: status });
-    setMessages(prev => ({ ...prev, [id]: prev[id] ?? defaultMsg }));
+    setMessages((prev) => ({ ...prev, [id]: prev[id] ?? defaultMsg }));
   };
 
   const cancelDraft = (id) => {
-    setDraftStatus(prev => {
+    setDraftStatus((prev) => {
       const copy = { ...prev };
       delete copy[id];
       return copy;
@@ -106,37 +107,49 @@ export default function VolunteerDashboard() {
 
   const renderList = (title, list, statusKey) => (
     <div>
-      <h2 className="text-lg font-semibold mt-6 mb-2">{title}</h2>
+      <h2 className="section-title mt-6 mb-2 text-left">{title}</h2>
       {list.length === 0 ? (
-        <p className="text-gray-500 italic">No {title.toLowerCase()} enquiries.</p>
+        <p className="muted italic">No {title.toLowerCase()} enquiries.</p>
       ) : (
-        <ul className="space-y-4">
+        <ul className="stack">
           {list.map((enquiry) => {
             const draft = draftStatus[enquiry.id];
             const msg = messages[enquiry.id] || '';
             return (
-              <li key={enquiry.id} className="p-4 bg-white shadow rounded border space-y-2">
-                <h3 className="text-lg font-semibold text-blue-800">
-                  📝 {enquiry.subject || 'No subject'}
+              <li key={enquiry.id} className="card space-y-2">
+                <h3 className="card-title text-black-800">
+                  {enquiry.subject || 'No subject'}
                 </h3>
-                <p className="text-sm text-gray-700">🏢 Organisation: {enquiry.org?.name || 'Unknown'}</p>
+
+                <p className="text text-sm">🏢 Organisation: {enquiry.org?.name || 'Unknown'}</p>
+
                 {enquiry.org?.contact_number && (
-                  <p className="text-sm text-gray-700">📞 Contact: {enquiry.org.contact_number}</p>
+                  <p className="text text-sm">📞 Contact: {enquiry.org.contact_number}</p>
                 )}
-                <p className="text-sm text-gray-700">🏠 Town: {enquiry.org?.home_town || 'Unknown'}</p>
-                <p className="text-sm text-gray-600">📅 Sent: {format(new Date(enquiry.created_at), 'PPP p')}</p>
+
+                <p className="text text-sm">🏠 Town: {enquiry.org?.home_town || 'Unknown'}</p>
+
+                <p className="caption">
+                  📅 Sent: {format(new Date(enquiry.created_at), 'PPP p')}
+                </p>
+
                 {enquiry.message && (
-                  <p className="text-sm text-gray-800 mt-1 whitespace-pre-line">
+                  <p className="text text-sm mt-1 whitespace-pre-line">
                     <strong>📨 Message:</strong> {enquiry.message}
                   </p>
                 )}
+
                 <p className="text-sm">
                   <strong>Status:</strong>{' '}
-                  <span className={
-                    statusKey === 'accepted' ? 'text-green-700 font-medium'
-                    : statusKey === 'denied' ? 'text-red-600 font-medium'
-                    : 'text-gray-700'
-                  }>
+                  <span
+                    className={
+                      statusKey === 'accepted'
+                        ? 'badge badge-success'
+                        : statusKey === 'denied'
+                        ? 'badge badge-danger'
+                        : 'badge badge-neutral'
+                    }
+                  >
                     {statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}
                   </span>
                 </p>
@@ -145,13 +158,13 @@ export default function VolunteerDashboard() {
                   <div className="flex gap-2 mt-2">
                     <button
                       onClick={() => handleAction(enquiry.id, 'accepted')}
-                      className="bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700"
+                      className="btn btn-success btn-sm"
                     >
                       Accept
                     </button>
                     <button
                       onClick={() => handleAction(enquiry.id, 'denied')}
-                      className="bg-red-600 text-white px-4 py-1.5 rounded hover:bg-red-700"
+                      className="btn btn-danger btn-sm"
                     >
                       Reject
                     </button>
@@ -159,33 +172,38 @@ export default function VolunteerDashboard() {
                 )}
 
                 {statusKey === 'pending' && draft && (
-                  <div className="space-y-2">
+                  <div className="stack">
                     <p className="text-sm font-medium">
-                      You’ve chosen to <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>{draft}</span> this opportunity.
+                      You’ve chosen to{' '}
+                      <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>
+                        {draft}
+                      </span>{' '}
+                      this opportunity.
                     </p>
+
                     <textarea
-                      className="w-full p-2 border rounded text-sm"
+                      className="input textarea textarea-sm text-sm"
                       value={msg}
-                      onChange={e =>
-                        setMessages({ ...messages, [enquiry.id]: e.target.value })
-                      }
+                      onChange={(e) => setMessages({ ...messages, [enquiry.id]: e.target.value })}
                     />
+
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleSend(enquiry.id)}
                         disabled={loadingId === enquiry.id}
-                        className="bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700"
+                        className="btn btn-primary btn-sm"
                       >
-                        Send
+                        {loadingId === enquiry.id ? 'Sending…' : 'Send'}
                       </button>
                       <button
                         onClick={() => cancelDraft(enquiry.id)}
-                        className="text-sm text-gray-600 underline hover:text-gray-900"
+                        className="btn btn-ghost btn-sm"
                       >
                         Cancel
                       </button>
                     </div>
-                    <div className="text-sm text-gray-500 italic">
+
+                    <div className="caption italic">
                       Changed your mind? You can switch to{' '}
                       <button
                         onClick={() =>
@@ -202,14 +220,16 @@ export default function VolunteerDashboard() {
 
                 {statusKey === 'denied' && (
                   <div className="text-sm text-red-600">
-                    ❌ You declined this opportunity.<br />
+                    ❌ You declined this opportunity.
+                    <br />
                     <strong>Message:</strong> {enquiry.rejection_message}
                   </div>
                 )}
 
                 {statusKey === 'accepted' && (
                   <div className="text-sm text-green-700">
-                    ✅ You’ve accepted this opportunity.<br />
+                    ✅ You’ve accepted this opportunity.
+                    <br />
                     <strong>Message:</strong> {enquiry.rejection_message}
                   </div>
                 )}
@@ -223,21 +243,20 @@ export default function VolunteerDashboard() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6 text-center">Received Enquiries</h1>
-      <div className="flex justify-center mb-6">
-        <Link
-          to="/volunteer/sent-enquiries"
-          className="inline-block bg-emerald-600 text-white font-semibold px-6 py-2 rounded-lg shadow hover:bg-emerald-700 transition"
-        >
+      <h1 className="title">Received Enquiries</h1>
+
+      <div className="text-center mb-6">
+        <Link to="/volunteer/sent-enquiries" className="btn btn-success">
           Sent Enquiries
         </Link>
       </div>
+
       {isLoading ? (
         <p className="text-center mt-10">Loading your dashboard...</p>
       ) : error ? (
         <div className="text-center text-red-600 mt-10">
           <p>⚠️ Failed to load enquiries.</p>
-          <p className="text-sm">{error.message}</p>
+          <p className="error-text">{error.message}</p>
         </div>
       ) : (
         <>

@@ -150,126 +150,165 @@ export default function EditOpportunity() {
   const generallyNeeded = watch('generally_needed');
 
   return (
-    <div className="max-w-3xl mx-auto mt-10 p-6 bg-white rounded shadow">
-      <h1 className="text-2xl font-bold mb-6 text-blue-700">Edit Opportunity</h1>
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="card">
+        <h1 className="title">Edit Opportunity</h1>
 
-      {isLoading ? (
-        <p>Loading opportunity...</p>
-      ) : (
-        <form className="space-y-5">
-          <div>
-            <label className="block font-semibold">Title</label>
-            <input {...register('title')} className="w-full border rounded px-3 py-2 mt-1" />
-            {errors.title && <p className="text-red-500 text-sm">{errors.title.message}</p>}
-          </div>
+        {isLoading ? (
+          <p className="muted">Loading opportunity...</p>
+        ) : (
+          <form className="form">
+            {/* Title */}
+            <div className="form-row">
+              <label className="label">
+                Title {!isDraft && <span className="required" />}
+              </label>
+              <input
+                {...register('title')}
+                className={`input ${errors.title ? 'input-invalid' : ''}`}
+                aria-invalid={!!errors.title}
+              />
+              {errors.title && <p className="error-text">{errors.title.message}</p>}
+            </div>
 
-          <div>
-            <label className="block font-semibold">Description</label>
-            <textarea {...register('description')} className="w-full border rounded px-3 py-2 mt-1" />
-            {errors.description && <p className="text-red-500 text-sm">{errors.description.message}</p>}
-          </div>
+            {/* Description */}
+            <div className="form-row">
+              <label className="label">Description <span className="help-text">(optional)</span></label>
+              <textarea
+                {...register('description')}
+                className={`textarea ${errors.description ? 'textarea-invalid' : ''}`}
+                aria-invalid={!!errors.description}
+              />
+              {errors.description && <p className="error-text">{errors.description.message}</p>}
+            </div>
 
-          <div>
-            <label className="block font-semibold">Location</label>
-            <input {...register('location')} className="w-full border rounded px-3 py-2 mt-1" />
-          </div>
+            {/* Location */}
+            <div className="form-row">
+              <label className="label">
+                Location {!isDraft && <span className="required" />}
+              </label>
+              <input
+                {...register('location')}
+                className={`input ${errors.location ? 'input-invalid' : ''}`}
+                aria-invalid={!!errors.location}
+              />
+              {errors.location && <p className="error-text">{errors.location.message}</p>}
+            </div>
 
-          <div>
-            <label className="block font-semibold">Contact Email</label>
-            <input {...register('contact')} className="w-full border rounded px-3 py-2 mt-1" />
-            {errors.contact && <p className="text-red-500 text-sm">{errors.contact.message}</p>}
-          </div>
+            {/* Contact Email */}
+            <div className="form-row">
+              <label className="label">
+                Contact Email {!isDraft && <span className="required" />}
+              </label>
+              <input
+                {...register('contact')}
+                className={`input ${errors.contact ? 'input-invalid' : ''}`}
+                aria-invalid={!!errors.contact}
+              />
+              {errors.contact && <p className="error-text">{errors.contact.message}</p>}
+            </div>
 
-          <div>
-            <label className="block font-semibold">Skills (optional)</label>
-            <input {...register('skills')} className="w-full border rounded px-3 py-2 mt-1" />
-          </div>
-
-          <div>
-            <label className="block font-semibold">Number of Volunteers Needed</label>
-            <input
-              type="number"
-              min={1}
-              {...register('volunteers_needed')}
-              className="w-full border rounded px-3 py-2 mt-1"
-            />
-            {errors.volunteers_needed && (
-              <p className="text-red-500 text-sm">{errors.volunteers_needed.message}</p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input type="checkbox" {...register('generally_needed')} id="generally_needed" />
-            <label htmlFor="generally_needed" className="font-semibold">
-              Generally Needed (any time)
-            </label>
-          </div>
-
-          {!generallyNeeded && (
-            <div>
-              <label className="block font-medium mb-1 mt-4">Specific Times Needed</label>
-              <Controller
-                name="when_needed"
-                control={control}
-                render={({ field }) => (
-                  <AvailabilityMatrix value={field.value || []} onChange={field.onChange} />
-                )}
+            {/* Skills */}
+            <div className="form-row">
+              <label className="label">Skills <span className="help-text">(optional)</span></label>
+              <input
+                {...register('skills')}
+                className="input"
+                placeholder="e.g. first aid, event setup"
               />
             </div>
-          )}
 
-          <div className="flex items-center gap-2">
-            <input type="checkbox" {...register('requires_dbs')} id="requires_dbs" />
-            <label htmlFor="requires_dbs" className="font-semibold">Requires DBS Check</label>
-          </div>
-          
-          <div className="flex flex-wrap gap-4 pt-4 items-center">
-            {isDraft && (
+            {/* Volunteers needed */}
+            <div className="form-row">
+              <label className="label">Number of Volunteers Needed {!isDraft && <span className="required" />}</label>
+              <input
+                type="number"
+                min={1}
+                {...register('volunteers_needed')}
+                className={`input ${errors.volunteers_needed ? 'input-invalid' : ''}`}
+                aria-invalid={!!errors.volunteers_needed}
+              />
+              {errors.volunteers_needed && (
+                <p className="error-text">{errors.volunteers_needed.message}</p>
+              )}
+            </div>
+
+            {/* Inline checkboxes */}
+            <div className="check-row">
+              <label className="check-label">
+                <input type="checkbox" {...register('generally_needed')} className="check" />
+                Generally Needed (any time)
+              </label>
+
+              <label className="check-label">
+                <input type="checkbox" {...register('requires_dbs')} className="check" />
+                Requires DBS Check
+              </label>
+            </div>
+
+            {/* Specific times (conditional) */}
+            {!generallyNeeded && (
+              <div className="form-row">
+                <label className="label">Specific Times Needed</label>
+                <Controller
+                  name="when_needed"
+                  control={control}
+                  render={({ field }) => (
+                    <AvailabilityMatrix value={field.value || []} onChange={field.onChange} />
+                  )}
+                />
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex flex-wrap gap-2 pt-2 items-center">
+              {isDraft && (
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={handleSubmit((data) => {
+                    const requiredSchema = getSchema(false); // strict validation
+                    const result = requiredSchema.safeParse(data);
+
+                    if (!result.success) {
+                      const fieldErrors = result.error.flatten().fieldErrors;
+                      Object.entries(fieldErrors).forEach(([field, messages]) => {
+                        if (messages && messages.length > 0) {
+                          setError(field, { type: 'manual', message: messages[0] });
+                        }
+                      });
+                      toast.error('Please fill in all required fields before posting.');
+                      return;
+                    }
+
+                    handleSave(data, 'active');
+                  })}
+                  className="btn btn-success"
+                >
+                  Post Opportunity
+                </button>
+              )}
+
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={handleSubmit((data) => {
-                  const requiredSchema = getSchema(false); // strict validation
-                  const result = requiredSchema.safeParse(data);
-
-                  if (!result.success) {
-                    const fieldErrors = result.error.flatten().fieldErrors;
-                    Object.entries(fieldErrors).forEach(([field, messages]) => {
-                      if (messages && messages.length > 0) {
-                        setError(field, { type: 'manual', message: messages[0] });
-                      }
-                    });
-                    toast.error('Please fill in all required fields before posting.');
-                    return;
-                  }
-
-                  handleSave(data, 'active');
-                })}
-                className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700"
+                onClick={handleSubmit((data) => handleSave(data))}
+                className="btn btn-primary"
               >
-                Post Opportunity
+                Save Changes
               </button>
-            )}
 
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={handleSubmit((data) => handleSave(data))}
-              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-            >
-              Save Changes
-            </button>
-
-            <button
-              type="button"
-              onClick={handleDiscard}
-              className="text-gray-700 border border-gray-400 px-6 py-2 rounded hover:bg-gray-100"
-            >
-              Discard Changes
-            </button>
-          </div>
-        </form>
-      )}
+              <button
+                type="button"
+                onClick={handleDiscard}
+                className="btn btn-outline"
+              >
+                Discard Changes
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

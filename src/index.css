@@ -2,6 +2,193 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  height: 100%;
+/* ---------- Base resets that help forms everywhere ---------- */
+@layer base {
+  html, body, #root { height: 100%; }
+
+  /* Accessible focus ring baseline for all interactive elements */
+  :is(button,[role="button"],a,input,select,textarea)[tabindex]:focus-visible,
+  :is(button,[role="button"],a,input,select,textarea):focus-visible {
+    @apply outline-none ring-2 ring-offset-2 ring-brand-teal;
+  }
+
+  /* Optional: smoother scrolling for anchor jumps */
+  html { scroll-behavior: smooth; }
+}
+
+/* ---------- Reusable components (existing + new form kit) ---------- */
+@layer components {
+  /* You already had these — kept as-is */
+  .card { @apply bg-white rounded-2xl shadow-card p-6; }
+  .card-post { @apply card space-y-4; }
+
+  .btn { @apply inline-flex items-center justify-center rounded-xl font-semibold px-4 py-2 transition disabled:opacity-50 disabled:pointer-events-none; }
+  .btn-primary { @apply btn bg-brand-teal text-white hover:bg-brand-tealDark; }
+  .btn-secondary { @apply btn bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200; }
+  
+  .title { @apply text-3xl font-bold mb-6 text-center; }
+
+  /* --------- FORM KIT (new) --------- */
+
+  /* Wrapper that gives consistent vertical rhythm between fields */
+  .form-grid { @apply grid gap-4; }
+  .form-row { @apply grid gap-1; } /* label + control + help/error */
+
+  /* Labels */
+  .label { @apply block text-sm font-medium text-gray-700; }
+
+  /* Inputs (text, email, password, number, etc.) */
+  .input {
+    @apply w-full rounded-xl border border-gray-300 bg-white px-3 py-2
+           placeholder:text-gray-400
+           focus:border-brand-teal focus:ring-brand-teal;
+  }
+
+  /* Textarea & Select share the same look */
+  .textarea { @apply input min-h-[100px]; }
+  .select   { @apply input pr-10; }
+
+  /* Checkboxes & radios: small, consistent sizing + label spacing helper */
+  .check { @apply h-4 w-4 rounded border-gray-300 text-brand-teal focus:ring-brand-teal; }
+  .check-label { @apply inline-flex items-center gap-2 text-sm text-gray-700; }
+  .checkbox { @apply w-full border border-gray-300 bg-white px-3 py-3 focus:border-brand-teal focus:ring-brand-teal}
+  /* Row for inline checkboxes/toggles */
+  .check-row { @apply flex flex-wrap items-center gap-4 md:gap-6 mb-2; }
+
+  /* Help and error text */
+  .help-text  { @apply text-xs text-gray-500; }
+  .error-text { @apply text-sm text-red-600; }
+
+  /* Invalid state (applied manually or via aria-invalid) */
+  .input-invalid { @apply border-red-500 focus:border-red-500 focus:ring-red-500; }
+  .select-invalid { @apply border-red-500 focus:border-red-500 focus:ring-red-500; }
+  .textarea-invalid { @apply border-red-500 focus:border-red-500 focus:ring-red-500; }
+
+  /* Disabled state */
+  .input:disabled,
+  .select:disabled,
+  .textarea:disabled {
+    @apply bg-gray-100 text-gray-500 cursor-not-allowed;
+  }
+
+  /* Compact inline group (e.g., label to left, control right) */
+  .form-inline { @apply flex items-center gap-3; }
+
+  /* Fieldset & legend for grouped controls (e.g., availability) */
+  .fieldset { @apply border border-gray-200 rounded-xl p-4; }
+  .legend   { @apply px-2 text-sm font-semibold text-gray-700; }
+}
+
+/* ---------- Tiny utilities you’ll likely reuse in forms ---------- */
+@layer utilities {
+  /* Show required asterisk via utility if you don’t want it in the label text */
+  .required::after { content: " *"; @apply text-red-600; }
+
+  /* One-off strong override: use Tailwind’s important (!) in JSX e.g. !bg-red-600 */
+}
+
+/* -------------------------------------------------
+   Components: more buttons, input groups, badges,
+   sections, tables, empty state, skeletons
+-------------------------------------------------- */
+@layer components {
+  /* More button variants */
+  .btn-outline { @apply btn border border-brand-teal text-brand-teal bg-transparent hover:bg-brand-teal hover:text-white; }
+  .btn-ghost   { @apply btn bg-transparent text-gray-700 hover:bg-gray-100; }
+  .btn-danger  { @apply btn text-white bg-red-600 hover:bg-red-700; }
+  .btn-success { @apply btn text-white bg-green-600 hover:bg-green-700; }
+  .btn-success-outline { @apply btn border border-green-600 text-green-600 bg-transparent hover:bg-green-600 hover:text-white; }
+  .btn-warning { @apply btn text-white bg-orange-500 hover:bg-orange-600; }
+  .btn-sm      { @apply btn px-3 py-1.5 text-sm; }
+  .btn-lg      { @apply btn px-5 py-3 text-base; }
+
+  /* Input group (left/right elements) */
+  .input-group        { @apply relative flex items-stretch w-full; }
+  .input-addon-left   { @apply absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 pointer-events-none; }
+  .input-addon-right  { @apply absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 pointer-events-none; }
+  .input--with-left   { @apply pl-10; }  /* add to .input when using .input-addon-left */
+  .input--with-right  { @apply pr-10; }  /* add to .input when using .input-addon-right */
+
+  /* Badges / pills */
+  .badge         { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold; }
+  .badge-neutral { @apply badge bg-gray-100 text-gray-800; }
+  .badge-info    { @apply badge bg-blue-100 text-blue-800; }
+  .badge-success { @apply badge bg-green-100 text-green-800; }
+  .badge-warning { @apply badge bg-orange-100 text-orange-800; }
+  .badge-danger  { @apply badge bg-red-100 text-red-800; }
+
+  /* Sections & shell */
+  .container-app { @apply container mx-auto px-4; }
+  .section       { @apply card p-6; }
+  .section-head  { @apply mb-4 flex items-center justify-between; }
+
+  /* Table baseline */
+  .table       { @apply w-full border-collapse; }
+  .thead       { @apply bg-gray-50 text-left text-sm font-semibold text-gray-700; }
+  .th, .td     { @apply p-3 align-middle border-b border-gray-200; }
+  .tr-hover:hover { @apply bg-gray-50; }
+
+  /* Empty state */
+  .empty      { @apply text-center text-gray-600 py-12; }
+  .empty-title{ @apply text-lg font-semibold text-gray-900; }
+  .empty-desc { @apply text-sm text-gray-600 mt-1; }
+  .empty-cta  { @apply mt-4; }
+
+  /* Skeleton loaders */
+  .skeleton        { @apply animate-pulse bg-gray-200 rounded; }
+  .skeleton-line   { @apply skeleton h-4; }
+  .skeleton-avatar { @apply skeleton h-10 w-10 rounded-full; }
+  .skeleton-card   { @apply skeleton h-24; }
+}
+
+/* -------------------------------------------------
+   Utilities: stack spacing, auto grids, clamp text
+-------------------------------------------------- */
+@layer utilities {
+  /* Vertical stack spacing */
+  .stack > * + *    { @apply mt-3; }
+  .stack-sm > * + * { @apply mt-2; }
+  .stack-lg > * + * { @apply mt-4; }
+
+  /* Responsive auto-fit card grid */
+  .grid-auto { @apply grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]; }
+
+  /* Text clamping */
+  .line-1 { @apply overflow-hidden text-ellipsis whitespace-nowrap; }
+  .line-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .line-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+}
+/* ==== Additions for shared header, text, icon buttons, and form niceties ==== */
+@layer components {
+  /* Page header with back button / title / spacer */
+  .page-header { @apply mb-6 flex items-center justify-between; }
+  .spacer { @apply w-20; } /* matches your old <div class="w-20" /> gap */
+
+  /* Titles inside cards/lists */
+  .card-title { @apply text-lg font-semibold; }
+
+  /* Text utilities used in components */
+  .muted   { @apply text-gray-600; }
+  .text    { @apply text-gray-800; }
+  .caption { @apply text-xs text-gray-500; }
+  .highlight { @apply text-sm font-medium text-blue-700; }
+
+  /* Buttons */
+  .btn-block { @apply w-full; }
+
+  /* Icon-only buttons (e.g., Trash) */
+  .icon-btn { @apply inline-flex items-center justify-center rounded-lg p-1.5 transition; }
+  .icon-btn:hover { @apply bg-gray-100; }
+  .icon-btn-danger { @apply text-gray-400 hover:text-red-600; }
+
+  /* Simple page-level section header (optional) */
+  .section-title { @apply text-2xl font-bold; }
+
+  /* Form wrappers used in refactors */
+  .form { @apply space-y-4; }
+  .field { @apply grid gap-1; }
+
+  /* Textarea sizing helpers */
+  .textarea-sm { @apply min-h-[50px]; }
+  .textarea-lg { @apply min-h-[120px]; }
 }

@@ -88,58 +88,70 @@ export default function SentEnquiriesPage() {
     await queryClient.invalidateQueries(['sent_enquiries', orgId]);
   };
 
-  if (isLoading) return <p className="text-center mt-20">Loading enquiries...</p>;
-  if (error) return <p className="text-center text-red-500 mt-20">Failed to load enquiries.</p>;
-
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded shadow-sm transition"
-        >
+      <div className="page-header">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="text-2xl font-bold">My Sent Enquiries</h1>
-        <div className="w-20" />
+        <h1 className="title">My Sent Enquiries</h1>
+        <div className="spacer" />
       </div>
 
-      {!Array.isArray(data) || data.length === 0 ? (
-        <p className="text-center text-gray-600">You haven’t sent any enquiries yet.</p>
+      {isLoading ? (
+        <p className="text-center mt-10">Loading enquiries...</p>
+      ) : error ? (
+        <div className="text-center text-red-600 mt-10">
+          <p>⚠️ Failed to load enquiries.</p>
+          <p className="error-text">{error.message}</p>
+        </div>
+      ) : !Array.isArray(data) || data.length === 0 ? (
+        <p className="text-center muted">You haven’t sent any enquiries yet.</p>
       ) : (
         <ul className="space-y-4">
           {data.map((enquiry) => (
-            <li key={enquiry.id} className="relative p-4 border rounded-lg shadow bg-white space-y-1">
+            <li key={enquiry.id} className="card relative space-y-1">
+              {/* top-right delete icon (matches your shared icon styles) */}
               <button
                 onClick={() => handleDelete(enquiry.id)}
-                className="absolute top-2 right-2 text-gray-400 hover:text-red-600 transition"
+                className="icon-btn icon-btn-danger absolute top-2 right-2"
                 title="Delete Enquiry"
+                aria-label="Delete Enquiry"
               >
                 <Trash2 size={30} />
               </button>
-              <div className="text-lg font-semibold">
+
+              {/* title */}
+              <div className="card-title">
                 {enquiry.volunteer?.name || 'Unknown volunteer'}
               </div>
-              <div className="text-sm text-blue-700 font-medium">
+
+              {/* subject */}
+              <div className="highlight">
                 📝 Subject: {enquiry.subject || 'No subject'}
               </div>
-              <div className="text-sm text-gray-600">
+
+              {/* meta rows */}
+              <div className="muted">
                 🏠 Home Town: {enquiry.volunteer?.home_town || 'Unknown'}
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="muted">
                 📞 Contact: {enquiry.volunteer?.contact_number || 'N/A'}
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="muted">
                 🛠️ Skills: {enquiry.volunteer?.skills || 'Not provided'}
               </div>
+
               {enquiry.volunteer?.dbs_checked && (
-                <div className="text-sm text-red-600">🔒 DBS Checked</div>
+                <div className="badge badge-success w-fit">🔒 DBS Checked</div>
               )}
-              <div className="text-sm text-gray-600">
+
+              <div className="caption">
                 📅 Sent: {format(new Date(enquiry.created_at), 'PPP p')}
               </div>
+
               {enquiry.message && (
-                <div className="text-sm text-gray-800 mt-2">
+                <div className="text mt-2 whitespace-pre-line">
                   <strong>📨 Message:</strong> {enquiry.message}
                 </div>
               )}

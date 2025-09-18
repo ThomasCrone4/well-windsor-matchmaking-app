@@ -5,6 +5,9 @@ import { supabase } from '../../utils/supabase';
 import { toast } from 'react-hot-toast';
 import { format, parseISO, isValid } from 'date-fns';
 
+import { Edit2, Trash2 } from 'lucide-react';
+
+
 export default function OrganizationDashboard() {
   const [opportunities, setOpportunities] = useState([]);
   const [applicationsCount, setApplicationsCount] = useState({});
@@ -37,7 +40,7 @@ export default function OrganizationDashboard() {
         console.error(opsError);
       } else {
         setOpportunities(ops);
-        const ids = ops.map(op => op.id);
+        const ids = ops.map((op) => op.id);
 
         if (ids.length > 0) {
           const { data: apps, error: appsError } = await supabase
@@ -72,45 +75,35 @@ export default function OrganizationDashboard() {
 
     if (!window.confirm(confirmMsg)) return;
 
-    const { error } = await supabase
-      .from('volunteer_opportunities')
-      .delete()
-      .eq('id', id);
+    const { error } = await supabase.from('volunteer_opportunities').delete().eq('id', id);
 
     if (error) {
       toast.error('Failed to delete opportunity');
       console.error(error);
     } else {
       toast.success('Opportunity deleted');
-      setOpportunities(prev => prev.filter(o => o.id !== id));
+      setOpportunities((prev) => prev.filter((o) => o.id !== id));
     }
   };
 
   const handleStatusChange = async (id, newStatus, reason = '') => {
     const updates = {
       status: newStatus,
-      closed_reason: newStatus === 'closed' ? (reason || null) : null
+      closed_reason: newStatus === 'closed' ? reason || null : null,
     };
 
-    const { error } = await supabase
-      .from('volunteer_opportunities')
-      .update(updates)
-      .eq('id', id);
+    const { error } = await supabase.from('volunteer_opportunities').update(updates).eq('id', id);
 
     if (error) {
       toast.error('Failed to update status');
       console.error(error);
     } else {
       toast.success(`Marked as ${newStatus}`);
-      setOpportunities(prev =>
-        prev.map(o => (o.id === id ? { ...o, ...updates } : o))
-      );
+      setOpportunities((prev) => prev.map((o) => (o.id === id ? { ...o, ...updates } : o)));
       setShowReasonDropdown(null);
       setSelectedReason('');
       setCustomReason('');
-      if (newStatus === 'active') {
-        navigate(`/edit-opportunity/${id}`);
-      }
+      if (newStatus === 'active') navigate(`/edit-opportunity/${id}`);
     }
   };
 
@@ -118,7 +111,7 @@ export default function OrganizationDashboard() {
     if (!Array.isArray(blocks) || blocks.length === 0) return null;
 
     return (
-      <div className="text-sm text-gray-600 mt-1">
+      <div className="muted mt-1">
         <p>📆 <strong>Specific Times Needed:</strong></p>
         <ul className="list-disc list-inside ml-2 space-y-1">
           {blocks.map((block, idx) => {
@@ -145,55 +138,62 @@ export default function OrganizationDashboard() {
 
   const renderSection = (title, filterStatus) => {
     const filtered = opportunities.filter(
-      op => op.status?.toLowerCase() === filterStatus.toLowerCase()
+      (op) => op.status?.toLowerCase() === filterStatus.toLowerCase()
     );
 
     return (
       <div className="mb-10">
-        <h2 className="text-xl font-bold mb-2">{title}</h2>
+        <h2 className="section-title mb-2 text-left">{title}</h2>
         {filtered.length === 0 ? (
-          <p className="text-sm text-gray-500 italic">No {filterStatus} opportunities</p>
+          <p className="muted italic">No {filterStatus.toLowerCase()} opportunities</p>
         ) : (
           <ul className="space-y-4">
-            {filtered.map(op => (
-              <li key={op.id} className="bg-white border rounded p-4 shadow-sm space-y-1">
-                <h3 className="text-lg font-semibold">{op.title}</h3>
-                {op.description && <p>{op.description}</p>}
-                <p className="text-sm text-gray-600">📍 {op.location}</p>
-                {isValid(new Date(op.date_needed)) && new Date(op.date_needed).getFullYear() > 1971 && (
-                  <p className="text-sm text-gray-600">📅 {format(new Date(op.date_needed), 'PPP')}</p>
-                )}
-                <p className="text-sm text-gray-600">📧 {op.contact}</p>
-                <p className="text-sm text-gray-600">👥 Volunteers Needed: {op.volunteers_needed ?? 'Not specified'}</p>
+            {filtered.map((op) => (
+              <li key={op.id} className="card relative space-y-1">
+                <h3 className="card-title">{op.title}</h3>
+
+                {op.description && <p className="text">{op.description}</p>}
+
+                <p className="muted">📍 {op.location}</p>
+
+                {isValid(new Date(op.date_needed)) &&
+                  new Date(op.date_needed).getFullYear() > 1971 && (
+                    <p className="muted">📅 {format(new Date(op.date_needed), 'PPP')}</p>
+                  )}
+
+                <p className="muted">📧 {op.contact}</p>
+                <p className="muted">👥 Volunteers Needed: {op.volunteers_needed ?? 'Not specified'}</p>
+
                 {op.requires_dbs && <p className="text-sm text-red-600">🔒 DBS Required</p>}
+
                 {op.generally_needed ? (
-                  <p className="text-sm text-gray-600">📌 Available anytime</p>
+                  <p className="muted">📌 Available anytime</p>
                 ) : (
                   renderWhenNeeded(op.when_needed)
                 )}
+
                 {op.status !== 'draft' && (
-                  <p className="text-sm text-blue-600">
-                    📨 {applicationsCount[op.id] || 0} applicants
-                  </p>
+                  <p className="highlight">📨 {applicationsCount[op.id] || 0} applicants</p>
                 )}
 
-                <div className="mt-2 flex flex-wrap gap-4">
+                {/* Actions */}
+                <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
-                    className="text-blue-600 hover:underline"
+                    className="btn-success btn-sm"
                   >
                     View Applicants
                   </button>
-                  <button
+                  {/* <button
                     onClick={() => navigate(`/opportunity/${op.id}/logged-hours`)}
-                    className="text-purple-600 hover:underline"
+                    className="btn-ghost btn-sm"
                   >
                     Logged Hours
-                  </button>
+                  </button> */}
                   {op.status !== 'active' && (
                     <button
                       onClick={() => handleStatusChange(op.id, 'active')}
-                      className="text-green-600 hover:underline"
+                      className="btn-success-outline btn-sm"
                     >
                       Mark as Active
                     </button>
@@ -201,30 +201,38 @@ export default function OrganizationDashboard() {
                   {op.status !== 'closed' && (
                     <button
                       onClick={() => setShowReasonDropdown(op.id)}
-                      className="text-yellow-600 hover:underline"
+                      className="btn btn-warning btn-sm"
                     >
                       Mark as Closed
                     </button>
                   )}
-                  <button
-                    onClick={() => navigate(`/edit-opportunity/${op.id}`)}
-                    className="text-blue-600 hover:underline"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(op.id, op.date_needed)}
-                    className="text-red-600 hover:underline"
-                  >
-                    Delete
-                  </button>
+
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <button
+                      aria-label="Edit"
+                      onClick={() => navigate(`/edit-opportunity/${op.id}`)}
+                      className="icon-btn hover:text-brand-teal"
+                      title="Edit"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button
+                      aria-label="Delete"
+                      onClick={() => handleDelete(op.id, op.date_needed)}
+                      className="icon-btn icon-btn-danger"
+                      title="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
 
+                {/* Close reason dropdown */}
                 {showReasonDropdown === op.id && (
-                  <div className="mt-2 p-3 border rounded bg-gray-50 space-y-2">
-                    <label className="block text-sm font-medium">Why are you closing this post?</label>
+                  <div className="section space-y-2">
+                    <label className="label">Why are you closing this post?</label>
                     <select
-                      className="w-full border rounded p-2"
+                      className="select"
                       value={selectedReason}
                       onChange={(e) => setSelectedReason(e.target.value)}
                     >
@@ -239,25 +247,31 @@ export default function OrganizationDashboard() {
                     {selectedReason === 'Other' && (
                       <input
                         type="text"
-                        className="w-full border rounded p-2"
+                        className="input"
                         placeholder="Enter custom reason"
                         value={customReason}
                         onChange={(e) => setCustomReason(e.target.value)}
                       />
                     )}
 
-                    <div className="flex gap-4 pt-1">
+                    <div className="flex gap-2 pt-1">
                       <button
-                        className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
+                        className="btn btn-warning"
                         onClick={() =>
-                          handleStatusChange(op.id, 'closed', selectedReason === 'Other' ? customReason : selectedReason)
+                          handleStatusChange(
+                            op.id,
+                            'closed',
+                            selectedReason === 'Other' ? customReason : selectedReason
+                          )
                         }
-                        disabled={!selectedReason || (selectedReason === 'Other' && !customReason.trim())}
+                        disabled={
+                          !selectedReason || (selectedReason === 'Other' && !customReason.trim())
+                        }
                       >
                         Confirm Close
                       </button>
                       <button
-                        className="text-gray-600 hover:underline"
+                        className="btn btn-ghost"
                         onClick={() => {
                           setShowReasonDropdown(null);
                           setSelectedReason('');
@@ -279,26 +293,22 @@ export default function OrganizationDashboard() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Organization Dashboard</h1>
-        <div className="flex gap-4">
-          <Link to="/organization/sent-enquiries">
-            <button className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700">
-              Sent Enquiries
-            </button>
+      <div className="page-header">
+        <h1 className="title">Organization Dashboard</h1>
+        <div className="flex gap-2">
+          <Link to="/organization/sent-enquiries" className="btn btn-success">
+            Sent Enquiries
           </Link>
-          <Link to="/post-opportunity">
-            <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-              + New Post
-            </button>
+          <Link to="/post-opportunity" className="btn btn-primary">
+            + New Post
           </Link>
         </div>
       </div>
 
       {loading ? (
-        <p>Loading your posts...</p>
+        <p className="muted">Loading your posts...</p>
       ) : opportunities.length === 0 ? (
-        <p className="text-gray-600">You haven’t posted any opportunities yet.</p>
+        <p className="muted">You haven’t posted any opportunities yet.</p>
       ) : (
         <>
           {renderSection('Active Opportunities', 'Active')}

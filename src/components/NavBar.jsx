@@ -58,47 +58,55 @@ export default function Navbar() {
       </Link>
 
       <div className="flex items-center gap-6">
-        <Link to="/opportunities" className="text-gray-700 hover:text-blue-600">
+        <Link to="/opportunities" className="btn-secondary">
           Opportunities
         </Link>
 
         {/* Show Looking for Volunteers only for organizations */}
         {isLoggedIn && role === 'organization' && (
           <>
-          <Link to="/volunteers" className="text-gray-700 hover:text-blue-600">
+          <Link to="/volunteers" className="btn-secondary">
             Looking for Volunteers
           </Link>
 
-          <Link to="/organization/logged-hours" className="text-gray-700 hover:text-blue-600">
+          {/* <Link to="/organization/logged-hours" className="text-gray-700 hover:text-blue-600">
             Logged Hours
-          </Link>
+          </Link> */}
           </>
         )}
 
         {/* Show Log Hours only for volunteers */}
-        {isLoggedIn && role === 'volunteer' && (
+        {/* {isLoggedIn && role === 'volunteer' && (
           <Link to="/volunteer/log-hours" className="text-gray-700 hover:text-blue-600">
             Log Hours
           </Link>
-        )}
+        )} */}
 
         {!isLoggedIn ? (
-          <Link to="/auth" className="text-gray-700 hover:text-blue-600">
+          <Link to="/auth" className="btn-primary">
             Login / Signup
           </Link>
         ) : (
           <>
-            <Link to="/redirect" className="text-gray-700 hover:text-blue-600">
+            {role == 'volunteer' && (
+            <Link to="/volunteer-dashboard" className="btn-secondary">
               Dashboard
             </Link>
+            )}
 
-            <Link to={profileLink} className="text-gray-700 hover:text-blue-600 flex items-center gap-1">
-              <UserCircle className="w-6 h-6" />
+            {role == 'organization' && (
+            <Link to="/organization-dashboard" className="btn-secondary">
+              Dashboard
+            </Link>
+            )}
+            
+            <Link to={profileLink} className="text-brand-teal hover:text-blue-600 flex items-center gap-1">
+              <UserCircle className="w-10 h-10" />
             </Link>
 
             <button
               onClick={handleLogout}
-              className="text-red-600 hover:underline font-medium"
+              className="btn-secondary !bg-red-600 hover:!bg-red-600 !text-white"
             >
               Log Out
             </button>
