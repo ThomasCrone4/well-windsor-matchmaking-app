@@ -209,7 +209,7 @@ export default function VolunteerDashboard() {
                         onClick={() =>
                           handleAction(enquiry.id, draft === 'accepted' ? 'denied' : 'accepted')
                         }
-                        className="underline text-blue-600"
+                        className="underline text-brand-teal"
                       >
                         {draft === 'accepted' ? 'Reject' : 'Accept'}
                       </button>{' '}
@@ -243,12 +243,13 @@ export default function VolunteerDashboard() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <h1 className="title">Received Enquiries</h1>
-
-      <div className="text-center mb-6">
-        <Link to="/volunteer/sent-enquiries" className="btn btn-success">
-          Sent Enquiries
-        </Link>
+      <div className="page-header">
+        <h1 className="title">Received Enquiries</h1>
+        <div className="flex gap-2">
+          <Link to="/volunteer/sent-enquiries" className="btn btn-success">
+            Sent Enquiries
+          </Link>
+        </div>
       </div>
 
       {isLoading ? (

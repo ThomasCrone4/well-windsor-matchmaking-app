@@ -85,7 +85,7 @@ export default function VolunteerSentEnquiriesPage() {
         >
           ← Back
         </button>
-        <h1 className="title">My Sent Enquiries</h1>
+        <h1 className="title !mb-0">My Sent Enquiries</h1>
         <div className="spacer" />
       </div>
 

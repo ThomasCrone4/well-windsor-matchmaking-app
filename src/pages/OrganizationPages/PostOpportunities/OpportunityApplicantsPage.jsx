@@ -238,11 +238,11 @@ export default function OpportunityApplicantsPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="page-header">
+      <div className="page-header items-centre">
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title">Applicants for {opportunityTitle}</h1>
+        <h1 className="title !mb-0">Applicants for {opportunityTitle}</h1>
         <div className="spacer" />
       </div>
 

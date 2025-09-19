@@ -94,7 +94,7 @@ export default function SentEnquiriesPage() {
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title">My Sent Enquiries</h1>
+        <h1 className="title mb-0">My Sent Enquiries</h1>
         <div className="spacer" />
       </div>
 

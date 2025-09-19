@@ -1,6 +1,6 @@
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { supabase } from '../../utils/supabase';
@@ -19,8 +19,6 @@ const profileSchema = z.object({
   dbs_checked: z.boolean(),
   available_anytime: z.boolean(),
   availability_matrix: z.any(),
-  home_town_only: z.boolean(),
-  auto_enquiry_opt_in: z.boolean(),
   public_profile: z.boolean(),
 }).refine(data => {
   if (data.public_profile) {
@@ -33,6 +31,7 @@ const profileSchema = z.object({
 });
 
 export default function VolunteerProfilePage() {
+  const queryClient = useQueryClient();
   const [hydrated, setHydrated] = useState(false);
   const { userId, profile, loading } = useUserProfile();
   const navigate = useNavigate();
@@ -63,36 +62,72 @@ export default function VolunteerProfilePage() {
         dbs_checked: !!profile?.dbs_checked,
         available_anytime: profile?.available_anytime ?? true,
         availability_matrix: profile?.available_anytime ? [] : profile?.availability_matrix ?? [],
-        home_town_only: !!profile?.home_town_only,
-        auto_enquiry_opt_in: !!profile?.auto_enquiry_opt_in,
         public_profile: !!profile?.public_profile,
       });
       setHydrated(true);
     }
   }, [profile, hydrated, reset]);
 
+  // helpers at top-level (or inside the component)
+  const emptyToNull = (v) => (v === '' || v === undefined ? null : v);
+  const trimOrNull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+  const normalizeUpdate = (formData) => ({
+    // text
+    name: trimOrNull(formData.name),                     // required by schema (but trim anyway)
+    contact_number: trimOrNull(formData.contact_number),
+    home_town: trimOrNull(formData.home_town),           // required by schema
+    bio: trimOrNull(formData.bio),
+    skills: trimOrNull(formData.skills),
+
+    // date
+    dob: emptyToNull(formData.dob),                      // '' -> null (fixes 400 on DATE)
+
+    // booleans
+    dbs_checked: !!formData.dbs_checked,
+    available_anytime: !!formData.available_anytime,
+    public_profile: !!formData.public_profile,
+
+    // jsonb
+    availability_matrix: formData.available_anytime
+      ? []                                               // store empty array when "anytime"
+      : Array.isArray(formData.availability_matrix)
+        ? formData.availability_matrix
+        : [],
+  });
+
   const mutation = useMutation({
     mutationFn: async (formData) => {
-      const update = {
-        ...formData,
-        availability_matrix: formData.available_anytime
-          ? []
-          : formData.availability_matrix ?? [],
-      };
+      if (!userId) throw new Error('No user id');        // avoid bad filter → 400
+
+      const update = normalizeUpdate(formData);
 
       const { error } = await supabase
         .from('user_profiles')
-        .update(update)
+        .update(update)                                   // only valid columns with safe types
         .eq('id', userId);
 
       if (error) throw error;
+      return update;
     },
-    onSuccess: () => {
-      toast.success('Profile updated!');
-      navigate('/volunteer-dashboard');
+    onSuccess: (update) => {
+     // Instant UI: merge new values into the cached profile
+     queryClient.setQueryData(['user_profile', userId], (prev) =>
+       prev ? { ...prev, ...update } : prev
+     );
+
+     // Safety: ensure a fresh fetch next time the page mounts
+     queryClient.invalidateQueries({ queryKey: ['user_profile', userId] });
+
+     toast.success('Profile updated!');
+     navigate('/volunteer-dashboard');
+   },
+    onError: (err) => {
+      // surface the exact DB message to debug quickly
+      toast.error(err?.message || 'Failed to update profile.');
     },
-    onError: () => toast.error('Failed to update profile.'),
   });
+
 
   const onSubmit = (data) => {
     if (!data.available_anytime && (!data.availability_matrix || data.availability_matrix.length === 0)) {
@@ -115,8 +150,6 @@ export default function VolunteerProfilePage() {
         dbs_checked: !!profile?.dbs_checked,
         available_anytime: profile?.available_anytime ?? true,
         availability_matrix: profile?.available_anytime ? [] : profile?.availability_matrix ?? [],
-        home_town_only: !!profile?.home_town_only,
-        auto_enquiry_opt_in: !!profile?.auto_enquiry_opt_in,
         public_profile: !!profile?.public_profile,
       });
       toast.success('Changes discarded');

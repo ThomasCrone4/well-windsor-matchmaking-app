@@ -69,10 +69,7 @@ export default function SendVolunteerEnquiry() {
     }
 
     toast.success('Enquiry sent!');
-
-    setTimeout(() => {
-      navigate('/organization-dashboard');
-    }, 1200);
+    setTimeout(() => navigate('/organization-dashboard'), 1200);
   };
 
   if (!volunteer) {
@@ -80,64 +77,51 @@ export default function SendVolunteerEnquiry() {
   }
 
   return (
-    <>
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded shadow-sm transition"
-          >
-            ← Back
-          </button>
-          <h1 className="text-2xl font-bold">Contact Volunteer</h1>
-          <div className="w-20" />
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="page-header">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
+          ← Back
+        </button>
+        <h1 className="title !mb-0">Contact Volunteer</h1>
+        <div className="spacer" />
+      </div>
+
+      <p className="muted mb-4">
+        You're contacting <strong>{volunteer.name || 'Unnamed Volunteer'}</strong>{' '}
+        from {volunteer.home_town || 'Unknown Town'}
+      </p>
+
+      <form onSubmit={handleSubmit(onSubmit)} className="card form">
+        <div className="form-row">
+          <label className="label">
+            Subject <span className="required" />
+          </label>
+          <textarea
+            {...register('subject', { required: 'Subject is required' })}
+            placeholder="Write your subject"
+            className={`input textarea textarea-sm ${errors.subject ? 'textarea-invalid' : ''}`}
+            aria-invalid={!!errors.subject}
+          />
+          {errors.subject && <p className="error-text">{errors.subject.message}</p>}
         </div>
 
-        <p className="mb-4 text-gray-700">
-          You're contacting <strong>{volunteer.name || 'Unnamed Volunteer'}</strong>{' '}
-          from {volunteer.home_town || 'Unknown Town'}
-        </p>
+        <div className="form-row">
+          <label className="label">
+            Message <span className="required" />
+          </label>
+          <textarea
+            {...register('message', { required: 'Message is required' })}
+            placeholder="Write your message"
+            className={`input textarea textarea-lg ${errors.message ? 'textarea-invalid' : ''}`}
+            aria-invalid={!!errors.message}
+          />
+          {errors.message && <p className="error-text">{errors.message.message}</p>}
+        </div>
 
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-4 bg-white p-6 rounded shadow"
-        >
-          <div>
-            <label className="block font-medium text-sm mb-1">
-              Subject <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              {...register('subject', { required: 'Subject is required' })}
-              placeholder="Write your subject"
-              className="w-full p-2 border rounded min-h-[50px]"
-            ></textarea>
-            {errors.subject && (
-              <p className="text-red-500 text-sm mt-1">{errors.subject.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block font-medium text-sm mb-1">
-              Message <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              {...register('message', { required: 'Message is required' })}
-              placeholder={`Write your message`}
-              className="w-full p-2 border rounded min-h-[120px]"
-            ></textarea>
-            {errors.subject && (
-              <p className="text-red-500 text-sm mt-1">{errors.message.message}</p>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-          >
-            Send Enquiry
-          </button>
-        </form>
-      </div>
-    </>
+        <button type="submit" className="btn btn-primary btn-block">
+          Send Enquiry
+        </button>
+      </form>
+    </div>
   );
 }

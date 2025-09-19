@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
@@ -19,6 +19,7 @@ export default function OrganisationProfilePage() {
   const [hydrated, setHydrated] = useState(false);
   const { userId, profile, loading } = useUserProfile();
   const navigate = useNavigate();
+  const queryClient = useQueryClient(); // ← add this
 
   const {
     register,
@@ -42,25 +43,44 @@ export default function OrganisationProfilePage() {
     }
   }, [profile, hydrated, reset]);
 
+  // (Optional) tiny normalizers to keep data clean
+  const trimOrNull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
   const mutation = useMutation({
     mutationFn: async (formData) => {
+      if (!userId) throw new Error('No user id');
+
+      const update = {
+        name: trimOrNull(formData.name),
+        home_town: trimOrNull(formData.home_town),
+        contact_number: trimOrNull(formData.contact_number),
+        email: trimOrNull(formData.email),
+      };
+
       const { error } = await supabase
         .from('user_profiles')
-        .update(formData)
+        .update(update)
         .eq('id', userId);
 
       if (error) throw error;
+      return update; // ← return for onSuccess
     },
-    onSuccess: () => {
+    onSuccess: (update) => {
+      // Instant UI update in cache
+      queryClient.setQueryData(['user_profile', userId], (prev) =>
+        prev ? { ...prev, ...update } : prev
+      );
+
+      // Ensure a fresh fetch next mount
+      queryClient.invalidateQueries({ queryKey: ['user_profile', userId] });
+
       toast.success('Profile updated!');
       navigate('/organization-dashboard');
     },
     onError: () => toast.error('Failed to update profile.'),
   });
 
-  const onSubmit = (data) => {
-    mutation.mutate(data);
-  };
+  const onSubmit = (data) => mutation.mutate(data);
 
   const handleDiscard = () => {
     if (profile) {

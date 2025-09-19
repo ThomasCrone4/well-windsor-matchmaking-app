@@ -101,7 +101,13 @@ export default function PostOpportunity() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="title">Post a New Opportunity</h1>
+      <div className="page-header">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
+        ← Back
+        </button>
+        <h1 className="title !mb-0">Post a New Opportunity</h1>
+        <div className="spacer" />
+      </div>
 
       <form className="card-post">
         <div className="form-grid">

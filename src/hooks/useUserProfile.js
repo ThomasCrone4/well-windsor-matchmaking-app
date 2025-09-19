@@ -35,12 +35,15 @@ export default function useUserProfile() {
         .from('user_profiles')
         .select('*') // ✅ ensures all fields come through
         .eq('id', userId)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
     enabled: !!userId, // ✅ only fetch profile when session is loaded
-    staleTime: 1000 * 60 * 5, // optional: cache profile for 5 mins
+    staleTime: 0, // optional: cache profile
+    refetchOnMount: 'always',  // refetch whenever this screen mounts
+    refetchOnWindowFocus: true,     // (optional) refetch when tab regains focus
+    refetchOnReconnect: true,       // (optional) refetch after network reconnect
   });
 
   return {
