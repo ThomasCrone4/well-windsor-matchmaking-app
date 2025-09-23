@@ -296,7 +296,7 @@ export default function OrganizationDashboard() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="page-header">
-        <h1 className="title">Organization Dashboard</h1>
+        <h1 className="title">Organisation Dashboard</h1>
         <div className="flex gap-2">
           <Link to="/organization/sent-enquiries" className="btn btn-success">
             Sent Enquiries

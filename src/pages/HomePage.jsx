@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 
 export default function HomePage() {
-  const [stats, setStats] = useState({ hours: 0, volunteers: 0, youth: 0 });
+  const [stats, setStats] = useState({ hours: 0, volunteers: 0, opportunities: 0});
 
   // Fetch real-time stats
   useEffect(() => {
@@ -22,13 +22,13 @@ export default function HomePage() {
         .select('id')
         .eq('role', 'volunteer');
 
-      // Crude example for youth-related skills
-      const { data: youthRows, error: youthErr } = await supabase
-        .from('user_profiles')
+      // Opportunities count
+      const { data: oppRows, error: oppErr } = await supabase
+        .from('volunteer_opportunities')
         .select('id')
-        .ilike('skills', '%mentoring%');
+        
 
-      if (hoursErr || volErr || youthErr) {
+      if (hoursErr || volErr || oppErr) {
         // swallow errors silently for the hero; you could toast.error here
       }
 
@@ -39,7 +39,7 @@ export default function HomePage() {
       setStats({
         hours: totalHours,
         volunteers: volunteersRows?.length || 0,
-        youth: youthRows?.length || 0,
+        opportunities: oppRows?.length || 0,
       });
     };
     fetchStats();
@@ -102,8 +102,8 @@ export default function HomePage() {
               <p className="text-sm text-gray-600">Volunteers Engaged</p>
             </div>
             <div className="card">
-              <p className="text-3xl font-bold text-brand-blue">{stats.youth.toLocaleString()}</p>
-              <p className="text-sm text-gray-600">Youth Mentored</p>
+              <p className="text-3xl font-bold text-brand-blue">{stats.opportunities.toLocaleString()}</p>
+              <p className="text-sm text-gray-600">Opportunities Posted</p>
             </div>
           </div>
         </div>
@@ -128,7 +128,7 @@ export default function HomePage() {
           </div>
 
           <div className="card">
-            <h2 className="text-xl font-semibold mb-2 text-gray-900">For Schools/Orgs</h2>
+            <h2 className="text-xl font-semibold mb-2 text-gray-900">For Organisations</h2>
             <ul className="text-gray-700 list-disc list-inside space-y-1">
               <li>Browse public volunteer profiles</li>
               <li>Submit volunteer needs</li>

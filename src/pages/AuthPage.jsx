@@ -146,7 +146,7 @@ export default function AuthPage() {
                 onChange={(e) => setRole(e.target.value)}
               >
                 <option value="volunteer">Volunteer</option>
-                <option value="organization">Organization</option>
+                <option value="organization">Organisation</option>
               </select>
             </div>
 
