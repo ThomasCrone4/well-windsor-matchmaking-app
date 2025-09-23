@@ -1,3 +1,4 @@
+// AuthPage.jsx
 import { useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
@@ -8,8 +9,13 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('volunteer');
+
+  // Shared
   const [name, setName] = useState('');
-  const [bio, setBio] = useState(''); // kept if you want to re-introduce later
+
+  // Volunteer fields
+  const [bio, setBio] = useState('');
+  const [skills, setSkills] = useState('');
   const [postcode, setPostcode] = useState('');
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
@@ -18,21 +24,37 @@ export default function AuthPage() {
   const [availableAnytime, setAvailableAnytime] = useState(true);
   const [availabilityMatrix, setAvailabilityMatrix] = useState([]);
   const [publicProfile, setPublicProfile] = useState(true);
-  const [isSigningUp, setIsSigningUp] = useState(false);
 
+  const [isSigningUp, setIsSigningUp] = useState(false);
   const [errors, setErrors] = useState({});
   const navigate = useNavigate();
 
   const validateFields = () => {
     const newErrors = {};
+
+    // Always
     if (!email) newErrors.email = 'Email is required';
     if (!password) newErrors.password = 'Password is required';
     if (!name) newErrors.name = 'Name is required';
-    if (role === 'volunteer') {
-      if (!dob) newErrors.dob = 'Date of birth is required';
-      if (!homeTown) newErrors.homeTown = 'Home town is required';
+
+    if (isSigningUp) {
+      if (role === 'volunteer') {
+        if (!dob) newErrors.dob = 'Date of birth is required';
+        if (!homeTown) newErrors.homeTown = 'Home town is required';
+        // Bio & Skills only required if public
+        if (publicProfile) {
+          if (!bio?.trim()) newErrors.bio = 'Bio is required when profile is visible to organisations';
+          if (!skills?.trim()) newErrors.skills = 'Skills are required when profile is visible to organisations';
+        }
+        if (!availableAnytime && (!availabilityMatrix || availabilityMatrix.length === 0)) {
+          newErrors.availabilityMatrix = 'Please add at least one availability slot or mark "Flexible Availability".';
+        }
+      }
+
+      if (role === 'organization') {
+        if (!postcode) newErrors.postcode = 'Postcode is required';
+      }
     }
-    if (role === 'organization' && !postcode) newErrors.postcode = 'Postcode is required';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -41,9 +63,7 @@ export default function AuthPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (isSigningUp && !validateFields()) {
-      return;
-    }
+    if (isSigningUp && !validateFields()) return;
 
     let authResponse;
     if (isSigningUp) {
@@ -52,7 +72,7 @@ export default function AuthPage() {
       authResponse = await supabase.auth.signInWithPassword({ email, password });
     }
 
-    const { data, error: authError } = authResponse;
+    const { error: authError } = authResponse;
     if (authError) {
       toast.error(authError.message);
       return;
@@ -63,7 +83,6 @@ export default function AuthPage() {
       toast.error('Could not verify user login.');
       return;
     }
-
     const sessionUserId = userData.user.id;
 
     if (isSigningUp) {
@@ -74,8 +93,9 @@ export default function AuthPage() {
         ...(role === 'organization' && { postcode }),
         ...(role === 'volunteer' && {
           dob,
-          bio,
-          contact_number: contactNumber,
+          bio: bio?.trim() || null,
+          skills: skills?.trim() || null,
+          contact_number: contactNumber || null,
           home_town: homeTown,
           dbs_checked: dbsChecked,
           available_anytime: availableAnytime,
@@ -84,10 +104,7 @@ export default function AuthPage() {
         }),
       };
 
-      const { error: insertError } = await supabase
-        .from('user_profiles')
-        .insert([profileData]);
-
+      const { error: insertError } = await supabase.from('user_profiles').insert([profileData]);
       if (insertError) {
         toast.error(insertError.message);
         return;
@@ -96,6 +113,17 @@ export default function AuthPage() {
 
     toast.success('Success! You are now logged in.');
     navigate('/');
+  };
+
+  const onTogglePublicProfile = (checked) => {
+    setPublicProfile(checked);
+    // Clear conditional errors if turning visibility off
+    if (!checked) {
+      setErrors((prev) => {
+        const { bio, skills, ...rest } = prev;
+        return rest;
+      });
+    }
   };
 
   return (
@@ -191,7 +219,7 @@ export default function AuthPage() {
                   <label className="label">
                     Home Town <span className="required" />
                   </label>
-                <select
+                  <select
                     className={`select ${errors.homeTown ? 'select-invalid' : ''}`}
                     value={homeTown}
                     onChange={(e) => setHomeTown(e.target.value)}
@@ -233,7 +261,7 @@ export default function AuthPage() {
                   />
                 </div>
 
-                {/* Inline checkboxes */}
+                {/* Visibility toggle (controls bio/skills requirement) */}
                 <div className="check-row">
                   <label className="check-label">
                     <input
@@ -252,25 +280,62 @@ export default function AuthPage() {
                       onChange={(e) => setAvailableAnytime(e.target.checked)}
                       className="check"
                     />
-                    Generally Available (all times)
+                    Flexible Availability
                   </label>
 
                   <label className="check-label">
                     <input
                       type="checkbox"
                       checked={publicProfile}
-                      onChange={(e) => setPublicProfile(e.target.checked)}
+                      onChange={(e) => onTogglePublicProfile(e.target.checked)}
                       className="check"
                     />
-                    Show my profile publicly on the volunteer page
+                    Allow organisations to view my profile and contact me
                   </label>
                 </div>
 
-                {!availableAnytime && (
-                  <AvailabilityMatrix
-                    value={availabilityMatrix}
-                    onChange={setAvailabilityMatrix}
+                {/* Bio */}
+                <div className="form-row">
+                  <label className="label">
+                    Bio{' '}
+                    {publicProfile ? <span className="required" /> : <span className="help-text">(optional)</span>}
+                  </label>
+                  <textarea
+                    className={`textarea ${errors.bio ? 'input-invalid' : ''}`}
+                    placeholder="Tell us about yourself..."
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    aria-invalid={!!errors.bio}
                   />
+                  {errors.bio && <p className="error-text">{errors.bio}</p>}
+                </div>
+
+                {/* Skills */}
+                <div className="form-row">
+                  <label className="label">
+                    Skills / Experience{' '}
+                    {publicProfile ? <span className="required" /> : <span className="help-text">(optional)</span>}
+                  </label>
+                  <textarea
+                    className={`textarea ${errors.skills ? 'input-invalid' : ''}`}
+                    placeholder="e.g. Working with children, first aid, cooking"
+                    value={skills}
+                    onChange={(e) => setSkills(e.target.value)}
+                    aria-invalid={!!errors.skills}
+                  />
+                  {errors.skills && <p className="error-text">{errors.skills}</p>}
+                </div>
+
+                {!availableAnytime && (
+                  <>
+                    <AvailabilityMatrix
+                      value={availabilityMatrix}
+                      onChange={setAvailabilityMatrix}
+                    />
+                    {errors.availabilityMatrix && (
+                      <p className="error-text">{errors.availabilityMatrix}</p>
+                    )}
+                  </>
                 )}
               </>
             )}

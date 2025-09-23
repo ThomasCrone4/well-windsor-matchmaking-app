@@ -20,15 +20,16 @@ const profileSchema = z.object({
   available_anytime: z.boolean(),
   availability_matrix: z.any(),
   public_profile: z.boolean(),
-}).refine(data => {
-  if (data.public_profile) {
-    return data.bio?.trim() && data.skills?.trim();
-  }
-  return true;
-}, {
-  message: 'Bio and skills are required to appear publicly',
-  path: ['public_profile'],
+})
+.refine(d => !d.public_profile || !!d.bio?.trim(), {
+  message: 'Bio is required to appear publicly',
+  path: ['public_profile_bio'],
+})
+.refine(d => !d.public_profile || !!d.skills?.trim(), {
+  message: 'Skills are required to appear publicly',
+  path: ['public_profile_skills'],
 });
+
 
 export default function VolunteerProfilePage() {
   const queryClient = useQueryClient();
@@ -49,6 +50,7 @@ export default function VolunteerProfilePage() {
   });
 
   const availableAnytime = watch('available_anytime');
+  const publicProfile = watch('public_profile');
 
   useEffect(() => {
     if (!hydrated && profile !== undefined) {
@@ -90,7 +92,7 @@ export default function VolunteerProfilePage() {
 
     // jsonb
     availability_matrix: formData.available_anytime
-      ? []                                               // store empty array when "anytime"
+      ? null                                               // store empty array when "anytime"
       : Array.isArray(formData.availability_matrix)
         ? formData.availability_matrix
         : [],
@@ -157,6 +159,7 @@ export default function VolunteerProfilePage() {
     }
   };
 
+
   if (loading || !hydrated) {
     return <p className="text-center mt-8">Loading profile...</p>;
   }
@@ -221,25 +224,31 @@ export default function VolunteerProfilePage() {
         {/* Bio */}
         <div className="form-row">
           <label className="label">
-            Bio <span className="help-text">(optional unless public)</span>
+            Bio{' '}
+            {publicProfile ? <span className="required" /> : <span className="help-text">(optional)</span>}
           </label>
           <textarea
             {...register('bio')}
             className="textarea"
             placeholder="Tell us about yourself..."
           />
+          {errors.bio && <p className="error-text">{errors.bio.message}</p>}
+          {errors.public_profile_bio && <p className="error-text">{errors.public_profile_bio.message}</p>}
         </div>
 
         {/* Skills */}
         <div className="form-row">
           <label className="label">
-            Skills / Experience <span className="help-text">(optional unless public)</span>
+            Skills / Experience{' '}
+            {publicProfile ? <span className="required" /> : <span className="help-text">(optional)</span>}
           </label>
           <textarea
             {...register('skills')}
             className="textarea"
             placeholder="e.g. Working with children, first aid, cooking"
           />
+          {errors.skills && <p className="error-text">{errors.skills.message}</p>}
+          {errors.public_profile_skills && <p className="error-text">{errors.public_profile_skills.message}</p>}
         </div>
 
         <div className="check-row">
@@ -252,14 +261,14 @@ export default function VolunteerProfilePage() {
           {/* Generally Available */}
           <label className="check-label">
             <input type="checkbox" {...register('available_anytime')} className="check" />
-            Generally Available (all times)
+            Flexible Availability
           </label>
 
           {/* Public Profile */}
           <label className="check-label">
-            <input type="checkbox" {...register('public_profile')} className="check" />
-            Show my profile publicly on the volunteer page
-          </label>
+           <input type="checkbox" {...register('public_profile')} className="check" />
+           Allow organisations to view my profile and contact me
+         </label>
         </div>
 
         {/* Availability Matrix */}
@@ -271,12 +280,7 @@ export default function VolunteerProfilePage() {
               <AvailabilityMatrix value={field.value} onChange={field.onChange} />
             )}
           />
-        )}
-
-        {errors.public_profile && (
-          <p className="error-text">{errors.public_profile.message}</p>
-        )}
-        
+        )}        
 
         {/* Actions */}
         <div className="flex gap-4 pt-2">
