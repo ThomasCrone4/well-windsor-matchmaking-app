@@ -261,38 +261,6 @@ export default function AuthPage() {
                   />
                 </div>
 
-                {/* Visibility toggle (controls bio/skills requirement) */}
-                <div className="check-row">
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={dbsChecked}
-                      onChange={(e) => setDbsChecked(e.target.checked)}
-                      className="check"
-                    />
-                    DBS Checked
-                  </label>
-
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={availableAnytime}
-                      onChange={(e) => setAvailableAnytime(e.target.checked)}
-                      className="check"
-                    />
-                    Flexible Availability
-                  </label>
-
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={publicProfile}
-                      onChange={(e) => onTogglePublicProfile(e.target.checked)}
-                      className="check"
-                    />
-                    Allow organisations to view my profile and contact me
-                  </label>
-                </div>
 
                 {/* Bio */}
                 <div className="form-row">
@@ -324,6 +292,39 @@ export default function AuthPage() {
                     aria-invalid={!!errors.skills}
                   />
                   {errors.skills && <p className="error-text">{errors.skills}</p>}
+                </div>
+
+                {/* Visibility toggle (controls bio/skills requirement) */}
+                <div className="check-row">
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={dbsChecked}
+                      onChange={(e) => setDbsChecked(e.target.checked)}
+                      className="check"
+                    />
+                    DBS Checked
+                  </label>
+
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={availableAnytime}
+                      onChange={(e) => setAvailableAnytime(e.target.checked)}
+                      className="check"
+                    />
+                    Flexible Availability
+                  </label>
+
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={publicProfile}
+                      onChange={(e) => onTogglePublicProfile(e.target.checked)}
+                      className="check"
+                    />
+                    Allow organisations to view my profile and contact me
+                  </label>
                 </div>
 
                 {!availableAnytime && (
