@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
-import { useState, useEffect, useMemo } from 'react'; // ← add useMemo
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { isThisWeek, isThisMonth } from 'date-fns';
+import { useSearchParams } from "react-router-dom";
 
 export default function OpportunitiesPage() {
   const [revealedContacts, setRevealedContacts] = useState({});
@@ -12,6 +13,8 @@ export default function OpportunitiesPage() {
   const [userProfile, setUserProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const onlyId = searchParams.get("opId");
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -148,6 +151,9 @@ export default function OpportunitiesPage() {
 
   const filtered = filterOpportunities(data || []);
   
+  const finalList = onlyId
+  ? (filtered || []).filter(op => String(op.id) === String(onlyId))
+  : (filtered || []);
 
   return (
   <div className="max-w-4xl mx-auto px-4 py-8">
@@ -246,6 +252,7 @@ export default function OpportunitiesPage() {
               setFilters({ town: 'All', dbs: 'Any', start: 'Any' });
               setSearchTerm('');
               setMatchedOnly(false);
+              navigate("/opportunities")
             }}
             className="btn-secondary mt-1"
           >
@@ -256,11 +263,11 @@ export default function OpportunitiesPage() {
     </div>
 
     {/* Results */}
-    {filtered.length === 0 ? (
+    {finalList.length === 0 ? (
       <p className="text-center text-gray-600">No opportunities available right now.</p>
     ) : (
       <ul className="space-y-6">
-        {filtered.map((opportunity) => {
+        {finalList.map((opportunity) => {
           const alreadyEnquired = !!userProfile?.id && appliedSet.has(opportunity.id); // NEW
           return (
             <li key={opportunity.id} className="card p-6 space-y-2">

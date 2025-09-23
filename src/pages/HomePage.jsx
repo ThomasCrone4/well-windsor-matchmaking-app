@@ -51,10 +51,23 @@ export default function HomePage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('volunteer_opportunities')
-        .select('id, title, location, date_needed')
-        .gte('date_needed', new Date().toISOString())
+        .select(`
+          id,
+          title,
+          description,
+          location,
+          date_needed,
+          contact,
+          requires_dbs,
+          when_needed,
+          generally_needed,
+          volunteers_needed,
+          status
+        `)
+        .eq('status', 'active') // ✅ Only show active posts
         .order('date_needed', { ascending: true })
         .limit(3);
+        
       if (error) throw error;
       return data;
     },
@@ -132,29 +145,49 @@ export default function HomePage() {
 
         {/* Upcoming opportunities */}
         <section className="container pb-12">
-          <h2 className="text-2xl font-bold mb-4 text-gray-900">📅 Upcoming Opportunities</h2>
+          <div className="page-header">
+            <h2 className="text-2xl font-bold mb-4 text-gray-900">📅 Upcoming Opportunities</h2>
+            <div className='flex gap-2'>
+              <Link
+                to="/opportunities"
+                className="btn-primary rounded-xl"
+              >
+                More
+              </Link>
+            </div>
+          </div>
+
+
           <div className="bg-white rounded-2xl shadow-card">
             {isLoading ? (
               <p className="p-6 text-gray-600">Loading...</p>
             ) : opportunities?.length > 0 ? (
               <ul className="divide-y">
                 {opportunities.map((op) => (
-                  <li key={op.id} className="py-4 px-6 flex items-center justify-between">
+                <li key={op.id}>
+                  <Link
+                    to={`/opportunities?opId=${op.id}`}
+                    className="flex items-center justify-between py-4 px-6 block hover:bg-gray-50 transition rounded-xl"
+                    aria-label={`View ${op.title}`}
+                  >
                     <div>
                       <p className="text-lg font-medium text-gray-900">{op.title}</p>
-                      <p className="text-sm text-gray-600">{op.location}</p>
+                      <p className="text-sm text-gray-600">{op.location || 'Location TBC'}</p>
                     </div>
                     <p className="text-sm text-gray-500">
-                      {op.date_needed ? format(new Date(op.date_needed), 'MMM d') : 'TBC'}
+                      {op.date_needed ? format(new Date(op.date_needed), 'MMM d') : 'Anytime'}
                     </p>
-                  </li>
-                ))}
-              </ul>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
             ) : (
               <p className="p-6 text-gray-600">No upcoming opportunities.</p>
             )}
           </div>
         </section>
+        
       </main>
 
     </div>
