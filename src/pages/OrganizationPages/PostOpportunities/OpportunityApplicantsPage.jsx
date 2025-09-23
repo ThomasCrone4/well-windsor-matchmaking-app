@@ -16,6 +16,11 @@ export default function OpportunityApplicantsPage() {
   const [loadingId, setLoadingId] = useState(null);
   const [expandedMessages, setExpandedMessages] = useState({});
 
+  const DEFAULT_REPLIES = {
+    accepted: "Congratulations! We’d love to have you join us.",
+    denied:   "Hi, unfortunately we have decided not to work with you.",
+  };
+
   const { data: applicants, isLoading, error } = useQuery({
     queryKey: ['applicants', opportunityId],
     queryFn: async () => {
@@ -77,13 +82,25 @@ export default function OpportunityApplicantsPage() {
   });
 
   const handleAction = (appId, status) => {
-    const defaultMsg =
-      status === 'accepted'
-        ? 'Congratulations! We’d love to have you join us.'
-        : 'Hi, unfortunately we have decided not to work with you.';
-    setDraftStatus({ ...draftStatus, [appId]: status });
-    setMessages((prev) => ({ ...prev, [appId]: prev[appId] ?? defaultMsg }));
+    // what message was there before?
+    const prevDraft = draftStatus[appId];        // e.g. 'accepted' or 'denied'
+    const prevMsg = (messages[appId] ?? '').trim();
+
+    // decide whether to swap in the new default:
+    const shouldSwapToNewDefault =
+      // no message yet
+      prevMsg === '' ||
+      // or the current message exactly matches the *previous* default
+      (prevDraft && prevMsg === DEFAULT_REPLIES[prevDraft]);
+
+    setDraftStatus(prev => ({ ...prev, [appId]: status }));
+
+    setMessages(prev => ({
+      ...prev,
+      [appId]: shouldSwapToNewDefault ? DEFAULT_REPLIES[status] : prevMsg,
+    }));
   };
+
 
   const cancelDraft = (appId) => {
     setDraftStatus((prev) => {
@@ -174,7 +191,9 @@ export default function OpportunityApplicantsPage() {
                   <div className="stack">
                     <p className="text-sm font-medium">
                       You’ve chosen to{' '}
-                      <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>{draft}</span> this applicant.
+                      <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>
+                        {draft === 'accepted' ? 'accept' : 'deny'}
+                      </span> this applicant.
                     </p>
 
                     <textarea
@@ -200,7 +219,7 @@ export default function OpportunityApplicantsPage() {
                       Changed your mind? You can switch to{' '}
                       <button
                         onClick={() => handleAction(app.id, draft === 'accepted' ? 'denied' : 'accepted')}
-                        className="underline text-blue-600"
+                        className="underline text-brand-teal"
                       >
                         {draft === 'accepted' ? 'Reject' : 'Accept'}
                       </button>{' '}

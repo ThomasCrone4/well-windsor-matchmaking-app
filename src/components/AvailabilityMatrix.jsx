@@ -1,18 +1,18 @@
 import { useState, useEffect } from 'react';
 
 export default function AvailabilityMatrix({ value = [], onChange }) {
-  const [blocks, setBlocks] = useState(value.length ? value : [{
-    days: [],
-    start_date: '',
-    end_date: '',
-    start_time: '',
-    end_time: ''
-  }]);
+  const [blocks, setBlocks] = useState(
+    Array.isArray(value) && value.length
+      ? value
+      : [{ days: [], start_date: '', end_date: '', start_time: '', end_time: '' }]
+  );
 
   useEffect(() => {
-    if (value.length === 0) {
-      onChange(blocks); // initialize form parent with one block
+    // Initialize parent form with one empty block if none provided
+    if (!value || value.length === 0) {
+      onChange(blocks);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleUpdate = (newBlocks) => {
@@ -21,68 +21,116 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
   };
 
   const addBlock = () => {
-    const newBlocks = [...blocks, {
-      days: [],
-      start_date: '',
-      end_date: '',
-      start_time: '',
-      end_time: ''
-    }];
-    handleUpdate(newBlocks);
+    handleUpdate([
+      ...blocks,
+      { days: [], start_date: '', end_date: '', start_time: '', end_time: '' },
+    ]);
   };
 
   const updateBlock = (index, field, val) => {
-    const updated = blocks.map((b, i) =>
-      i === index ? { ...b, [field]: val } : b
-    );
+    const updated = blocks.map((b, i) => (i === index ? { ...b, [field]: val } : b));
     handleUpdate(updated);
   };
 
   const removeBlock = (index) => {
-    const updated = blocks.filter((_, i) => i !== index);
-    handleUpdate(updated);
+    handleUpdate(blocks.filter((_, i) => i !== index));
   };
 
-  const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
   return (
-    <div className="space-y-4">
+    <div className="stack">
       {blocks.map((block, i) => (
-        <div key={i} className="p-4 border rounded space-y-2">
-          <div>
-            <label className="block font-semibold">Days:</label>
-            <div className="flex flex-wrap gap-2">
-              {daysOfWeek.map(day => (
-                <label key={day} className="flex items-center gap-1 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={block.days.includes(day)}
-                    onChange={() => {
-                      const updatedDays = block.days.includes(day)
-                        ? block.days.filter(d => d !== day)
-                        : [...block.days, day];
-                      updateBlock(i, 'days', updatedDays);
-                    }}
-                  />
-                  {day}
-                </label>
-              ))}
+        <div key={i} className="fieldset space-y-3 relative">
+          <div className="flex items-center justify-between">
+            <span className="legend">Availability Block {i + 1}</span>
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={() => removeBlock(i)}
+            >
+              Remove
+            </button>
+          </div>
+
+          {/* Days */}
+          <div className="form-row">
+            <label className="label">Days</label>
+            <div className="flex flex-wrap gap-3">
+              {daysOfWeek.map((day) => {
+                const checked = block.days.includes(day);
+                return (
+                  <label key={day} className="check-label">
+                    <input
+                      type="checkbox"
+                      className="check"
+                      checked={checked}
+                      onChange={() => {
+                        const updatedDays = checked
+                          ? block.days.filter((d) => d !== day)
+                          : [...block.days, day];
+                        updateBlock(i, 'days', updatedDays);
+                      }}
+                    />
+                    {day}
+                  </label>
+                );
+              })}
+            </div>
+            <p className="help-text">Pick one or more days.</p>
+          </div>
+
+          {/* Date range */}
+          <div className="form-grid sm:grid-cols-2">
+            <div className="form-row">
+              <label className="label">Start Date</label>
+              <input
+                type="date"
+                className="input"
+                value={block.start_date}
+                onChange={(e) => updateBlock(i, 'start_date', e.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label className="label">End Date</label>
+              <input
+                type="date"
+                className="input"
+                value={block.end_date}
+                onChange={(e) => updateBlock(i, 'end_date', e.target.value)}
+              />
             </div>
           </div>
-          <div className="flex gap-2">
-            <input type="date" className="input" value={block.start_date} onChange={e => updateBlock(i, 'start_date', e.target.value)} />
-            <input type="date" className="input" value={block.end_date} onChange={e => updateBlock(i, 'end_date', e.target.value)} />
+
+          {/* Time range */}
+          <div className="form-grid sm:grid-cols-2">
+            <div className="form-row">
+              <label className="label">Start Time</label>
+              <input
+                type="time"
+                className="input"
+                value={block.start_time}
+                onChange={(e) => updateBlock(i, 'start_time', e.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label className="label">End Time</label>
+              <input
+                type="time"
+                className="input"
+                value={block.end_time}
+                onChange={(e) => updateBlock(i, 'end_time', e.target.value)}
+              />
+            </div>
           </div>
-          <div className="flex gap-2">
-            <input type="time" className="input" value={block.start_time} onChange={e => updateBlock(i, 'start_time', e.target.value)} />
-            <input type="time" className="input" value={block.end_time} onChange={e => updateBlock(i, 'end_time', e.target.value)} />
-          </div>
-          <button type="button" className="text-red-500 underline" onClick={() => removeBlock(i)}>Remove Block</button>
         </div>
       ))}
-      <button type="button" className="bg-blue-500 text-white px-3 py-1 rounded" onClick={addBlock}>
-        Add Availability Block
-      </button>
+
+      <div className="flex justify-end">
+        <button type="button" className="btn btn-primary btn-sm" onClick={addBlock}>
+          Add Availability Block
+        </button>
+      </div>
     </div>
   );
 }

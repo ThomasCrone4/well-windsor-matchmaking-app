@@ -173,24 +173,26 @@ export default function OrganizationDashboard() {
                 )}
 
                 {op.status !== 'draft' && (
-                  <p className="highlight">📨 {applicationsCount[op.id] || 0} applicants</p>
+                  <p className="highlight text-brand-teal">📨 {applicationsCount[op.id] || 0} applicants</p>
                 )}
 
                 {/* Actions */}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
-                    className="btn-success btn-sm"
-                  >
-                    View Applicants
-                  </button>
+                  {op.status !== 'draft' && (applicationsCount[op.id] ?? 0) > 0 && (
+                    <button
+                      onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
+                      className="btn-success btn-sm"
+                    >
+                      View Applicants
+                    </button>
+                  )}
                   {/* <button
                     onClick={() => navigate(`/opportunity/${op.id}/logged-hours`)}
                     className="btn-ghost btn-sm"
                   >
                     Logged Hours
                   </button> */}
-                  {op.status !== 'active' && (
+                  {op.status == 'closed' && (
                     <button
                       onClick={() => handleStatusChange(op.id, 'active')}
                       className="btn-success-outline btn-sm"
@@ -198,7 +200,7 @@ export default function OrganizationDashboard() {
                       Mark as Active
                     </button>
                   )}
-                  {op.status !== 'closed' && (
+                  {op.status == 'active' && (
                     <button
                       onClick={() => setShowReasonDropdown(op.id)}
                       className="btn btn-warning btn-sm"

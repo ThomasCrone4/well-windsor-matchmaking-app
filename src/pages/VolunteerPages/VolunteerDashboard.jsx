@@ -1,3 +1,4 @@
+// src/pages/volunteer/VolunteerDashboard.jsx
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 import { useEffect, useState } from 'react';
@@ -11,6 +12,11 @@ export default function VolunteerDashboard() {
   const [draftStatus, setDraftStatus] = useState({});
   const [messages, setMessages] = useState({});
   const [loadingId, setLoadingId] = useState(null);
+
+  const DEFAULT_REPLIES = {
+    accepted: 'Thank you! I’m happy to volunteer.',
+    denied:   'Thanks for reaching out, but I won’t be able to volunteer.',
+  };
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -39,6 +45,7 @@ export default function VolunteerDashboard() {
           org:org_id (
             name,
             contact_number,
+            email,
             home_town
           ),
           volunteer_opportunities (
@@ -70,13 +77,29 @@ export default function VolunteerDashboard() {
     onError: () => toast.error('Failed to respond to enquiry'),
   });
 
-  const handleAction = (id, status) => {
-    const defaultMsg =
-      status === 'accepted'
-        ? 'Thank you! I’m happy to volunteer.'
-        : 'Thanks for reaching out, but I won’t be able to volunteer.';
-    setDraftStatus({ ...draftStatus, [id]: status });
-    setMessages((prev) => ({ ...prev, [id]: prev[id] ?? defaultMsg }));
+  /**
+   * Start/modify a draft decision for an enquiry.
+   * Swaps to the correct default message when the prior text is empty
+   * or matches the previous default.
+   */
+  const handleAction = (id, targetStatus, currentStatus = null, serverMsg = '') => {
+    const prevDraft = draftStatus[id];                      // 'accepted' | 'denied' | undefined
+    const prevMsgInState = (messages[id] ?? '').trim();
+
+    // What the textarea currently shows (local edit if present, else what's on the server)
+    const baseline = prevMsgInState !== '' ? prevMsgInState : (serverMsg ?? '').trim();
+    const currentDefault = currentStatus ? DEFAULT_REPLIES[currentStatus] : null;
+
+    // Swap to the new default if the baseline was empty or still equal to the previous default
+    const shouldUseNewDefault =
+      baseline === '' ||
+      (currentDefault && baseline === currentDefault) ||
+      (prevDraft && baseline === DEFAULT_REPLIES[prevDraft]);
+
+    const nextMsg = shouldUseNewDefault ? DEFAULT_REPLIES[targetStatus] : baseline;
+
+    setDraftStatus(prev => ({ ...prev, [id]: targetStatus }));
+    setMessages(prev => ({ ...prev, [id]: nextMsg }));
   };
 
   const cancelDraft = (id) => {
@@ -96,8 +119,16 @@ export default function VolunteerDashboard() {
     await updateStatus.mutateAsync({ id, status, rejection_message: message });
     setLoadingId(null);
     cancelDraft(id);
+
+    // Clear cached message so future toggles evaluate from server state
+    setMessages(prev => {
+      const cp = { ...prev };
+      delete cp[id];
+      return cp;
+    });
   };
 
+  // Group enquiries by status
   const grouped = { pending: [], accepted: [], denied: [] };
   if (receivedData) {
     for (const entry of receivedData) {
@@ -115,6 +146,7 @@ export default function VolunteerDashboard() {
           {list.map((enquiry) => {
             const draft = draftStatus[enquiry.id];
             const msg = messages[enquiry.id] || '';
+
             return (
               <li key={enquiry.id} className="card space-y-2">
                 <h3 className="card-title text-black-800">
@@ -127,6 +159,7 @@ export default function VolunteerDashboard() {
                   <p className="text text-sm">📞 Contact: {enquiry.org.contact_number}</p>
                 )}
 
+                <p className="text text-sm">📧 Email: {enquiry.org?.email || 'Unknown'}</p>
                 <p className="text text-sm">🏠 Town: {enquiry.org?.home_town || 'Unknown'}</p>
 
                 <p className="caption">
@@ -154,6 +187,7 @@ export default function VolunteerDashboard() {
                   </span>
                 </p>
 
+                {/* Pending actions */}
                 {statusKey === 'pending' && !draft && (
                   <div className="flex gap-2 mt-2">
                     <button
@@ -171,12 +205,50 @@ export default function VolunteerDashboard() {
                   </div>
                 )}
 
-                {statusKey === 'pending' && draft && (
+                {/* Accepted/Denied → change buttons */}
+                {statusKey === 'accepted' && !draft && (
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() =>
+                        handleAction(
+                          enquiry.id,
+                          'denied',
+                          'accepted',
+                          enquiry.rejection_message
+                        )
+                      }
+                      className="btn btn-danger btn-sm"
+                    >
+                      Change to Denied
+                    </button>
+                  </div>
+                )}
+
+                {statusKey === 'denied' && !draft && (
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() =>
+                        handleAction(
+                          enquiry.id,
+                          'accepted',
+                          'denied',
+                          enquiry.rejection_message
+                        )
+                      }
+                      className="btn btn-success btn-sm"
+                    >
+                      Change to Accepted
+                    </button>
+                  </div>
+                )}
+
+                {/* Draft UI (shown for any list if a draft exists) */}
+                {draft && (
                   <div className="stack">
                     <p className="text-sm font-medium">
                       You’ve chosen to{' '}
                       <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>
-                        {draft}
+                        {draft === 'accepted' ? 'accept' : 'deny'}
                       </span>{' '}
                       this opportunity.
                     </p>
@@ -184,7 +256,9 @@ export default function VolunteerDashboard() {
                     <textarea
                       className="input textarea textarea-sm text-sm"
                       value={msg}
-                      onChange={(e) => setMessages({ ...messages, [enquiry.id]: e.target.value })}
+                      onChange={(e) =>
+                        setMessages({ ...messages, [enquiry.id]: e.target.value })
+                      }
                     />
 
                     <div className="flex gap-2">
@@ -207,7 +281,12 @@ export default function VolunteerDashboard() {
                       Changed your mind? You can switch to{' '}
                       <button
                         onClick={() =>
-                          handleAction(enquiry.id, draft === 'accepted' ? 'denied' : 'accepted')
+                          handleAction(
+                            enquiry.id,
+                            draft === 'accepted' ? 'denied' : 'accepted',
+                            statusKey,
+                            enquiry.rejection_message
+                          )
                         }
                         className="underline text-brand-teal"
                       >
@@ -218,7 +297,8 @@ export default function VolunteerDashboard() {
                   </div>
                 )}
 
-                {statusKey === 'denied' && (
+                {/* Final summaries when not editing */}
+                {!draft && statusKey === 'denied' && enquiry.rejection_message && (
                   <div className="text-sm text-red-600">
                     ❌ You declined this opportunity.
                     <br />
@@ -226,7 +306,7 @@ export default function VolunteerDashboard() {
                   </div>
                 )}
 
-                {statusKey === 'accepted' && (
+                {!draft && statusKey === 'accepted' && enquiry.rejection_message && (
                   <div className="text-sm text-green-700">
                     ✅ You’ve accepted this opportunity.
                     <br />
@@ -261,9 +341,9 @@ export default function VolunteerDashboard() {
         </div>
       ) : (
         <>
-          {renderList('Pending', grouped.pending, 'pending')}
           {renderList('Accepted', grouped.accepted, 'accepted')}
           {renderList('Denied', grouped.denied, 'denied')}
+          {renderList('Awaiting Response', grouped.pending, 'pending')}
         </>
       )}
     </div>

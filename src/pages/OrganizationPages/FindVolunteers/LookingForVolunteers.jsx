@@ -9,6 +9,18 @@ export default function LookingForVolunteersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
+  // 1) Get current org user id
+  const { data: sessionUser } = useQuery({
+    queryKey: ['session'],
+    queryFn: async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user;
+    },
+  });
+  const orgId = sessionUser?.id;
+
+  // 2) Load volunteers list
   const { data, error, isLoading } = useQuery({
     queryKey: ['volunteer_profiles'],
     queryFn: async () => {
@@ -17,14 +29,30 @@ export default function LookingForVolunteersPage() {
         .select('id, name, home_town, dbs_checked, skills, available_anytime, availability_matrix, bio')
         .eq('role', 'volunteer')
         .eq('public_profile', true);
-
       if (error) throw error;
       return data;
     },
   });
 
-  const filterVolunteers = (vols) => {
-    return vols.filter(v => {
+  // 3) Load which volunteers this org has already contacted
+  const { data: contactedRows, isLoading: isLoadingContacts } = useQuery({
+    queryKey: ['contacted_volunteers', orgId],
+    enabled: !!orgId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('volunteer_id')
+        .eq('org_id', orgId)
+        .eq('direction', 'to_volunteer');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const contactedSet = new Set((contactedRows ?? []).map(r => r.volunteer_id));
+
+  const filterVolunteers = (vols) =>
+    vols.filter((v) => {
       const matchesTown = filters.town === 'All' || v.home_town === filters.town;
       const matchesDBS =
         filters.dbs === 'Any' ||
@@ -36,9 +64,17 @@ export default function LookingForVolunteersPage() {
         (v.bio || '').toLowerCase().includes(q);
       return matchesTown && matchesDBS && matchesSearch;
     });
-  };
 
   const handleEnquire = (volunteerId) => {
+    if (!orgId) {
+      toast.error('Please log in as an organisation.');
+      navigate('/auth');
+      return;
+    }
+    if (contactedSet.has(volunteerId)) {
+      toast('You’ve already contacted this volunteer.');
+      return;
+    }
     navigate(`/volunteers/${volunteerId}/enquire`);
   };
 
@@ -49,20 +85,9 @@ export default function LookingForVolunteersPage() {
     return (
       <ul className="space-y-1 text-sm text-gray-700 list-disc list-inside mt-1">
         {vol.availability_matrix.map((block, i) => {
-          const dayList = block.days?.length
-            ? `Every ${block.days.join(', ')}`
-            : 'Unspecified days';
-
-          const timeRange =
-            block.start_time && block.end_time
-              ? `${block.start_time} to ${block.end_time}`
-              : 'unspecified times';
-
-          const dateRange =
-            block.start_date && block.end_date
-              ? `between ${formatDate(block.start_date)} and ${formatDate(block.end_date)}`
-              : '';
-
+          const dayList = block.days?.length ? `Every ${block.days.join(', ')}` : 'Unspecified days';
+          const timeRange = block.start_time && block.end_time ? `${block.start_time} to ${block.end_time}` : 'unspecified times';
+          const dateRange = block.start_date && block.end_date ? `between ${formatDate(block.start_date)} and ${formatDate(block.end_date)}` : '';
           return (
             <li key={i}>
               {dayList}, {timeRange} {dateRange && `(${dateRange})`}
@@ -76,11 +101,7 @@ export default function LookingForVolunteersPage() {
   const formatDate = (dateStr) => {
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
+      return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     } catch {
       return dateStr;
     }
@@ -95,13 +116,11 @@ export default function LookingForVolunteersPage() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="page-header">
         <h1 className="title">Find Volunteers</h1>
-
         <div className="flex justify-center mb-6">
-          <Link to="/organization/sent-enquiries" className="btn-success">
-            Sent Enquiries
-          </Link>
+          <Link to="/organization/sent-enquiries" className="btn-success">Sent Enquiries</Link>
         </div>
       </div>
+
       {/* Filters */}
       <div className="card mb-6">
         <div className="form-grid md:grid-cols-4">
@@ -124,7 +143,7 @@ export default function LookingForVolunteersPage() {
             <select
               id="town"
               value={filters.town}
-              onChange={(e) => setFilters(f => ({ ...f, town: e.target.value }))}
+              onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
               className="select"
             >
               <option value="All">All</option>
@@ -140,7 +159,7 @@ export default function LookingForVolunteersPage() {
             <select
               id="dbs"
               value={filters.dbs}
-              onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))}
+              onChange={(e) => setFilters((f) => ({ ...f, dbs: e.target.value }))}
               className="select"
             >
               <option value="Any">Any</option>
@@ -171,36 +190,41 @@ export default function LookingForVolunteersPage() {
         <p className="text-center text-gray-600">No volunteers found.</p>
       ) : (
         <ul className="space-y-6">
-          {filtered.map((vol) => (
-            <li key={vol.id} className="card p-6 space-y-3">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold">{vol.name}</h2>
-                  <p className="text-gray-700">{vol.bio}</p>
+          {filtered.map((vol) => {
+            const alreadyContacted = contactedSet.has(vol.id);
+            return (
+              <li key={vol.id} className="card p-6 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-semibold">{vol.name}</h2>
+                    <p className="text-gray-700">{vol.bio}</p>
+                  </div>
+                  {vol.dbs_checked && (
+                    <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">
+                      DBS Checked
+                    </span>
+                  )}
                 </div>
-                {vol.dbs_checked && (
-                  <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">
-                    DBS Checked
-                  </span>
-                )}
-              </div>
 
-              <div className="text-sm text-gray-600">🏠 Home Town: {vol.home_town || '—'}</div>
-              <div className="text-sm text-gray-600">🛠️ Skills: {vol.skills || '—'}</div>
-              <div className="text-sm text-gray-600">
-                📋 Availability: {renderAvailability(vol)}
-              </div>
+                <div className="text-sm text-gray-600">🏠 Home Town: {vol.home_town || '—'}</div>
+                {vol.skills?.trim() ? (
+                  <div className="text-sm text-gray-600">🛠️ Skills: {vol.skills}</div>
+                ) : null}
+                <div className="text-sm text-gray-600">📋 Availability: {renderAvailability(vol)}</div>
 
-              <div className="pt-2">
-                <button
-                  className="btn-primary"
-                  onClick={() => handleEnquire(vol.id)}
-                >
-                  Contact Volunteer
-                </button>
-              </div>
-            </li>
-          ))}
+                <div className="pt-2">
+                  <button
+                    className={`btn-primary ${alreadyContacted ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    disabled={alreadyContacted || isLoadingContacts}
+                    onClick={() => handleEnquire(vol.id)}
+                    title={alreadyContacted ? 'You have already contacted this volunteer' : 'Contact Volunteer'}
+                  >
+                    {alreadyContacted ? 'Already contacted' : 'Contact Volunteer'}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

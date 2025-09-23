@@ -59,6 +59,7 @@ export default function EnquiryPage() {
 
     if (existing) {
       toast.error('You have already enquired about this opportunity.');
+      navigate('/volunteer/sent-enquiries')
       return;
     }
 

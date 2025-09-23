@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react'; // ← add useMemo
+import { useNavigate, Link } from 'react-router-dom';
 import { isThisWeek, isThisMonth } from 'date-fns';
 
 export default function OpportunitiesPage() {
@@ -19,7 +19,7 @@ export default function OpportunitiesPage() {
       const userId = session?.session?.user?.id;
       if (!userId) return;
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
@@ -29,6 +29,28 @@ export default function OpportunitiesPage() {
     };
     fetchProfile();
   }, []);
+
+  // --- NEW: preload opportunity_ids this volunteer has already enquired about ---
+  const { data: myApps } = useQuery({
+    queryKey: ['my_applied_opportunity_ids', userProfile?.id],
+    enabled: !!userProfile?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('opportunity_id')
+        .eq('volunteer_id', userProfile.id);
+        // Note: no direction filter to mirror your existing handleApply check
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 0,
+  });
+
+  const appliedSet = useMemo(
+    () => new Set((myApps ?? []).map(r => r.opportunity_id)),
+    [myApps]
+  );
+  // ---------------------------------------------------------------------------
 
   const { data, error, isLoading } = useQuery({
     queryKey: ['volunteer_opportunities'],
@@ -86,6 +108,7 @@ export default function OpportunitiesPage() {
 
     if (existing) {
       toast.error('You have already enquired about this opportunity.');
+      navigate('/volunteer/sent-enquiries');
       return;
     }
 
@@ -95,7 +118,6 @@ export default function OpportunitiesPage() {
   const filterOpportunities = (items) => {
     return items.filter(op => {
       const startDate = new Date(op.date_needed);
-      const now = new Date();
 
       const matchesTown =
         filters.town === 'All' || op.location === filters.town;
@@ -125,12 +147,21 @@ export default function OpportunitiesPage() {
   if (error) return <p className="text-center text-red-500 mt-20">Failed to load opportunities.</p>;
 
   const filtered = filterOpportunities(data || []);
+  
 
   return (
   <div className="max-w-4xl mx-auto px-4 py-8">
     <div className="page-header">
       <h1 className="title">Volunteer Opportunities</h1>
+      {userProfile?.role === 'volunteer' && (
+        <div className="flex justify-center mb-6">
+          <Link to="/volunteer/sent-enquiries" className="btn btn-success"> 
+            Sent Enquiries
+          </Link>
+        </div>
+      )}
     </div>
+
     {/* Filters */}
     <div className="card mb-6">
       <div className="form-grid md:grid-cols-5">
@@ -229,44 +260,49 @@ export default function OpportunitiesPage() {
       <p className="text-center text-gray-600">No opportunities available right now.</p>
     ) : (
       <ul className="space-y-6">
-        {filtered.map((opportunity) => (
-          <li key={opportunity.id} className="card p-6 space-y-2">
-            <h2 className="text-xl font-semibold">{opportunity.title}</h2>
-            <p className="text-gray-700">{opportunity.description}</p>
-            <div className="text-sm text-gray-600">📍 Location: {opportunity.location}</div>
-            <div className="text-sm text-gray-600">👥 Volunteers Needed: {opportunity.volunteers_needed ?? 'N/A'}</div>
+        {filtered.map((opportunity) => {
+          const alreadyEnquired = !!userProfile?.id && appliedSet.has(opportunity.id); // NEW
+          return (
+            <li key={opportunity.id} className="card p-6 space-y-2">
+              <h2 className="text-xl font-semibold">{opportunity.title}</h2>
+              <p className="text-gray-700">{opportunity.description}</p>
+              <div className="text-sm text-gray-600">📍 Location: {opportunity.location}</div>
+              <div className="text-sm text-gray-600">👥 Volunteers Needed: {opportunity.volunteers_needed ?? 'N/A'}</div>
 
-            {opportunity.requires_dbs && (
-              <span className="badge-danger">DBS Required</span>
-            )}
+              {opportunity.requires_dbs && (
+                <span className="badge-danger">DBS Required</span>
+              )}
 
-            {opportunity.generally_needed ? (
-              <p className="text-sm text-green-700 font-medium">🕒 Available anytime</p>
-            ) : opportunity.when_needed?.length > 0 ? (
-              <div className="text-sm text-gray-700 mt-2 space-y-1">
-                <p className="font-semibold">🕒 Times Needed:</p>
-                <ul className="list-disc list-inside">
-                  {opportunity.when_needed.map((block, idx) => (
-                    <li key={idx}>
-                      {(block.days?.length ? block.days.join(', ') : 'Days unknown')} —{' '}
-                      {block.start_time || '??'} to {block.end_time || '??'}
-                      {block.start_date && block.end_date && (
-                        <> ({block.start_date} to {block.end_date})</>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+              {opportunity.generally_needed ? (
+                <p className="text-sm text-green-700 font-medium">🕒 Available anytime</p>
+              ) : opportunity.when_needed?.length > 0 ? (
+                <div className="text-sm text-gray-700 mt-2 space-y-1">
+                  <p className="font-semibold">🕒 Times Needed:</p>
+                  <ul className="list-disc list-inside">
+                    {opportunity.when_needed.map((block, idx) => (
+                      <li key={idx}>
+                        {(block.days?.length ? block.days.join(', ') : 'Days unknown')} —{' '}
+                        {block.start_time || '??'} to {block.end_time || '??'}
+                        {block.start_date && block.end_date && (
+                          <> ({block.start_date} to {block.end_date})</>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
-            <button
-              className="btn-primary mt-2"
-              onClick={() => handleApply(opportunity.id)}
-            >
-              Enquire
-            </button>
-          </li>
-        ))}
+              <button
+                className={`btn-primary ${alreadyEnquired ? 'opacity-60 cursor-not-allowed' : ''}`} 
+                disabled={alreadyEnquired} 
+                onClick={() => handleApply(opportunity.id)}
+                title={alreadyEnquired ? 'You already enquired' : 'Enquire'} 
+              >
+                {alreadyEnquired ? 'Already enquired' : 'Enquire'}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     )}
   </div>
