@@ -133,7 +133,8 @@ export default function AuthPage() {
       return;
     }
     try {
-      const redirectTo = `${window.location.origin}/reset-password`;
+      const appBase = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
+      const redirectTo = `${appBase.replace(/\/$/, '')}/reset-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) {
         toast.error(error.message);
