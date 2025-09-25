@@ -9,6 +9,7 @@ import './index.css';
 
 import HomePage from './pages/HomePage';
 import AuthPage from './pages/AuthPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import Redirector from './pages/Redirector';
 import UserList from './pages/AdminPages/UserList';
 import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard';
@@ -54,6 +55,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="/opportunities" element={<OpportunitiesPage />} />
                 <Route path="/auth" element={<AuthPage />} />
                 <Route path="/redirect" element={<Redirector />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+
 
                 {/* Organisation pages */}
                 <Route path="/organization/profile" element={<ProtectedRoute allowedRoles={['organization']}><OrganizationProfilePage /></ProtectedRoute>} />

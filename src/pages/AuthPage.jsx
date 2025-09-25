@@ -126,6 +126,26 @@ export default function AuthPage() {
     }
   };
 
+  // Forgot password handler
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast('Enter your account email above first, then click "Forgot password?".');
+      return;
+    }
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success('Reset link sent! Check your inbox (and spam).');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not send reset email. Please try again.');
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <form onSubmit={handleSubmit} className="card w-full max-w-lg form">
@@ -159,6 +179,19 @@ export default function AuthPage() {
             aria-invalid={!!errors.password}
           />
           {errors.password && <p className="error-text">{errors.password}</p>}
+
+          {/* NEW: Forgot password link */}
+          {!isSigningUp && (
+            <div className="mt-2 text-right">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-sm underline text-brand-teal"
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
         </div>
 
         {isSigningUp && (
@@ -261,7 +294,6 @@ export default function AuthPage() {
                   />
                 </div>
 
-
                 {/* Bio */}
                 <div className="form-row">
                   <label className="label">
@@ -294,7 +326,7 @@ export default function AuthPage() {
                   {errors.skills && <p className="error-text">{errors.skills}</p>}
                 </div>
 
-                {/* Visibility toggle (controls bio/skills requirement) */}
+                {/* Visibility & Availability */}
                 <div className="check-row">
                   <label className="check-label">
                     <input
