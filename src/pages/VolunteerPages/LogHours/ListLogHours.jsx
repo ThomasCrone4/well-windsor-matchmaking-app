@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../utils/supabase';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
+import '../../../index.css';
+import { Edit2, Trash2 } from 'lucide-react';
 
 export default function ListLogHours() {
   const [userId, setUserId] = useState(null);
@@ -33,6 +35,8 @@ export default function ListLogHours() {
           application_id,
           notes,
           logged_hours,
+          total_minutes,
+          total_hours,
           created_at,
           vol_confirmed,
           org_confirmed,
@@ -48,28 +52,83 @@ export default function ListLogHours() {
 
       if (error) throw error;
 
-      return data.filter((entry) => entry.application?.volunteer_id === userId);
+      return (data || []).filter((entry) => entry.application?.volunteer_id === userId);
     },
   });
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this log entry?')) return;
-    const { error } = await supabase.from('volunteer_hours').delete().eq('id', id);
+    const { data, error } = await supabase
+      .from('volunteer_hours')
+      .delete()
+      .eq('id', id)
+      .select('id'); // force return; helps detect RLS blocks
     if (error) toast.error('Delete failed');
+    else if (!data || data.length === 0) toast.error('Delete blocked by policy or not found');
     else {
       toast.success('Entry deleted');
       queryClient.invalidateQueries(['loggedHours', userId]);
     }
   };
 
-  const getBlockDurationMinutes = (start, end) => {
+  /** ---------------- Time + occurrence helpers ---------------- */
+
+  // Safer local date parser for 'YYYY-MM-DD' (avoids TZ surprises)
+  const parseYMD = (s) => {
+    if (!s) return null;
+    const [y, m, d] = s.split('-').map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d);
+  };
+
+  const minutesBetweenTimes = (start, end) => {
     try {
-      const [sh, sm] = start.split(':').map(Number);
-      const [eh, em] = end.split(':').map(Number);
-      return Math.max((eh * 60 + em) - (sh * 60 + sm), 0);
+      const [sh, sm] = String(start).split(':').map(Number);
+      const [eh, em] = String(end).split(':').map(Number);
+      const startMins = sh * 60 + sm;
+      const endMins = eh * 60 + em;
+      const diff = endMins - startMins;
+      return diff > 0 ? diff : 0;
     } catch {
       return 0;
     }
+  };
+
+  const DAY_TO_IDX = {
+    Sunday: 0,
+    Monday: 1,
+    Tuesday: 2,
+    Wednesday: 3,
+    Thursday: 4,
+    Friday: 5,
+    Saturday: 6,
+  };
+
+  // Count how many dates between start/end (inclusive) land on the selected weekdays
+  const countOccurrencesInRange = (startDateStr, endDateStr, days = []) => {
+    const start = parseYMD(startDateStr);
+    if (!start) return 0;
+    const end = parseYMD(endDateStr) || start;
+    if (end < start) return 0;
+
+    const wanted = new Set(days.map((d) => DAY_TO_IDX[d]).filter((n) => n >= 0));
+    if (wanted.size === 0) return 0;
+
+    let count = 0;
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      if (wanted.has(cursor.getDay())) count++;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return count;
+  };
+
+  // Total minutes for a single worked block = duration * number of matching days in range
+  const minutesForBlock = (block) => {
+    const perDay = minutesBetweenTimes(block.start_time, block.end_time);
+    if (perDay <= 0) return 0;
+    const occurrences = countOccurrencesInRange(block.start_date, block.end_date, block.days || []);
+    return perDay * occurrences;
   };
 
   const formatTotalTime = (minutes) => {
@@ -80,52 +139,33 @@ export default function ListLogHours() {
 
   const getStatusBadge = (entry) => {
     if (entry.finalized) {
-      return (
-        <span className="text-xs font-medium px-2 py-1 rounded bg-green-100 text-green-700">
-          Finalised
-        </span>
-      );
+      return <span className="badge badge-success">Finalised</span>;
     }
-
     if (!entry.org_confirmed) {
-      return (
-        <span className="text-xs font-medium px-2 py-1 rounded bg-yellow-100 text-yellow-700">
-          Awaiting Organisation
-        </span>
-      );
+      return <span className="badge badge-warning">Awaiting Organisation Approval</span>;
     }
-
     if (!entry.vol_confirmed) {
-      return (
-        <span className="text-xs font-medium px-2 py-1 rounded bg-orange-100 text-orange-700">
-          Needs Your Confirmation
-        </span>
-      );
+      return <span className="badge badge-info">Needs Your Confirmation</span>;
     }
-
-    return (
-      <span className="text-xs font-medium px-2 py-1 rounded bg-gray-100 text-gray-700">
-        Pending Finalisation
-      </span>
-    );
+    return <span className="badge badge-neutral">Pending Finalisation</span>;
   };
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Your Logged Hours</h1>
+      <div className="page-header">
+        <h1 className="title">Your Logged Hours</h1>
         <button
           onClick={() => navigate('/volunteer/log-hours/new')}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          className="btn btn-primary"
         >
           + Log New Hours
         </button>
       </div>
 
       {isLoading ? (
-        <p>Loading...</p>
+        <p className="muted">Loading...</p>
       ) : loggedHours.length === 0 ? (
-        <p className="text-gray-500 italic">No hours logged yet.</p>
+        <p className="muted italic">No hours logged yet.</p>
       ) : (
         loggedHours.map((entry) => {
           const title =
@@ -133,69 +173,70 @@ export default function ListLogHours() {
               ? entry.application?.subject || 'Untitled Opportunity'
               : entry.application?.opportunity_title || 'Untitled Opportunity';
 
-          const totalMinutes = (entry.logged_hours || []).reduce((acc, block) => {
-            return acc + getBlockDurationMinutes(block.start_time, block.end_time);
-          }, 0);
-
+          // NEW: sum minutes across blocks, factoring weekday occurrences between dates
+          const totalMinutes = 
+            typeof entry.total_minutes === 'number'
+            ? entry.total_minutes
+            : (entry.logged_hours || []).reduce((acc, block) => acc + minutesForBlock(block), 0);
+          
           return (
-            <div
-              key={entry.id}
-              className="bg-white p-4 rounded border shadow-sm space-y-2 mb-4"
-            >
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-lg">{title}</h3>
-                {getStatusBadge(entry)}
+            <div key={entry.id} className="card space-y-2 mb-4">
+              {/* Header row: title | centered status | actions */}
+              <div className="grid items-center grid-cols-[auto_1fr_auto] gap-3">
+                <h3 className="card-title">{title}</h3>
+
+                <div className="flex justify-center">{getStatusBadge(entry)}</div>
+
+                {!entry.finalized ? (
+                  <div className="flex items-center gap-2 justify-self-end">
+                    <button
+                      aria-label="Edit"
+                      onClick={() => navigate(`/volunteer/log-hours/edit/${entry.id}`)}
+                      className="icon-btn hover:text-brand-teal"
+                      title="Edit"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button
+                      aria-label="Delete"
+                      onClick={() => handleDelete(entry.id)}
+                      className="icon-btn icon-btn-danger"
+                      title="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ) : (
+                  <div />
+                )}
               </div>
 
-              <p className="text-sm text-gray-500">
+              <p className="muted caption">
                 Logged on: {format(parseISO(entry.created_at), 'PPP')}
               </p>
-              <p className="text-sm text-gray-700">
-                ⏱ {entry.logged_hours?.length || 0} block(s) –{' '}
+              <p className="text">
+                ⏱ {entry.logged_hours?.length || 0} block(s) —{' '}
                 <strong>Total: {formatTotalTime(totalMinutes)}</strong>
               </p>
 
-              <div className="space-y-2 pl-2 text-sm">
-                {entry.logged_hours?.map((block, i) => (
-                  <div key={i} className="border-l-4 pl-2 border-blue-500">
+              <div className="stack">
+                {(entry.logged_hours || []).map((block, i) => (
+                  <div key={i} className="border border-gray-200 rounded-xl p-3">
                     <p>
                       <strong>Days:</strong>{' '}
                       {block.days?.length ? block.days.join(', ') : 'N/A'}
                     </p>
                     <p>
-                      <strong>Date:</strong>{' '}
-                      {block.start_date || 'N/A'} → {block.end_date || 'N/A'}
+                      <strong>Date:</strong> {block.start_date || 'N/A'} → {block.end_date || 'N/A'}
                     </p>
                     <p>
-                      <strong>Time:</strong>{' '}
-                      {block.start_time || 'N/A'} → {block.end_time || 'N/A'}
+                      <strong>Time:</strong> {block.start_time || 'N/A'} → {block.end_time || 'N/A'}
                     </p>
                   </div>
                 ))}
               </div>
 
-              {entry.notes && (
-                <p className="italic text-gray-600">“{entry.notes}”</p>
-              )}
-
-              {!entry.finalized && (
-                <div className="flex gap-4 text-sm mt-2">
-                  <button
-                    className="text-blue-600 hover:underline"
-                    onClick={() => navigate(`/volunteer/log-hours/edit/${entry.id}`)}
-                  >
-                    {entry.org_confirmed && !entry.vol_confirmed
-                      ? 'Confirm & Edit'
-                      : 'Edit'}
-                  </button>
-                  <button
-                    className="text-red-600 hover:underline"
-                    onClick={() => handleDelete(entry.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
+              {entry.notes && <p className="muted italic">“{entry.notes}”</p>}
             </div>
           );
         })
