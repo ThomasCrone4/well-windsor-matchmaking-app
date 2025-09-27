@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function AvailabilityMatrix({ value = [], onChange }) {
+  const startRefs = useRef([]);
+  const endRefs = useRef([]);
+  const today = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
   const [blocks, setBlocks] = useState(
     Array.isArray(value) && value.length
       ? value
@@ -28,7 +31,21 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
   };
 
   const updateBlock = (index, field, val) => {
-    const updated = blocks.map((b, i) => (i === index ? { ...b, [field]: val } : b));
+    const updated = blocks.map((b, i) => {
+      if (i !== index) return b;
+      let next = { ...b, [field]: val };
+
+      // Enforce: no past dates + end_date >= start_date
+      if (field === 'start_date') {
+        if (next.start_date && next.start_date < today) next.start_date = today;
+        if (next.end_date && next.end_date < next.start_date) next.end_date = next.start_date;
+      }
+      if (field === 'end_date') {
+        const minEnd = next.start_date && next.start_date > today ? next.start_date : today;
+        if (next.end_date && next.end_date < minEnd) next.end_date = minEnd;
+      }
+      return next;
+    });
     handleUpdate(updated);
   };
 
@@ -88,6 +105,7 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
                 type="date"
                 className="input"
                 value={block.start_date}
+                min={today}
                 onChange={(e) => updateBlock(i, 'start_date', e.target.value)}
               />
             </div>
@@ -97,6 +115,7 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
                 type="date"
                 className="input"
                 value={block.end_date}
+                min={block.start_date || today}
                 onChange={(e) => updateBlock(i, 'end_date', e.target.value)}
               />
             </div>

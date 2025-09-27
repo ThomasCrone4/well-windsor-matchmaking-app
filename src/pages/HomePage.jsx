@@ -17,10 +17,8 @@ export default function HomePage() {
         .select('logged_hours');
 
       // Volunteers count
-      const { data: volunteersRows, error: volErr } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('role', 'volunteer');
+      const { data: volunteerCount, error: volErr } =
+        await supabase.rpc('count_volunteers');
 
       // Opportunities count
       const { data: oppRows, error: oppErr } = await supabase
@@ -38,7 +36,7 @@ export default function HomePage() {
 
       setStats({
         hours: totalHours,
-        volunteers: volunteersRows?.length || 0,
+        volunteers: volunteerCount ?? 0,
         opportunities: oppRows?.length || 0,
       });
     };
