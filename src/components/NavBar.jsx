@@ -76,11 +76,11 @@ export default function Navbar() {
         )}
 
         {/* Show Log Hours only for volunteers */}
-        {/* {isLoggedIn && role === 'volunteer' && (
+         {isLoggedIn && role === 'volunteer' && (
           <Link to="/volunteer/log-hours" className="text-gray-700 hover:text-blue-600">
             Log Hours
           </Link>
-        )} */}
+        )}
 
         {!isLoggedIn ? (
           <Link to="/auth" className="btn-primary">
