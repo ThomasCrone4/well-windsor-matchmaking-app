@@ -100,7 +100,6 @@ export default function WorkedMatrix({ value = [], onChange }) {
                 );
               })}
             </div>
-            <p className="help-text">Tick the days you actually worked.</p>
           </div>
 
           {/* Date range (past allowed). Keep end ≥ start. */}

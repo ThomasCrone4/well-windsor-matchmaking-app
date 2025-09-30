@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../utils/supabase';
 import toast from 'react-hot-toast';
 import WorkedMatrix from '../../../components/WorkedMatrix';
+import '../../../index.css';
 
 export default function OrgLoggedHoursPage() {
   const [orgId, setOrgId] = useState(null);
@@ -44,7 +45,7 @@ export default function OrgLoggedHoursPage() {
             opportunity_id,
             org_id,
             subject,
-            volunteer:user_profiles!applications_volunteer_id_fkey1 (
+            volunteer:user_profiles!applications_volunteer_id_fkey (
               id, name, email
             ),
             opportunity:volunteer_opportunities!applications_opportunity_id_fkey (
@@ -52,6 +53,7 @@ export default function OrgLoggedHoursPage() {
             )
           )
         `)
+        .eq('application.org_id', orgId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -63,19 +65,19 @@ export default function OrgLoggedHoursPage() {
     },
   });
 
-  const mutation = useMutation({
+  // Edit-&-Confirm path: org changes anything → vol must reconfirm
+  const editMutation = useMutation({
     mutationFn: async ({ id, logged_hours, notes }) => {
       const { error } = await supabase
         .from('volunteer_hours')
         .update({
           logged_hours,
           notes,
-          org_confirmed: true,
-          vol_confirmed: false,
+          org_confirmed: true,     // org has confirmed their edited version
+          vol_confirmed: false,    // force volunteer to reconfirm after edits
           finalized: false,
         })
         .eq('id', id);
-
       if (error) throw error;
     },
     onSuccess: () => {
@@ -84,6 +86,24 @@ export default function OrgLoggedHoursPage() {
       setEditingId(null);
     },
     onError: () => toast.error('Failed to update hours'),
+  });
+
+  // Confirm-without-changes path: if volunteer already confirmed → finalize now
+  const confirmMutation = useMutation({
+    mutationFn: async ({ id, finalizeNow }) => {
+      const payload = {
+        org_confirmed: true,
+        finalized: finalizeNow ? true : false,
+      };
+      // If finalised now, keep vol_confirmed as-is (already true); no other changes
+      const { error } = await supabase.from('volunteer_hours').update(payload).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      toast.success(vars.finalizeNow ? 'Hours finalised' : 'Confirmed — awaiting volunteer');
+      queryClient.invalidateQueries(['orgAllLoggedHours', orgId]);
+    },
+    onError: () => toast.error('Failed to confirm hours'),
   });
 
   const handleEdit = (log) => {
@@ -99,8 +119,13 @@ export default function OrgLoggedHoursPage() {
       toast.error('Hour blocks required');
       return;
     }
+    editMutation.mutate({ id, logged_hours: blocks, notes });
+  };
 
-    mutation.mutate({ id, logged_hours: blocks, notes });
+  const handleConfirmNoChange = (log) => {
+    if (log.finalized) return;
+    const finalizeNow = !!log.vol_confirmed; // if vol already confirmed, both sides now agree → finalize
+    confirmMutation.mutate({ id: log.id, finalizeNow });
   };
 
   const getDuration = (start, end) => {
@@ -116,31 +141,43 @@ export default function OrgLoggedHoursPage() {
     return `${h}h ${m}m`;
   };
 
-  const getStatus = (log) => {
+  const getStatusBadge = (log) => {
     if (log.finalized) {
-      return <span className="text-green-700 font-medium">Finalised</span>;
-    }
-    if (!log.vol_confirmed) {
-      return <span className="text-orange-600 font-medium">Pending Volunteer Confirmation</span>;
+      return <span className="badge badge-success">Finalised</span>;
     }
     if (!log.org_confirmed) {
-      return <span className="text-yellow-600 font-medium">Needs Your Confirmation</span>;
+      return <span className="badge badge-warning">Needs Your Confirmation</span>;
     }
-    return <span className="text-gray-600">Pending Finalisation</span>;
+    if (!log.vol_confirmed) {
+      return <span className="badge badge-info">Pending Volunteer Confirmation</span>;
+    }
+    return <span className="badge badge-neutral">Pending Finalisation</span>;
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">All Logged Hours</h1>
+    <div className="container-app max-w-5xl py-8">
+      <div className="page-header">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary" type="button">
+          ← Back
+        </button>
+        <h1 className="title">All Logged Hours</h1>
+        <div className="spacer" />
+      </div>
 
       {isLoading ? (
-        <p>Loading...</p>
+        <div className="card">
+          <p className="muted">Loading…</p>
+        </div>
       ) : error ? (
-        <p className="text-red-600">Failed to load logged hours.</p>
+        <div className="card">
+          <p className="error-text">Failed to load logged hours.</p>
+        </div>
       ) : logs.length === 0 ? (
-        <p className="text-gray-500 italic">No volunteer hours logged yet.</p>
+        <div className="card">
+          <p className="muted italic">No volunteer hours logged yet.</p>
+        </div>
       ) : (
-        <ul className="space-y-6">
+        <ul className="stack">
           {logs.map((log) => {
             const totalMins = (log.logged_hours || []).reduce((acc, block) => {
               return acc + getDuration(block.start_time, block.end_time);
@@ -150,24 +187,28 @@ export default function OrgLoggedHoursPage() {
             const opportunity = log.application?.opportunity;
 
             return (
-              <li key={log.id} className="bg-white p-4 rounded border shadow-sm space-y-1">
-                <h3 className="text-lg font-semibold text-blue-800">
-                  {volunteer?.name || 'Unknown'} — {opportunity?.title || log.application?.subject || 'Untitled'}
-                </h3>
+              <li key={log.id} className="card space-y-3">
+                {/* Header row: title | status badge */}
+                <div className="grid items-center grid-cols-[1fr_auto] gap-3">
+                  <h3 className="card-title">
+                    {volunteer?.name || 'Unknown'} —{' '}
+                    {opportunity?.title || log.application?.subject || 'Untitled'}
+                  </h3>
+                  <div>{getStatusBadge(log)}</div>
+                </div>
 
-                <p className="text-sm text-gray-600">📧 {volunteer?.email || 'No email'}</p>
-                <p className="text-sm">
-                  <strong>Status:</strong> {getStatus(log)}
-                </p>
-                <p className="text-sm">
+                <p className="caption muted">📧 {volunteer?.email || 'No email'}</p>
+
+                <p className="text">
                   <strong>Total Time:</strong>{' '}
-                  <span className="text-blue-700">{formatTime(totalMins)}</span>
+                  <span className="highlight">{formatTime(totalMins)}</span>
                 </p>
 
                 {editingId === log.id ? (
                   <>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Edit Hour Blocks</label>
+                    {/* Edit form */}
+                    <div className="field">
+                      <label className="label">Edit Hour Blocks</label>
                       <WorkedMatrix
                         value={editedBlocks[log.id] || []}
                         onChange={(val) =>
@@ -176,59 +217,79 @@ export default function OrgLoggedHoursPage() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Edit Notes</label>
+                    <div className="field">
+                      <label className="label">Edit Notes</label>
                       <textarea
-                        className="w-full p-2 border rounded min-h-[100px]"
+                        className="textarea"
                         value={editedNotes[log.id]}
                         onChange={(e) =>
                           setEditedNotes((prev) => ({ ...prev, [log.id]: e.target.value }))
                         }
+                        placeholder="Optional context for these hours…"
                       />
                     </div>
 
-                    <div className="flex gap-2 mt-2">
+                    <div className="flex gap-2">
                       <button
                         onClick={() => handleSave(log.id)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                        className="btn btn-primary"
+                        disabled={editMutation.isPending}
                       >
                         Save
                       </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-sm text-gray-600 underline hover:text-gray-900"
-                      >
+                      <button onClick={() => setEditingId(null)} className="btn btn-ghost">
                         Cancel
                       </button>
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="text-sm">
+                    <div className="text">
                       <strong>Notes:</strong>{' '}
                       {log.notes ? (
                         <span>{log.notes}</span>
                       ) : (
-                        <span className="italic text-gray-500">No notes</span>
+                        <span className="muted italic">No notes</span>
                       )}
                     </div>
 
-                    <ul className="text-xs mt-2 space-y-0.5">
+                    <ul className="stack-sm caption">
                       {log.logged_hours?.map((block, i) => (
-                        <li key={i}>
-                          🗓 {block.days?.join(', ') || 'N/A'} | {block.start_date} → {block.end_date} |{' '}
-                          {block.start_time}–{block.end_time}
+                        <li key={i} className="text">
+                          🗓 {block.days?.length ? block.days.join(', ') : 'N/A'} |{' '}
+                          {block.start_date || 'N/A'} → {block.end_date || 'N/A'} |{' '}
+                          {block.start_time || 'N/A'}–{block.end_time || 'N/A'}
                         </li>
                       ))}
                     </ul>
 
                     {!log.finalized && (
-                      <button
-                        onClick={() => handleEdit(log)}
-                        className="text-blue-600 text-sm underline mt-1"
-                      >
-                        Edit & Confirm
-                      </button>
+                      <div className="empty-cta flex gap-2 flex-wrap">
+                        {/* Path A: confirm as-is */}
+                        {!log.org_confirmed && (
+                          <button
+                            onClick={() => handleConfirmNoChange(log)}
+                            className="btn btn-primary btn-sm"
+                            disabled={confirmMutation.isPending}
+                            title={
+                              log.vol_confirmed
+                                ? 'Volunteer already confirmed — this will finalise'
+                                : 'Confirm these hours without changes'
+                            }
+                          >
+                            {log.vol_confirmed ? 'Confirm' : 'Confirm (no changes)'}
+                          </button>
+                        )}
+
+                        {/* Path B: edit & confirm (vol must reconfirm) */}
+                        <button
+                          onClick={() => handleEdit(log)}
+                          className="btn btn-outline btn-sm"
+                          disabled={editMutation.isPending}
+                        >
+                          Edit
+                        </button>
+                      </div>
                     )}
                   </>
                 )}
