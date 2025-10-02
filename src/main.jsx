@@ -30,7 +30,7 @@ import SentEnquiriesVol from './pages/VolunteerPages/FindOpportunities/SentEnqui
 import ListLogHours from './pages/VolunteerPages/LogHours/ListLogHours';
 import NewLogHours from './pages/VolunteerPages/LogHours/NewLogHours';
 import EditLogHours from './pages/VolunteerPages/LogHours/EditLogHours';
-import EditConfirmHours from './pages/OrganizationPages/LogHours/EditConfirmHours';
+// import EditConfirmHours from './pages/OrganizationPages/LogHours/EditConfirmHours';
 import AllLoggedHours from './pages/OrganizationPages/LogHours/AllLoggedHours';
 
 import Navbar from './components/NavBar';
@@ -68,7 +68,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="/volunteers/:id/enquire" element={<ProtectedRoute allowedRoles={['organization']}><EnquireVolunteerPage /></ProtectedRoute>} />
                 <Route path="/organization/sent-enquiries" element={<ProtectedRoute allowedRoles={['organization']}><SentEnquiriesOrg /></ProtectedRoute>} />
                 <Route path="/opportunity/:id/logged-hours" element={<ProtectedRoute allowedRoles={['organization']}><PostLoggedHours /></ProtectedRoute>} />
-                <Route path="/opportunity/:id/logged-hours/:id/edit" element={<ProtectedRoute allowedRoles={['organization']}><EditConfirmHours /></ProtectedRoute>} />
+                {/* <Route path="/opportunity/:id/logged-hours/:id/edit" element={<ProtectedRoute allowedRoles={['organization']}><EditConfirmHours /></ProtectedRoute>} /> */}
                 <Route path="/organization/logged-hours" element={<ProtectedRoute allowedRoles={['organization']}><AllLoggedHours /></ProtectedRoute>} />
                 
                 {/* Volunteer pages */}

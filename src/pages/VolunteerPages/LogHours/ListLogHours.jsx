@@ -1,14 +1,22 @@
+// ListLogHours.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '../../../utils/supabase';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
 import '../../../index.css';
-import { Edit2, Trash2 } from 'lucide-react';
+import WorkedMatrix from '../../../components/WorkedMatrix';
+import { Edit2, Trash2, CheckCircle } from 'lucide-react';
 
 export default function ListLogHours() {
   const [userId, setUserId] = useState(null);
+
+  // inline edit state
+  const [editingId, setEditingId] = useState(null);
+  const [editedBlocks, setEditedBlocks] = useState({});
+  const [editedNotes, setEditedNotes] = useState({});
+
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -24,7 +32,7 @@ export default function ListLogHours() {
     fetchUser();
   }, []);
 
-  const { data: loggedHours = [], isLoading } = useQuery({
+  const { data: loggedHours = [], isLoading, error } = useQuery({
     queryKey: ['loggedHours', userId],
     enabled: !!userId,
     queryFn: async () => {
@@ -55,6 +63,29 @@ export default function ListLogHours() {
     },
   });
 
+  // ---------- Volunteer inline edit (vol edits → org must reconfirm) ----------
+  const editMutation = useMutation({
+    mutationFn: async ({ id, logged_hours, notes }) => {
+      const { error } = await supabase
+        .from('volunteer_hours')
+        .update({
+          logged_hours,
+          notes,
+          vol_confirmed: true,   // volunteer confirming their proposal
+          org_confirmed: false,  // org must reconfirm
+          finalized: false,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Hours updated — awaiting organisation confirmation');
+      queryClient.invalidateQueries(['loggedHours', userId]);
+      setEditingId(null);
+    },
+    onError: () => toast.error('Failed to update hours'),
+  });
+
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this log entry?')) return;
     const { data, error } = await supabase
@@ -70,8 +101,50 @@ export default function ListLogHours() {
     }
   };
 
-  /** ---------------- Time + occurrence helpers ---------------- */
+  // ✅ Volunteer confirms their hours (finalise if org already confirmed)
+  const handleVolunteerConfirm = async (entry) => {
+    const ok = window.confirm(
+      entry.org_confirmed
+        ? 'Confirm these hours? The organisation has already confirmed — this will FINALISE the entry.'
+        : 'Confirm these hours? The organisation will still need to approve.'
+    );
+    if (!ok) return;
 
+    const finalizeNow = !!entry.org_confirmed;
+
+    const { error } = await supabase
+      .from('volunteer_hours')
+      .update({
+        vol_confirmed: true,
+        finalized: finalizeNow,
+      })
+      .eq('id', entry.id);
+
+    if (error) {
+      toast.error('Failed to confirm hours');
+    } else {
+      toast.success(finalizeNow ? 'Hours finalised' : 'Confirmed — awaiting organisation');
+      queryClient.invalidateQueries(['loggedHours', userId]);
+    }
+  };
+
+  const handleEdit = (entry) => {
+    setEditingId(entry.id);
+    setEditedBlocks((prev) => ({ ...prev, [entry.id]: entry.logged_hours || [] }));
+    setEditedNotes((prev) => ({ ...prev, [entry.id]: entry.notes || '' }));
+  };
+
+  const handleSave = (id) => {
+    const blocks = editedBlocks[id];
+    const notes = editedNotes[id]?.trim() || '';
+    if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
+      toast.error('Hour blocks required');
+      return;
+    }
+    editMutation.mutate({ id, logged_hours: blocks, notes });
+  };
+
+  /** ---------------- Time + occurrence helpers ---------------- */
   const parseYMD = (s) => {
     if (!s) return null;
     const [y, m, d] = s.split('-').map(Number);
@@ -147,7 +220,6 @@ export default function ListLogHours() {
   };
 
   /** ---------------- Grouping ---------------- */
-
   const grouped = useMemo(() => {
     const theyApprove = [];
     const waitingOrg = [];
@@ -157,23 +229,16 @@ export default function ListLogHours() {
       if (e.finalized) {
         finalised.push(e);
       } else if (!e.vol_confirmed) {
-        // volunteer still needs to approve (even if org hasn't yet)
-        theyApprove.push(e);
+        theyApprove.push(e); // volunteer must confirm
       } else if (!e.org_confirmed || (e.org_confirmed && e.vol_confirmed && !e.finalized)) {
-        // org hasn't confirmed OR both confirmed but waiting finalisation
         waitingOrg.push(e);
       }
     }
 
-    return {
-      theyApprove,
-      waitingOrg,
-      finalised,
-    };
+    return { theyApprove, waitingOrg, finalised };
   }, [loggedHours]);
 
   /** ---------------- Card renderer ---------------- */
-
   const EntryCard = ({ entry }) => {
     const title =
       entry.application?.direction === 'to_volunteer'
@@ -185,28 +250,59 @@ export default function ListLogHours() {
         ? entry.total_minutes
         : (entry.logged_hours || []).reduce((acc, block) => acc + minutesForBlock(block), 0);
 
+    const isEditing = editingId === entry.id;
+
     return (
       <div className="card space-y-2 mb-4">
+        {/* Header row */}
         <div className="grid items-center grid-cols-[auto_1fr_auto] gap-3">
           <h3 className="card-title">{title}</h3>
 
-          <div className="flex justify-center">{getStatusBadge(entry)}</div>
+          <div
+            className={
+              entry.finalized
+                ? 'flex items-center gap-2 justify-self-end'
+                : 'flex justify-center'
+            }
+          >
+            {getStatusBadge(entry)}
+          </div>
 
+          {/* Top-right actions */}
           {!entry.finalized ? (
             <div className="flex items-center gap-2 justify-self-end">
-              <button
-                aria-label="Edit"
-                onClick={() => navigate(`/volunteer/log-hours/edit/${entry.id}`)}
-                className="icon-btn hover:text-brand-teal"
-                title="Edit"
-              >
-                <Edit2 size={18} />
-              </button>
+              {/* HIDE confirm while editing */}
+              {!isEditing && !entry.vol_confirmed && (
+                <button
+                  aria-label="Confirm hours"
+                  onClick={() => handleVolunteerConfirm(entry)}
+                  className="icon-btn icon-btn-success"
+                  title={
+                    entry.org_confirmed
+                      ? 'Confirm these hours (both agreed → finalise)'
+                      : 'Confirm these hours (organisation still needs to approve)'
+                  }
+                >
+                  <CheckCircle size={18} />
+                </button>
+              )}
+
+              {!isEditing && (
+                <button
+                  aria-label="Edit"
+                  onClick={() => handleEdit(entry)}
+                  className="icon-btn icon-btn-brand"
+                  title="Edit these hours (organisation must reconfirm)"
+                >
+                  <Edit2 size={18} />
+                </button>
+              )}
+
               <button
                 aria-label="Delete"
                 onClick={() => handleDelete(entry.id)}
                 className="icon-btn icon-btn-danger"
-                title="Delete"
+                title="Delete this entry"
               >
                 <Trash2 size={18} />
               </button>
@@ -216,28 +312,87 @@ export default function ListLogHours() {
           )}
         </div>
 
+        {/* Meta + Totals */}
         <p className="muted caption">Logged on: {format(parseISO(entry.created_at), 'PPP')}</p>
         <p className="text">
           ⏱ {entry.logged_hours?.length || 0} block(s) — <strong>Total: {formatTotalTime(totalMinutes)}</strong>
         </p>
 
-        <div className="stack">
-          {(entry.logged_hours || []).map((block, i) => (
-            <div key={i} className="border border-gray-200 rounded-xl p-3">
-              <p>
-                <strong>Days:</strong> {block.days?.length ? block.days.join(', ') : 'N/A'}
-              </p>
-              <p>
-                <strong>Date:</strong> {block.start_date || 'N/A'} → {block.end_date || 'N/A'}
-              </p>
-              <p>
-                <strong>Time:</strong> {block.start_time || 'N/A'} → {block.end_time || 'N/A'}
-              </p>
+        {/* Body */}
+        {isEditing ? (
+          <>
+            <div className="field">
+              <label className="label">Edit Hour Blocks</label>
+              <WorkedMatrix
+                value={editedBlocks[entry.id] || []}
+                onChange={(val) =>
+                  setEditedBlocks((prev) => ({ ...prev, [entry.id]: val }))
+                }
+              />
             </div>
-          ))}
-        </div>
 
-        {entry.notes && <p className="muted italic">“{entry.notes}”</p>}
+            <div className="field">
+              <label className="label">Edit Notes</label>
+              <textarea
+                className="textarea"
+                value={editedNotes[entry.id]}
+                onChange={(e) =>
+                  setEditedNotes((prev) => ({ ...prev, [entry.id]: e.target.value }))
+                }
+                placeholder="Optional context for these hours…"
+              />
+            </div>
+
+            {/* Bottom action row (Save/Cancel) */}
+            <div className="flex items-center gap-2 justify-end mt-2">
+              <button
+                onClick={() => handleSave(entry.id)}
+                className="btn btn-primary btn-sm"
+                disabled={editMutation.isPending}
+                title="Save changes and request organisation confirmation"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditingId(null)}
+                className="btn btn-ghost btn-sm"
+                title="Cancel editing"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="text">
+              <strong>Notes:</strong>{' '}
+              {entry.notes ? (
+                <span>{entry.notes}</span>
+              ) : (
+                <span className="muted italic">No notes</span>
+              )}
+            </div>
+
+            <div className="stack">
+              {(entry.logged_hours || []).map((block, i) => (
+                <div key={i} className="border border-gray-200 rounded-xl p-3">
+                  <p>
+                    <strong>Days:</strong>{' '}
+                    {block.days?.length ? block.days.join(', ') : 'N/A'}
+                  </p>
+                  <p>
+                    <strong>Date:</strong> {block.start_date || 'N/A'} →{' '}
+                    {block.end_date || 'N/A'}
+                  </p>
+                  <p>
+                    <strong>Time:</strong> {block.start_time || 'N/A'} →{' '}
+                    {block.end_time || 'N/A'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     );
   };
@@ -248,7 +403,9 @@ export default function ListLogHours() {
       <section className="mb-8">
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="section-title mt-6 mb-2 text-left">{heading}</h2>
-          <span className="caption muted">{list.length} item{list.length === 1 ? '' : 's'}</span>
+          <span className="caption muted">
+            {list.length} item{list.length === 1 ? '' : 's'}
+          </span>
         </div>
         {list.map((entry) => (
           <EntryCard key={entry.id} entry={entry} />
@@ -268,6 +425,8 @@ export default function ListLogHours() {
 
       {isLoading ? (
         <p className="muted">Loading...</p>
+      ) : error ? (
+        <p className="error-text">Failed to load logged hours.</p>
       ) : loggedHours.length === 0 ? (
         <p className="muted italic">No hours logged yet.</p>
       ) : (
