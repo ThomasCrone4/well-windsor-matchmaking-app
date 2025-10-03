@@ -39,7 +39,6 @@ export default function OpportunityApplicantsPage() {
             name,
             email,
             dob,
-            dbs_checked,
             role
           )
         `)
@@ -54,7 +53,6 @@ export default function OpportunityApplicantsPage() {
           name: isVolunteer ? app.volunteer.name : 'Unknown',
           email: isVolunteer ? app.volunteer.email : null,
           dob: isVolunteer ? app.volunteer.dob : null,
-          dbs_checked: isVolunteer ? app.volunteer.dbs_checked : false,
           created_at: app.created_at,
           status: app.status,
           rejection_message: app.rejection_message,
@@ -149,10 +147,9 @@ export default function OpportunityApplicantsPage() {
 
             return (
               <li key={app.id} className="card space-y-2">
-                {/* Name + optional DBS badge */}
+                {/* Name */}
                 <h3 className="card-title flex items-center gap-2">
                   {app.name}
-                  {app.dbs_checked && <span className="badge badge-success">DBS</span>}
                 </h3>
 
                 {/* Meta */}

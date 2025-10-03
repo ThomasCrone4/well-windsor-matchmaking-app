@@ -16,7 +16,6 @@ const profileSchema = z.object({
   dob: z.string().optional(),
   bio: z.string().optional(),
   skills: z.string().optional(),
-  dbs_checked: z.boolean(),
   available_anytime: z.boolean(),
   availability_matrix: z.any(),
   public_profile: z.boolean(),
@@ -61,7 +60,6 @@ export default function VolunteerProfilePage() {
         dob: profile?.dob ?? '',
         bio: profile?.bio ?? '',
         skills: profile?.skills ?? '',
-        dbs_checked: !!profile?.dbs_checked,
         available_anytime: profile?.available_anytime ?? true,
         availability_matrix: profile?.available_anytime ? [] : profile?.availability_matrix ?? [],
         public_profile: !!profile?.public_profile,
@@ -86,7 +84,6 @@ export default function VolunteerProfilePage() {
     dob: emptyToNull(formData.dob),                      // '' -> null (fixes 400 on DATE)
 
     // booleans
-    dbs_checked: !!formData.dbs_checked,
     available_anytime: !!formData.available_anytime,
     public_profile: !!formData.public_profile,
 
@@ -149,7 +146,6 @@ export default function VolunteerProfilePage() {
         dob: profile?.dob ?? '',
         bio: profile?.bio ?? '',
         skills: profile?.skills ?? '',
-        dbs_checked: !!profile?.dbs_checked,
         available_anytime: profile?.available_anytime ?? true,
         availability_matrix: profile?.available_anytime ? [] : profile?.availability_matrix ?? [],
         public_profile: !!profile?.public_profile,
@@ -252,12 +248,7 @@ export default function VolunteerProfilePage() {
         </div>
 
         <div className="check-row">
-          {/* DBS Checked */}
-          <label className="check-label">
-            <input type="checkbox" {...register('dbs_checked')} className="check" />
-            DBS Checked
-          </label>
-
+          
           {/* Generally Available */}
           <label className="check-label">
             <input type="checkbox" {...register('available_anytime')} className="check" />

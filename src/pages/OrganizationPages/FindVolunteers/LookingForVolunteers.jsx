@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function LookingForVolunteersPage() {
-  const [filters, setFilters] = useState({ town: 'All', dbs: 'Any' });
+  const [filters, setFilters] = useState({ town: 'All'});
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
@@ -26,7 +26,7 @@ export default function LookingForVolunteersPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, name, home_town, dbs_checked, skills, available_anytime, availability_matrix, bio')
+        .select('id, name, home_town, skills, available_anytime, availability_matrix, bio')
         .eq('role', 'volunteer')
         .eq('public_profile', true);
       if (error) throw error;
@@ -54,15 +54,12 @@ export default function LookingForVolunteersPage() {
   const filterVolunteers = (vols) =>
     vols.filter((v) => {
       const matchesTown = filters.town === 'All' || v.home_town === filters.town;
-      const matchesDBS =
-        filters.dbs === 'Any' ||
-        (filters.dbs === 'DBS Required' ? v.dbs_checked : !v.dbs_checked);
       const q = searchTerm.toLowerCase();
       const matchesSearch =
         (v.name || '').toLowerCase().includes(q) ||
         (v.skills || '').toLowerCase().includes(q) ||
         (v.bio || '').toLowerCase().includes(q);
-      return matchesTown && matchesDBS && matchesSearch;
+      return matchesTown && matchesSearch;
     });
 
   const handleEnquire = (volunteerId) => {
@@ -123,7 +120,7 @@ export default function LookingForVolunteersPage() {
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="form-grid md:grid-cols-4">
+        <div className="form-grid md:grid-cols-3">
           {/* Search */}
           <div className="form-row">
             <label htmlFor="search" className="label">Search</label>
@@ -152,21 +149,7 @@ export default function LookingForVolunteersPage() {
               <option value="Slough">Slough</option>
             </select>
           </div>
-
-          {/* DBS */}
-          <div className="form-row">
-            <label htmlFor="dbs" className="label">DBS</label>
-            <select
-              id="dbs"
-              value={filters.dbs}
-              onChange={(e) => setFilters((f) => ({ ...f, dbs: e.target.value }))}
-              className="select"
-            >
-              <option value="Any">Any</option>
-              <option value="DBS Required">DBS Required</option>
-              <option value="No DBS Required">No DBS Required</option>
-            </select>
-          </div>
+   
 
           {/* Clear */}
           <div className="form-row">
@@ -174,7 +157,7 @@ export default function LookingForVolunteersPage() {
             <button
               type="button"
               onClick={() => {
-                setFilters({ town: 'All', dbs: 'Any' });
+                setFilters({ town: 'All'});
                 setSearchTerm('');
               }}
               className="btn-secondary"
@@ -199,11 +182,6 @@ export default function LookingForVolunteersPage() {
                     <h2 className="text-xl font-semibold">{vol.name}</h2>
                     <p className="text-gray-700">{vol.bio}</p>
                   </div>
-                  {vol.dbs_checked && (
-                    <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">
-                      DBS Checked
-                    </span>
-                  )}
                 </div>
 
                 <div className="text-sm text-gray-600">🏠 Home Town: {vol.home_town || '—'}</div>
