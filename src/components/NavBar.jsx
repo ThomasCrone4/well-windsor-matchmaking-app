@@ -69,18 +69,18 @@ export default function Navbar() {
             Looking for Volunteers
           </Link>
 
-           <Link to="/organization/logged-hours" className="btn-secondary">
+           {/* <Link to="/organization/logged-hours" className="btn-secondary">
             Logged Hours
-          </Link>
+          </Link> */}
           </>
         )}
 
         {/* Show Log Hours only for volunteers */}
-         {isLoggedIn && role === 'volunteer' && (
+         {/* {isLoggedIn && role === 'volunteer' && (
           <Link to="/volunteer/log-hours" className="btn-secondary">
             Log Hours
           </Link>
-        )}
+        )} */}
 
         {!isLoggedIn ? (
           <Link to="/auth" className="btn-primary">
