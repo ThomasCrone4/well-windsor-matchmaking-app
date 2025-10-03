@@ -20,7 +20,6 @@ export default function AuthPage() {
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [homeTown, setHomeTown] = useState('');
-  const [dbsChecked, setDbsChecked] = useState(false);
   const [availableAnytime, setAvailableAnytime] = useState(true);
   const [availabilityMatrix, setAvailabilityMatrix] = useState([]);
   const [publicProfile, setPublicProfile] = useState(true);
@@ -97,7 +96,6 @@ export default function AuthPage() {
           skills: skills?.trim() || null,
           contact_number: contactNumber || null,
           home_town: homeTown,
-          dbs_checked: dbsChecked,
           available_anytime: availableAnytime,
           availability_matrix: availableAnytime ? null : availabilityMatrix,
           public_profile: publicProfile,
@@ -329,16 +327,6 @@ export default function AuthPage() {
 
                 {/* Visibility & Availability */}
                 <div className="check-row">
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={dbsChecked}
-                      onChange={(e) => setDbsChecked(e.target.checked)}
-                      className="check"
-                    />
-                    DBS Checked
-                  </label>
-
                   <label className="check-label">
                     <input
                       type="checkbox"
