@@ -67,6 +67,7 @@ export default function EnquiryPage() {
       {
         opportunity_id: opportunityId,
         volunteer_id: user.id,
+        org_id: opportunity?.org_id,
         subject: subject.trim(),
         message: message.trim(),
         direction: 'to_opportunity',

@@ -179,7 +179,10 @@
   /* Icon-only buttons (e.g., Trash) */
   .icon-btn { @apply inline-flex items-center justify-center rounded-lg p-1.5 transition; }
   .icon-btn:hover { @apply bg-gray-100; }
-  .icon-btn-danger { @apply text-gray-400 hover:text-red-600; }
+  .icon-btn-brand { @apply text-brand-teal; }
+  .icon-btn-danger { @apply text-red-600; }
+  .icon-btn-success { @apply text-green-600; } 
+  .icon-btn-success:hover { @apply text-green-700; }
 
   /* Simple page-level section header (optional) */
   .section-title { @apply text-2xl font-bold; }
