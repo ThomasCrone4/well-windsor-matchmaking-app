@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { supabase } from '../../../utils/supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { useEffect, useRef, useState } from 'react';
 
 import AvailabilityMatrix from '../../../components/AvailabilityMatrix';
@@ -47,6 +47,7 @@ export default function EditOpportunity() {
     register,
     handleSubmit,
     reset,
+    getValues,
     watch,
     control,
     setError,
@@ -84,7 +85,7 @@ export default function EditOpportunity() {
 
   useEffect(() => {
     if (opportunity) {
-      reset(opportunity);
+      reset(opportunity, { keepDirty: false, keepTouched: false });
       originalData.current = opportunity;
       setIsDraft(opportunity.status === 'draft');
     }
@@ -108,12 +109,20 @@ export default function EditOpportunity() {
         .update(formData)
         .eq('id', id);
       if (error) throw error;
+      return formData;
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success('Opportunity updated!');
       queryClient.invalidateQueries(['opportunity', id]);
       queryClient.invalidateQueries(['volunteer_opportunities']);
-      navigate('/organization-dashboard');
+
+      originalData.current = { ...(originalData.current || {}), ...saved };
+
+      reset(
+        { ...getValues(), ...saved },
+        { keepDirty: false, keepTouched: false }
+      );
+      // navigate('/organization-dashboard'); // optional
     },
     onError: (err) => {
       console.error('Update error:', err);
@@ -140,19 +149,34 @@ export default function EditOpportunity() {
   };
 
   const handleDiscard = () => {
-    if (window.confirm('Are you sure you want to discard changes?')) {
-      reset(originalData.current);
-      toast('Changes discarded.');
-      navigate('/organization-dashboard');
+    reset(originalData.current, { keepDirty: false, keepTouched: false });
+    toast.success('Changes discarded');
+  };
+
+  const handleBack = () => {
+    if (isDirty) {
+      toast.error('You have unsaved changes. Please Save or Discard first.');
+      return;
     }
+    navigate(-1); // or navigate('/organization-dashboard')
   };
 
   const generallyNeeded = watch('generally_needed');
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="card">
-        <h1 className="title">Edit Opportunity</h1>
+      <div className="card relative">
+        {/* Back button top-left of the card */}
+        <button
+          type="button"
+          onClick={handleBack}
+          className="btn btn-ghost absolute top-4 left-4"
+          aria-label="Go back"
+        >
+          ← Back
+        </button>
+
+        <h1 className="title pl-14">Edit Opportunity</h1>
 
         {isLoading ? (
           <p className="muted">Loading opportunity...</p>
@@ -173,7 +197,9 @@ export default function EditOpportunity() {
 
             {/* Description */}
             <div className="form-row">
-              <label className="label">Description <span className="help-text">(optional)</span></label>
+              <label className="label">
+                Description <span className="help-text">(optional)</span>
+              </label>
               <textarea
                 {...register('description')}
                 className={`textarea ${errors.description ? 'textarea-invalid' : ''}`}
@@ -210,7 +236,9 @@ export default function EditOpportunity() {
 
             {/* Skills */}
             <div className="form-row">
-              <label className="label">Skills <span className="help-text">(optional)</span></label>
+              <label className="label">
+                Skills <span className="help-text">(optional)</span>
+              </label>
               <input
                 {...register('skills')}
                 className="input"
@@ -220,7 +248,9 @@ export default function EditOpportunity() {
 
             {/* Volunteers needed */}
             <div className="form-row">
-              <label className="label">Number of Volunteers Needed {!isDraft && <span className="required" />}</label>
+              <label className="label">
+                Number of Volunteers Needed {!isDraft && <span className="required" />}
+              </label>
               <input
                 type="number"
                 min={1}
@@ -265,7 +295,7 @@ export default function EditOpportunity() {
               {isDraft && (
                 <button
                   type="button"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || mutation.isPending}
                   onClick={handleSubmit((data) => {
                     const requiredSchema = getSchema(false); // strict validation
                     const result = requiredSchema.safeParse(data);
@@ -291,7 +321,7 @@ export default function EditOpportunity() {
 
               <button
                 type="button"
-                disabled={isSubmitting}
+                disabled={!isDirty || isSubmitting || mutation.isPending}
                 onClick={handleSubmit((data) => handleSave(data))}
                 className="btn btn-primary"
               >
@@ -302,6 +332,7 @@ export default function EditOpportunity() {
                 type="button"
                 onClick={handleDiscard}
                 className="btn btn-outline"
+                disabled={!isDirty}
               >
                 Discard Changes
               </button>

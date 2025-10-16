@@ -6,7 +6,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
-import { useNavigate } from 'react-router-dom';
 
 const orgSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -18,13 +17,13 @@ const orgSchema = z.object({
 export default function OrganisationProfilePage() {
   const [hydrated, setHydrated] = useState(false);
   const { userId, profile, loading } = useUserProfile();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient(); // ← add this
+  const queryClient = useQueryClient();
 
   const {
     register,
     handleSubmit,
     reset,
+    getValues,            // ← needed to sync values post-save
     formState: { errors, isDirty },
   } = useForm({
     resolver: zodResolver(orgSchema),
@@ -43,7 +42,7 @@ export default function OrganisationProfilePage() {
     }
   }, [profile, hydrated, reset]);
 
-  // (Optional) tiny normalizers to keep data clean
+  // small normalizer
   const trimOrNull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
   const mutation = useMutation({
@@ -63,21 +62,26 @@ export default function OrganisationProfilePage() {
         .eq('id', userId);
 
       if (error) throw error;
-      return update; // ← return for onSuccess
+      return update; // returned to onSuccess
     },
     onSuccess: (update) => {
-      // Instant UI update in cache
+      // update cache immediately
       queryClient.setQueryData(['user_profile', userId], (prev) =>
         prev ? { ...prev, ...update } : prev
       );
 
-      // Ensure a fresh fetch next mount
+      // ensure fresh fetch next mount
       queryClient.invalidateQueries({ queryKey: ['user_profile', userId] });
 
+      // KEY: mark form as pristine so buttons grey out like the volunteer page
+      reset(
+        { ...getValues(), ...update },
+        { keepDirty: false, keepTouched: false }
+      );
+
       toast.success('Profile updated!');
-      navigate('/organization-dashboard');
     },
-    onError: () => toast.error('Failed to update profile.'),
+    onError: (err) => toast.error(err?.message || 'Failed to update profile.'),
   });
 
   const onSubmit = (data) => mutation.mutate(data);
@@ -164,7 +168,11 @@ export default function OrganisationProfilePage() {
 
         {/* Actions */}
         <div className="flex gap-4 pt-2">
-          <button type="submit" className="btn btn-primary flex-1" disabled={!isDirty}>
+          <button
+            type="submit"
+            className="btn btn-primary flex-1"
+            disabled={!isDirty || mutation.isPending}
+          >
             Save Profile
           </button>
           <button
