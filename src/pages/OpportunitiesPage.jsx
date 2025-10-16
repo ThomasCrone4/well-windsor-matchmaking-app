@@ -72,7 +72,7 @@ export default function OpportunitiesPage() {
           status
         `)
         .eq('status', 'active') // ✅ Only show active posts
-        .order('when_needed', { ascending: true });
+        // .order('when_needed', { ascending: true });
 
       if (error) throw error;
       return data;

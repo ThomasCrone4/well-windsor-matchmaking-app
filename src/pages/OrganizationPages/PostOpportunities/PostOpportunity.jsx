@@ -164,6 +164,18 @@ export default function PostOpportunity() {
             {errors.contact && <p className="error-text">{errors.contact.message}</p>}
           </div>
 
+          {/* Skills */}
+          <div className="form-row">
+            <label className="label">
+              Skills <span className="help-text">(optional)</span>
+            </label>
+            <input
+              {...register('skills')}
+              className="input"
+              placeholder="e.g. first aid, event setup"
+            />
+          </div>
+
           {/* Volunteers Needed */}
           <div className="form-row">
             <label htmlFor="volunteers_needed" className="label">Number of Volunteers Needed</label>
@@ -203,13 +215,6 @@ export default function PostOpportunity() {
             </div>
           )}
 
-          {/* DBS */}
-          <div className="form-row">
-            <label className="check-label">
-              <input type="checkbox" {...register('requires_dbs')} className="check" />
-              Requires DBS check
-            </label>
-          </div>
         </div>
 
         {/* Actions */}
@@ -220,7 +225,7 @@ export default function PostOpportunity() {
               e.preventDefault();
               setIsDraft(false);
               setTimeout(() => {
-                handleSubmit((data) => submitOpportunity(data, 'Active'))();
+                handleSubmit((data) => submitOpportunity(data, 'active'))();
               }, 0);
             }}
             className="btn-primary w-full"

@@ -165,19 +165,14 @@ export default function EditOpportunity() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="card relative">
-        {/* Back button top-left of the card */}
-        <button
-          type="button"
-          onClick={handleBack}
-          className="btn btn-ghost absolute top-4 left-4"
-          aria-label="Go back"
-        >
-          ← Back
+      <div className="page-header">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
+        ← Back
         </button>
-
-        <h1 className="title pl-14">Edit Opportunity</h1>
-
+        <h1 className="title !mb-0"> Edit Opportunity</h1>
+        <div className="spacer" />
+      </div>
+      <div className="card relative">
         {isLoading ? (
           <p className="muted">Loading opportunity...</p>
         ) : (
@@ -319,23 +314,25 @@ export default function EditOpportunity() {
                 </button>
               )}
 
-              <button
-                type="button"
-                disabled={!isDirty || isSubmitting || mutation.isPending}
-                onClick={handleSubmit((data) => handleSave(data))}
-                className="btn btn-primary"
-              >
-                Save Changes
-              </button>
+              <div className="flex gap-4 pt-2">
+                <button
+                  type="button"
+                  disabled={!isDirty || isSubmitting || mutation.isPending}
+                  onClick={handleSubmit((data) => handleSave(data))}
+                  className="btn btn-primary"
+                >
+                  Save Changes
+                </button>
 
-              <button
-                type="button"
-                onClick={handleDiscard}
-                className="btn btn-outline"
-                disabled={!isDirty}
-              >
-                Discard Changes
-              </button>
+                <button
+                  type="button"
+                  onClick={handleDiscard}
+                  className="btn btn-outline"
+                  disabled={!isDirty}
+                >
+                  Discard Changes
+                </button>
+              </div>
             </div>
           </form>
         )}
