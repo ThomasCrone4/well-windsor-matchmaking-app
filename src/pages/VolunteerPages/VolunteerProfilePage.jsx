@@ -7,7 +7,6 @@ import { supabase } from '../../utils/supabase';
 import AvailabilityMatrix from '../../components/AvailabilityMatrix';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
-import { useNavigate } from 'react-router-dom';
 
 const profileSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -34,7 +33,6 @@ export default function VolunteerProfilePage() {
   const queryClient = useQueryClient();
   const [hydrated, setHydrated] = useState(false);
   const { userId, profile, loading } = useUserProfile();
-  const navigate = useNavigate();
 
   const {
     register,
@@ -43,6 +41,7 @@ export default function VolunteerProfilePage() {
     watch,
     reset,
     formState: { errors, isDirty },
+    getValues,
   } = useForm({
     resolver: zodResolver(profileSchema),
     defaultValues: {},
@@ -119,7 +118,7 @@ export default function VolunteerProfilePage() {
      queryClient.invalidateQueries({ queryKey: ['user_profile', userId] });
 
      toast.success('Profile updated!');
-     navigate('/volunteer-dashboard');
+     reset(getValues(), { keepDirty: false, keepTouched: false });
    },
     onError: (err) => {
       // surface the exact DB message to debug quickly
@@ -151,7 +150,6 @@ export default function VolunteerProfilePage() {
         public_profile: !!profile?.public_profile,
       });
       toast.success('Changes discarded');
-      navigate('/volunteer-dashboard');
     }
   };
 
@@ -278,7 +276,7 @@ export default function VolunteerProfilePage() {
           <button
             type="submit"
             className="btn btn-primary flex-1"
-            disabled={!isDirty}
+            disabled={!isDirty || mutation.isPending}
           >
             Save Profile
           </button>

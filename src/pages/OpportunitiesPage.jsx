@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router-dom";
 
 export default function OpportunitiesPage() {
   const [revealedContacts, setRevealedContacts] = useState({});
-  const [filters, setFilters] = useState({ town: 'All', dbs: 'Any', start: 'Any' });
+  const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
   const [matchedOnly, setMatchedOnly] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,16 +65,14 @@ export default function OpportunitiesPage() {
           title,
           description,
           location,
-          date_needed,
           contact,
-          requires_dbs,
           when_needed,
           generally_needed,
           volunteers_needed,
           status
         `)
         .eq('status', 'active') // ✅ Only show active posts
-        .order('date_needed', { ascending: true });
+        .order('when_needed', { ascending: true });
 
       if (error) throw error;
       return data;
@@ -120,14 +118,9 @@ export default function OpportunitiesPage() {
 
   const filterOpportunities = (items) => {
     return items.filter(op => {
-      const startDate = new Date(op.date_needed);
-
+    
       const matchesTown =
         filters.town === 'All' || op.location === filters.town;
-
-      const matchesDBS =
-        filters.dbs === 'Any' ||
-        (filters.dbs === 'DBS Required' ? op.requires_dbs : !op.requires_dbs);
 
       const matchesStart =
         filters.start === 'Any' ||
@@ -137,12 +130,11 @@ export default function OpportunitiesPage() {
       const matched =
         !matchedOnly ||
         (userProfile &&
-          (!op.requires_dbs || userProfile.dbs_checked) &&
           (!userProfile.home_town_only || op.location === userProfile.home_town));
 
       const matchesSearch = op.title.toLowerCase().includes(searchTerm.toLowerCase());
 
-      return matchesTown && matchesDBS && matchesStart && matched && matchesSearch;
+      return matchesTown && matchesStart && matched && matchesSearch;
     });
   };
 
@@ -170,7 +162,7 @@ export default function OpportunitiesPage() {
 
     {/* Filters */}
     <div className="card mb-6">
-      <div className="form-grid md:grid-cols-5">
+      <div className="form-grid md:grid-cols-4">
         {/* Search */}
         <div className="form-row">
           <label htmlFor="search" className="label">Search</label>
@@ -197,21 +189,6 @@ export default function OpportunitiesPage() {
             <option value="Windsor">Windsor</option>
             <option value="Maidenhead">Maidenhead</option>
             <option value="Slough">Slough</option>
-          </select>
-        </div>
-
-        {/* DBS */}
-        <div className="form-row">
-          <label htmlFor="dbs" className="label">DBS</label>
-          <select
-            id="dbs"
-            value={filters.dbs}
-            onChange={(e) => setFilters(f => ({ ...f, dbs: e.target.value }))}
-            className="select"
-          >
-            <option value="Any">Any</option>
-            <option value="DBS Required">DBS Required</option>
-            <option value="No DBS Required">No DBS Required</option>
           </select>
         </div>
 
@@ -249,7 +226,7 @@ export default function OpportunitiesPage() {
           <button
             type="button"
             onClick={() => {
-              setFilters({ town: 'All', dbs: 'Any', start: 'Any' });
+              setFilters({ town: 'All', start: 'Any' });
               setSearchTerm('');
               setMatchedOnly(false);
               navigate("/opportunities")
@@ -275,10 +252,6 @@ export default function OpportunitiesPage() {
               <p className="text-gray-700">{opportunity.description}</p>
               <div className="text-sm text-gray-600">📍 Location: {opportunity.location}</div>
               <div className="text-sm text-gray-600">👥 Volunteers Needed: {opportunity.volunteers_needed ?? 'N/A'}</div>
-
-              {opportunity.requires_dbs && (
-                <span className="badge-danger">DBS Required</span>
-              )}
 
               {opportunity.generally_needed ? (
                 <p className="text-sm text-green-700 font-medium">🕒 Available anytime</p>

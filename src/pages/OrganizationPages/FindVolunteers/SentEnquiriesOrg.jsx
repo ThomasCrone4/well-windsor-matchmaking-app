@@ -56,8 +56,7 @@ export default function SentEnquiriesPage() {
             name,
             home_town,
             contact_number,
-            skills,
-            dbs_checked
+            skills
           ),
           volunteer_opportunities (
             title
@@ -141,10 +140,6 @@ export default function SentEnquiriesPage() {
               <div className="muted">
                 🛠️ Skills: {enquiry.volunteer?.skills || 'Not provided'}
               </div>
-
-              {enquiry.volunteer?.dbs_checked && (
-                <div className="badge badge-success w-fit">🔒 DBS Checked</div>
-              )}
 
               <div className="caption">
                 📅 Sent: {format(new Date(enquiry.created_at), 'PPP p')}

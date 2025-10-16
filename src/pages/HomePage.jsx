@@ -1,37 +1,33 @@
 // src/pages/HomePage.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { useQuery } from '@tanstack/react-query';
-import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 
+// 🧠 Reusable schedule helpers (works with AvailabilityMatrix block shape)
+import {
+  formatOpportunitySchedule,
+  compareByEarliestStart,
+} from '../utils/schedule';
+
 export default function HomePage() {
-  const [stats, setStats] = useState({ hours: 0, volunteers: 0, opportunities: 0});
+  const [stats, setStats] = useState({ hours: 0, volunteers: 0, opportunities: 0 });
 
   // Fetch real-time stats
   useEffect(() => {
     const fetchStats = async () => {
-      // Sum hours from applications.logged_hours (adjust table/column if different)
-      const { data: hoursRows, error: hoursErr } = await supabase
+      const { data: hoursRows } = await supabase
         .from('applications')
         .select('logged_hours');
 
-      // Volunteers count
-      const { data: volunteerCount, error: volErr } =
-        await supabase.rpc('count_volunteers');
+      const { data: volunteerCount } = await supabase.rpc('count_volunteers');
 
-      // Opportunities count
-      const { data: oppRows, error: oppErr } = await supabase
+      const { data: oppRows } = await supabase
         .from('volunteer_opportunities')
-        .select('id')
-        
-
-      if (hoursErr || volErr || oppErr) {
-        // swallow errors silently for the hero; you could toast.error here
-      }
+        .select('id');
 
       const totalHours = (hoursRows || [])
-        .map(r => Number(r.logged_hours) || 0)
+        .map((r) => Number(r.logged_hours) || 0)
         .reduce((a, b) => a + b, 0);
 
       setStats({
@@ -43,9 +39,9 @@ export default function HomePage() {
     fetchStats();
   }, []);
 
-  // Fetch upcoming opportunities
+  // Fetch opportunities
   const { data: opportunities, isLoading } = useQuery({
-    queryKey: ['upcoming_opportunities'],
+    queryKey: ['upcoming_opportunities_home'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('volunteer_opportunities')
@@ -54,7 +50,6 @@ export default function HomePage() {
           title,
           description,
           location,
-          date_needed,
           contact,
           requires_dbs,
           when_needed,
@@ -62,14 +57,17 @@ export default function HomePage() {
           volunteers_needed,
           status
         `)
-        .eq('status', 'active') // ✅ Only show active posts
-        .order('date_needed', { ascending: true })
-        .limit(3);
-        
+        .eq('status', 'active');
       if (error) throw error;
       return data;
     },
   });
+
+  // Sort by earliest start using schedule util; then show top 3
+  const topThree = useMemo(() => {
+    if (!opportunities) return [];
+    return [...opportunities].sort(compareByEarliestStart).slice(0, 3);
+  }, [opportunities]);
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -145,49 +143,44 @@ export default function HomePage() {
         <section className="container pb-12">
           <div className="page-header">
             <h2 className="text-2xl font-bold mb-4 text-gray-900">📅 Upcoming Opportunities</h2>
-            <div className='flex gap-2'>
-              <Link
-                to="/opportunities"
-                className="btn-primary rounded-xl"
-              >
+            <div className="flex gap-2">
+              <Link to="/opportunities" className="btn-primary rounded-xl">
                 More
               </Link>
             </div>
           </div>
 
-
           <div className="bg-white rounded-2xl shadow-card">
             {isLoading ? (
               <p className="p-6 text-gray-600">Loading...</p>
-            ) : opportunities?.length > 0 ? (
+            ) : topThree.length > 0 ? (
               <ul className="divide-y">
-                {opportunities.map((op) => (
-                <li key={op.id}>
-                  <Link
-                    to={`/opportunities?opId=${op.id}`}
-                    className="flex items-center justify-between py-4 px-6 block hover:bg-gray-50 transition rounded-xl"
-                    aria-label={`View ${op.title}`}
-                  >
-                    <div>
-                      <p className="text-lg font-medium text-gray-900">{op.title}</p>
-                      <p className="text-sm text-gray-600">{op.location || 'Location TBC'}</p>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      {op.date_needed ? format(new Date(op.date_needed), 'MMM d') : 'Anytime'}
-                    </p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+                {topThree.map((op) => (
+                  <li key={op.id}>
+                    <Link
+                      to={`/opportunities?opId=${op.id}`}
+                      className="flex items-center justify-between py-4 px-6 block hover:bg-gray-50 transition rounded-xl"
+                      aria-label={`View ${op.title}`}
+                    >
+                      <div>
+                        <p className="text-lg font-medium text-gray-900">{op.title}</p>
+                        <p className="text-sm text-gray-600">{op.location || 'Location TBC'}</p>
+                      </div>
 
+                      {/* Unified schedule label (Days • Time • Date) from schedule.js */}
+                      <p className="text-sm text-gray-500">
+                        {formatOpportunitySchedule(op)}
+                      </p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             ) : (
               <p className="p-6 text-gray-600">No upcoming opportunities.</p>
             )}
           </div>
         </section>
-        
       </main>
-
     </div>
   );
 }

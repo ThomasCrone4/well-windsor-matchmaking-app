@@ -92,7 +92,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </BrowserRouter>
 
         <ReactQueryDevtools initialIsOpen={false} />
-        <Toaster position="top-right" />
+        <Toaster 
+          position="top-center" 
+          toastOptions={{
+            duration: 5000,
+          }}
+        />
       </SessionProvider>
     </QueryClientProvider>
   </React.StrictMode>
