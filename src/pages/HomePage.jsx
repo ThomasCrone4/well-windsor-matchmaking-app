@@ -169,7 +169,8 @@ export default function HomePage() {
 
                       {/* Unified schedule label (Days • Time • Date) from schedule.js */}
                       <p className="text-sm text-gray-500">
-                        {formatOpportunitySchedule(op)}
+                        Dates & Times:
+                        <span className="ml-2">{formatOpportunitySchedule(op)} </span>
                       </p>
                     </Link>
                   </li>
