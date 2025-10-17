@@ -1,3 +1,4 @@
+// src/pages/organization/PostOpportunity.jsx
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,6 +7,9 @@ import { supabase } from '../../../utils/supabase';
 import toast from 'react-hot-toast';
 import AvailabilityMatrix from '../../../components/AvailabilityMatrix';
 import { useNavigate } from 'react-router-dom';
+
+// 🔁 use your schedule.js
+import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
 
 const getOpportunitySchema = (isDraft) =>
   z.object({
@@ -61,6 +65,78 @@ export default function PostOpportunity() {
     fetchOrgId();
   }, []);
 
+  /* -------------------- Normalization helpers (via schedule.js) -------------------- */
+
+  /** Date -> 'YYYY-MM-DD' */
+  const toISO = (d) => {
+    const dt = toDate(d);
+    if (!dt) return null;
+    const yyyy = String(dt.getFullYear());
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  /** Minutes -> 'HH:MM' */
+  const minutesToHHMM = (mins) => {
+    if (mins == null) return null;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  /** Day labels -> numeric indices (0..6) using DAYS order */
+  const dayLabelsToIndices = (labels) => {
+    // normalizeDays returns full labels ('Monday'..'Sunday'), sorted & deduped
+    const normalizedLabels = normalizeDays(labels);
+    return normalizedLabels
+      .map((label) => DAYS.indexOf(label))
+      .filter((i) => i >= 0 && i <= 6);
+  };
+
+  /** Matrix blocks -> rows for opportunity_timeblocks */
+  const matrixToTimeblockRows = (blocks, opportunity_id) =>
+    (blocks ?? [])
+      .map((b) => {
+        const daysIdx = dayLabelsToIndices(b?.days);
+        const startM = toMinutes(b?.start_time);
+        const endM = toMinutes(b?.end_time ?? b?.start_time);
+
+        return {
+          opportunity_id,
+          start_date: toISO(b?.start_date),       // 'YYYY-MM-DD' or null
+          end_date: toISO(b?.end_date),           // 'YYYY-MM-DD' or null
+          days: daysIdx,                           // int[] 0..6
+          start_time: minutesToHHMM(startM),       // 'HH:MM'
+          end_time: minutesToHHMM(endM),           // 'HH:MM'
+        };
+      })
+      .filter(
+        (r) =>
+          Array.isArray(r.days) &&
+          r.days.length > 0 &&
+          r.start_time &&
+          r.end_time
+      );
+
+  /** Delete then insert timeblocks for a given opportunity */
+  const replaceTimeblocks = async (opportunityId, blocks, generally_needed) => {
+    // Clear existing (safe even on create)
+    const { error: delErr } = await supabase
+      .from('opportunity_timeblocks')
+      .delete()
+      .eq('opportunity_id', opportunityId);
+    if (delErr) throw delErr;
+
+    if (generally_needed) return; // no blocks to insert
+
+    const rows = matrixToTimeblockRows(blocks, opportunityId);
+    if (!rows.length) return;
+
+    const { error: insErr } = await supabase.from('opportunity_timeblocks').insert(rows);
+    if (insErr) throw insErr;
+  };
+
   const submitOpportunity = async (data, status) => {
     if (!orgId) {
       toast.error('Organization ID not loaded');
@@ -82,28 +158,50 @@ export default function PostOpportunity() {
       description: data.description || '',
       location: data.location || '',
       contact: data.contact || '',
-      generally_needed: data.generally_needed,
-      when_needed: data.generally_needed ? null : data.when_needed,
-      requires_dbs: data.requires_dbs,
-      volunteers_needed: data.volunteers_needed,
+      generally_needed: !!data.generally_needed,
+      when_needed: data.generally_needed ? null : (data.when_needed ?? []), // keep JSON for editing UX
+      requires_dbs: !!data.requires_dbs,
+      volunteers_needed: Number(data.volunteers_needed) || 1,
       status,
     };
 
-    const { error } = await supabase.from('volunteer_opportunities').insert([postData]);
+    // 1) Create opportunity and get its id
+    const { data: inserted, error } = await supabase
+      .from('volunteer_opportunities')
+      .insert([postData])
+      .select('id')
+      .single();
 
     if (error) {
       toast.error(`Failed to save opportunity: ${error.message}`);
-    } else {
-      toast.success(status === 'draft' ? 'Saved as draft!' : 'Opportunity posted!');
-      navigate('/organization-dashboard');
+      return;
     }
+
+    const opportunityId = inserted?.id;
+    if (!opportunityId) {
+      toast.error('Created opportunity but did not receive an id.');
+      return;
+    }
+
+    // 2) Mirror matrix into opportunity_timeblocks with normalized values
+    try {
+      await replaceTimeblocks(opportunityId, postData.when_needed ?? [], postData.generally_needed);
+    } catch (e) {
+      console.error('Saving timeblocks failed:', e);
+      toast.error('Opportunity saved, but failed to save required times. Please edit and retry.');
+      navigate('/organization-dashboard');
+      return;
+    }
+
+    toast.success(status === 'draft' ? 'Saved as draft!' : 'Opportunity posted!');
+    navigate('/organization-dashboard');
   };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="page-header">
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
-        ← Back
+          ← Back
         </button>
         <h1 className="title !mb-0">Post a New Opportunity</h1>
         <div className="spacer" />
@@ -164,7 +262,7 @@ export default function PostOpportunity() {
             {errors.contact && <p className="error-text">{errors.contact.message}</p>}
           </div>
 
-          {/* Skills */}
+          {/* Skills (optional) */}
           <div className="form-row">
             <label className="label">
               Skills <span className="help-text">(optional)</span>
@@ -214,7 +312,6 @@ export default function PostOpportunity() {
               />
             </div>
           )}
-
         </div>
 
         {/* Actions */}
@@ -225,7 +322,7 @@ export default function PostOpportunity() {
               e.preventDefault();
               setIsDraft(false);
               setTimeout(() => {
-                handleSubmit((data) => submitOpportunity(data, 'active'))();
+                handleSubmit((form) => submitOpportunity(form, 'active'))();
               }, 0);
             }}
             className="btn-primary w-full"
@@ -239,7 +336,7 @@ export default function PostOpportunity() {
               e.preventDefault();
               setIsDraft(true);
               setTimeout(() => {
-                handleSubmit((data) => submitOpportunity(data, 'draft'))();
+                handleSubmit((form) => submitOpportunity(form, 'draft'))();
               }, 0);
             }}
             className="btn-secondary w-full"

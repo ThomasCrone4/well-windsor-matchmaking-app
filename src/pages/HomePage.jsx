@@ -13,7 +13,51 @@ import {
 export default function HomePage() {
   const [stats, setStats] = useState({ hours: 0, volunteers: 0, opportunities: 0 });
 
-  // Fetch real-time stats
+  /**
+   * Auth & profile
+   */
+  const { data: authData } = useQuery({
+    queryKey: ['auth_session_home'],
+    queryFn: async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      return data?.session ?? null;
+    },
+    staleTime: 60_000,
+  });
+
+  const userId = authData?.user?.id ?? null;
+
+  const { data: profileData } = useQuery({
+    queryKey: ['profile_home', userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, role')
+        .eq('id', userId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 60_000,
+  });
+
+  const isLoggedIn = !!userId;
+  const role = profileData?.role ?? null;
+
+  const getStartedPath = useMemo(() => {
+    if (!isLoggedIn) return '/auth';
+    // NOTE: using 'organisation' (UK spelling) to match your DB
+    if (role === 'organisation') return '/post-opportunity';
+    if (role === 'volunteer') return '/opportunities';
+    // fallback if some other role appears
+    return '/auth';
+  }, [isLoggedIn, role]);
+
+  /**
+   * Fetch real-time stats
+   */
   useEffect(() => {
     const fetchStats = async () => {
       const { data: hoursRows } = await supabase
@@ -39,7 +83,10 @@ export default function HomePage() {
     fetchStats();
   }, []);
 
-  // Fetch opportunities
+  /**
+   * Fetch opportunities for the "Upcoming" list on Home
+   * (includes org_id for name lookup)
+   */
   const { data: opportunities, isLoading } = useQuery({
     queryKey: ['upcoming_opportunities_home'],
     queryFn: async () => {
@@ -55,13 +102,43 @@ export default function HomePage() {
           when_needed,
           generally_needed,
           volunteers_needed,
-          status
+          status,
+          created_at,
+          org_id
         `)
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .order('created_at', { ascending: false }); // show newest first
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
+    staleTime: 30_000,
   });
+
+  // 🔎 Build a distinct list of org_ids and fetch org names in one query
+  const orgIds = useMemo(() => {
+    const ids = new Set((opportunities ?? []).map((o) => o.org_id).filter(Boolean));
+    return Array.from(ids);
+  }, [opportunities]);
+
+  const { data: orgRows } = useQuery({
+    queryKey: ['org_names_home', orgIds],
+    enabled: orgIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, name')
+        .in('id', orgIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const orgNameById = useMemo(() => {
+    const map = new Map();
+    (orgRows ?? []).forEach((r) => map.set(r.id, r.name));
+    return map;
+  }, [orgRows]);
 
   // Sort by earliest start using schedule util; then show top 3
   const topThree = useMemo(() => {
@@ -80,9 +157,11 @@ export default function HomePage() {
           <p className="text-gray-700 mb-6 max-w-2xl mx-auto">
             Sign up to support local schools and organisations. Find roles that match your skills, location, and availability.
           </p>
+
+          {/* Single "Get Started" that routes based on auth + role */}
           <Link
-            to="/auth"
-            className="btn-primary px-6 py-3 rounded-2xl shadow-card"
+            to={getStartedPath}
+            className="btn-primary px-6 py-3 rounded-2xl shadow-card inline-block"
           >
             Get Started
           </Link>
@@ -90,15 +169,21 @@ export default function HomePage() {
           {/* Impact quick stats in the hero */}
           <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
             <div className="card">
-              <p className="text-3xl font-bold text-brand-blue">{stats.hours.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-brand-blue">
+                {stats.hours.toLocaleString()}
+              </p>
               <p className="text-sm text-gray-600">Volunteer Hours</p>
             </div>
             <div className="card">
-              <p className="text-3xl font-bold text-brand-blue">{stats.volunteers.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-brand-blue">
+                {stats.volunteers.toLocaleString()}
+              </p>
               <p className="text-sm text-gray-600">Volunteers Engaged</p>
             </div>
             <div className="card">
-              <p className="text-3xl font-bold text-brand-blue">{stats.opportunities.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-brand-blue">
+                {stats.opportunities.toLocaleString()}
+              </p>
               <p className="text-sm text-gray-600">Opportunities Posted</p>
             </div>
           </div>
@@ -155,26 +240,30 @@ export default function HomePage() {
               <p className="p-6 text-gray-600">Loading...</p>
             ) : topThree.length > 0 ? (
               <ul className="divide-y">
-                {topThree.map((op) => (
-                  <li key={op.id}>
-                    <Link
-                      to={`/opportunities?opId=${op.id}`}
-                      className="flex items-center justify-between py-4 px-6 block hover:bg-gray-50 transition rounded-xl"
-                      aria-label={`View ${op.title}`}
-                    >
-                      <div>
-                        <p className="text-lg font-medium text-gray-900">{op.title}</p>
-                        <p className="text-sm text-gray-600">{op.location || 'Location TBC'}</p>
-                      </div>
+                {topThree.map((op) => {
+                  const orgName = orgNameById.get(op.org_id) ?? 'Organisation';
+                  return (
+                    <li key={op.id}>
+                      <Link
+                        to={`/opportunities?opId=${op.id}`}
+                        className="flex items-center justify-between py-4 px-6 block hover:bg-gray-50 transition rounded-xl"
+                        aria-label={`View ${op.title}`}
+                      >
+                        <div>
+                          <p className="text-lg font-medium text-gray-900">{op.title}</p>
+                          {/* 👇 Replaced location with org name */}
+                          <p className="text-sm text-gray-600">by {orgName}</p>
+                        </div>
 
-                      {/* Unified schedule label (Days • Time • Date) from schedule.js */}
-                      <p className="text-sm text-gray-500">
-                        Dates & Times:
-                        <span className="ml-2">{formatOpportunitySchedule(op)} </span>
-                      </p>
-                    </Link>
-                  </li>
-                ))}
+                        {/* Unified schedule label (Days • Time • Date) from schedule.js */}
+                        <p className="text-sm text-gray-500">
+                          Dates & Times:
+                          <span className="ml-2">{formatOpportunitySchedule(op)}</span>
+                        </p>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="p-6 text-gray-600">No upcoming opportunities.</p>

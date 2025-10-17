@@ -1,3 +1,4 @@
+// src/pages/organization/EditOpportunity.jsx
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,6 +10,9 @@ import { useEffect, useRef, useState } from 'react';
 
 import AvailabilityMatrix from '../../../components/AvailabilityMatrix';
 import useUnsavedChangesWarning from '../../../hooks/useUnsavedWarning';
+
+// 🔁 schedule.js helpers
+import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
 
 const getSchema = (isDraft) =>
   z.object({
@@ -26,8 +30,8 @@ const getSchema = (isDraft) =>
           days: z.array(z.string()),
           start_time: z.string(),
           end_time: z.string(),
-          start_date: z.string(),
-          end_date: z.string(),
+          start_date: z.string().nullable().optional(),
+          end_date: z.string().nullable().optional(),
         })
       )
       .nullable()
@@ -85,8 +89,10 @@ export default function EditOpportunity() {
 
   useEffect(() => {
     if (opportunity) {
-      reset(opportunity, { keepDirty: false, keepTouched: false });
-      originalData.current = opportunity;
+      // Ensure the matrix is always an array for the UI
+      const defaults = { ...opportunity, when_needed: opportunity.when_needed ?? [] };
+      reset(defaults, { keepDirty: false, keepTouched: false });
+      originalData.current = defaults;
       setIsDraft(opportunity.status === 'draft');
     }
   }, [opportunity, reset]);
@@ -102,13 +108,92 @@ export default function EditOpportunity() {
     return () => window.removeEventListener('beforeunload', beforeUnload);
   }, [isDirty]);
 
+  /* -------------------- Normalization (via schedule.js) -------------------- */
+
+  /** Date -> 'YYYY-MM-DD' */
+  const toISO = (d) => {
+    const dt = toDate(d);
+    if (!dt) return null;
+    const yyyy = String(dt.getFullYear());
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  /** Minutes -> 'HH:MM' */
+  const minutesToHHMM = (mins) => {
+    if (mins == null) return null;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  /** Day labels -> numeric indices (0..6) using DAYS order */
+  const dayLabelsToIndices = (labels) => {
+    const normalizedLabels = normalizeDays(labels); // returns full labels, sorted & deduped
+    return normalizedLabels
+      .map((label) => DAYS.indexOf(label))
+      .filter((i) => i >= 0 && i <= 6);
+  };
+
+  /** Matrix blocks -> rows for opportunity_timeblocks */
+  const matrixToTimeblockRows = (blocks, opportunity_id) =>
+    (blocks ?? [])
+      .map((b) => {
+        const daysIdx = dayLabelsToIndices(b?.days);
+        const startM = toMinutes(b?.start_time);
+        const endM = toMinutes(b?.end_time ?? b?.start_time);
+        return {
+          opportunity_id,
+          start_date: toISO(b?.start_date), // 'YYYY-MM-DD' or null
+          end_date: toISO(b?.end_date),     // 'YYYY-MM-DD' or null
+          days: daysIdx,                    // int[] 0..6 (Mon..Sun)
+          start_time: minutesToHHMM(startM),
+          end_time: minutesToHHMM(endM),
+        };
+      })
+      .filter(
+        (r) =>
+          Array.isArray(r.days) &&
+          r.days.length > 0 &&
+          r.start_time &&
+          r.end_time
+      );
+
+  /** Delete then insert timeblocks for this opportunity */
+  const replaceTimeblocks = async (opportunityId, blocks, generally_needed) => {
+    const { error: delErr } = await supabase
+      .from('opportunity_timeblocks')
+      .delete()
+      .eq('opportunity_id', opportunityId);
+    if (delErr) throw delErr;
+
+    if (generally_needed) return;
+
+    const rows = matrixToTimeblockRows(blocks, opportunityId);
+    if (!rows.length) return;
+
+    const { error: insErr } = await supabase.from('opportunity_timeblocks').insert(rows);
+    if (insErr) throw insErr;
+  };
+
   const mutation = useMutation({
     mutationFn: async (formData) => {
+      // 1) Update the parent row
       const { error } = await supabase
         .from('volunteer_opportunities')
         .update(formData)
         .eq('id', id);
       if (error) throw error;
+
+      // 2) Mirror normalized blocks into opportunity_timeblocks
+      try {
+        await replaceTimeblocks(id, formData.when_needed ?? [], !!formData.generally_needed);
+      } catch (e) {
+        console.error('Saving timeblocks failed:', e);
+        toast.error('Saved details, but failed to save required times. Please retry.');
+      }
+
       return formData;
     },
     onSuccess: (saved) => {
@@ -119,10 +204,9 @@ export default function EditOpportunity() {
       originalData.current = { ...(originalData.current || {}), ...saved };
 
       reset(
-        { ...getValues(), ...saved },
+        { ...getValues(), ...saved, when_needed: saved.when_needed ?? [] },
         { keepDirty: false, keepTouched: false }
       );
-      // navigate('/organization-dashboard'); // optional
     },
     onError: (err) => {
       console.error('Update error:', err);
@@ -137,13 +221,23 @@ export default function EditOpportunity() {
       location: formData.location ?? '',
       contact: formData.contact ?? '',
       skills: formData.skills || null,
-      volunteers_needed: formData.volunteers_needed,
-      generally_needed: formData.generally_needed,
-      when_needed: formData.generally_needed ? null : formData.when_needed,
-      requires_dbs: formData.requires_dbs,
+      volunteers_needed: Number(formData.volunteers_needed ?? 1),
+      generally_needed: !!formData.generally_needed,
+      when_needed: formData.generally_needed ? null : (formData.when_needed ?? []), // keep JSON for UI/editing
+      requires_dbs: !!formData.requires_dbs,
     };
 
     if (statusOverride) updateData.status = statusOverride;
+
+    // If not generally-needed, require at least one block unless saving as draft
+    if (
+      !updateData.generally_needed &&
+      (!updateData.when_needed || updateData.when_needed.length === 0) &&
+      !statusOverride // saving as current status
+    ) {
+      toast.error('Please specify times or mark as Generally Needed.');
+      return;
+    }
 
     mutation.mutate(updateData);
   };
@@ -158,7 +252,7 @@ export default function EditOpportunity() {
       toast.error('You have unsaved changes. Please Save or Discard first.');
       return;
     }
-    navigate(-1); // or navigate('/organization-dashboard')
+    navigate(-1);
   };
 
   const generallyNeeded = watch('generally_needed');
@@ -166,8 +260,8 @@ export default function EditOpportunity() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="page-header">
-        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
-        ← Back
+        <button onClick={handleBack} className="btn btn-secondary btn-sm">
+          ← Back
         </button>
         <h1 className="title !mb-0"> Edit Opportunity</h1>
         <div className="spacer" />

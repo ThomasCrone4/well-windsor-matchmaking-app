@@ -1,3 +1,4 @@
+// src/pages/volunteer/VolunteerProfilePage.jsx
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,26 +9,29 @@ import AvailabilityMatrix from '../../components/AvailabilityMatrix';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
 
-const profileSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  contact_number: z.string().optional(),
-  home_town: z.string().min(1, 'Select a home town'),
-  dob: z.string().optional(),
-  bio: z.string().optional(),
-  skills: z.string().optional(),
-  available_anytime: z.boolean(),
-  availability_matrix: z.any(),
-  public_profile: z.boolean(),
-})
-.refine(d => !d.public_profile || !!d.bio?.trim(), {
-  message: 'Bio is required to appear publicly',
-  path: ['public_profile_bio'],
-})
-.refine(d => !d.public_profile || !!d.skills?.trim(), {
-  message: 'Skills are required to appear publicly',
-  path: ['public_profile_skills'],
-});
+// ✅ import the schedule helpers you already have
+import { toDate, toMinutes, normalizeDays, DAYS } from '../../utils/schedule';
 
+const profileSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required'),
+    contact_number: z.string().optional(),
+    home_town: z.string().min(1, 'Select a home town'),
+    dob: z.string().optional(),
+    bio: z.string().optional(),
+    skills: z.string().optional(),
+    available_anytime: z.boolean(),
+    availability_matrix: z.any(),
+    public_profile: z.boolean(),
+  })
+  .refine((d) => !d.public_profile || !!d.bio?.trim(), {
+    message: 'Bio is required to appear publicly',
+    path: ['public_profile_bio'],
+  })
+  .refine((d) => !d.public_profile || !!d.skills?.trim(), {
+    message: 'Skills are required to appear publicly',
+    path: ['public_profile_skills'],
+  });
 
 export default function VolunteerProfilePage() {
   const queryClient = useQueryClient();
@@ -67,72 +71,159 @@ export default function VolunteerProfilePage() {
     }
   }, [profile, hydrated, reset]);
 
-  // helpers at top-level (or inside the component)
+  // --- helpers ---
   const emptyToNull = (v) => (v === '' || v === undefined ? null : v);
   const trimOrNull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
   const normalizeUpdate = (formData) => ({
     // text
-    name: trimOrNull(formData.name),                     // required by schema (but trim anyway)
+    name: trimOrNull(formData.name),
     contact_number: trimOrNull(formData.contact_number),
-    home_town: trimOrNull(formData.home_town),           // required by schema
+    home_town: trimOrNull(formData.home_town),
     bio: trimOrNull(formData.bio),
     skills: trimOrNull(formData.skills),
 
     // date
-    dob: emptyToNull(formData.dob),                      // '' -> null (fixes 400 on DATE)
+    dob: emptyToNull(formData.dob),
 
     // booleans
     available_anytime: !!formData.available_anytime,
     public_profile: !!formData.public_profile,
 
-    // jsonb
+    // jsonb (keep for editing UI)
     availability_matrix: formData.available_anytime
-      ? null                                               // store empty array when "anytime"
+      ? null
       : Array.isArray(formData.availability_matrix)
-        ? formData.availability_matrix
-        : [],
+      ? formData.availability_matrix
+      : [],
   });
+
+  /** Format Date -> 'YYYY-MM-DD' using schedule.toDate */
+  const toISO = (d) => {
+    const dt = toDate(d);
+    if (!dt) return null;
+    const yyyy = String(dt.getFullYear());
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  /** Minutes -> 'HH:MM' */
+  const minutesToHHMM = (mins) => {
+    if (mins == null) return null;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  /** Day labels -> numeric indices (0..6) using DAYS order */
+  const dayLabelsToIndices = (labels) => {
+    // normalizeDays returns full labels ('Monday'..'Sunday'), sorted & deduped
+    const normalizedLabels = normalizeDays(labels);
+    return normalizedLabels
+      .map((label) => DAYS.indexOf(label))
+      .filter((i) => i >= 0 && i <= 6);
+  };
+
+  /**
+   * Convert AvailabilityMatrix blocks -> rows for volunteer_availability table.
+   * Uses schedule.js to normalize dates/times/days so everything is comparable.
+   */
+  const matrixToRows = (blocks, uid) =>
+    (blocks ?? [])
+      .map((b) => {
+        const daysIdx = dayLabelsToIndices(b?.days);
+        const startM = toMinutes(b?.start_time);
+        const endM = toMinutes(b?.end_time ?? b?.start_time);
+
+        return {
+          volunteer_id: uid,
+          start_date: toISO(b?.start_date),            // 'YYYY-MM-DD' or null
+          end_date: toISO(b?.end_date),                // 'YYYY-MM-DD' or null
+          days: daysIdx,                               // int[] 0..6 (same order as DAYS)
+          start_time: minutesToHHMM(startM),           // 'HH:MM'
+          end_time: minutesToHHMM(endM),               // 'HH:MM'
+        };
+      })
+      // must have at least one day and valid times
+      .filter(
+        (r) =>
+          Array.isArray(r.days) &&
+          r.days.length > 0 &&
+          r.start_time &&
+          r.end_time
+      );
+
+  /**
+   * Mirror availability to volunteer_availability table.
+   * Strategy: delete all then insert current (simple & RLS-friendly).
+   */
+  const mirrorAvailability = async (uid, available_anytime_flag, matrixBlocks) => {
+    // Always clear existing rows first
+    const { error: delErr } = await supabase
+      .from('volunteer_availability')
+      .delete()
+      .eq('volunteer_id', uid);
+    if (delErr) throw delErr;
+
+    if (available_anytime_flag) {
+      // nothing to insert
+      return;
+    }
+
+    const rows = matrixToRows(matrixBlocks, uid);
+    if (!rows.length) return; // no blocks to insert
+
+    const { error: insErr } = await supabase.from('volunteer_availability').insert(rows);
+    if (insErr) throw insErr;
+  };
 
   const mutation = useMutation({
     mutationFn: async (formData) => {
-      if (!userId) throw new Error('No user id');        // avoid bad filter → 400
+      if (!userId) throw new Error('No user id');
 
       const update = normalizeUpdate(formData);
 
+      // 1) Update user_profiles (keeps JSON for UI)
       const { error } = await supabase
         .from('user_profiles')
-        .update(update)                                   // only valid columns with safe types
+        .update(update)
         .eq('id', userId);
 
       if (error) throw error;
+
+      // 2) Mirror to volunteer_availability using schedule.js normalization
+      try {
+        await mirrorAvailability(userId, update.available_anytime, update.availability_matrix ?? []);
+      } catch (e) {
+        console.error('Mirror availability failed:', e);
+        toast.error('Saved profile, but failed to save detailed availability. Please retry.');
+      }
+
       return update;
     },
     onSuccess: (update) => {
-     // Instant UI: merge new values into the cached profile
-     queryClient.setQueryData(['user_profile', userId], (prev) =>
-       prev ? { ...prev, ...update } : prev
-     );
+      // Instant UI: merge new values into the cached profile
+      queryClient.setQueryData(['user_profile', userId], (prev) =>
+        prev ? { ...prev, ...update } : prev
+      );
 
-     // Safety: ensure a fresh fetch next time the page mounts
-     queryClient.invalidateQueries({ queryKey: ['user_profile', userId] });
+      // Safety: ensure a fresh fetch next time the page mounts
+      queryClient.invalidateQueries({ queryKey: ['user_profile', userId] });
 
-     toast.success('Profile updated!');
-     reset(getValues(), { keepDirty: false, keepTouched: false });
-   },
+      toast.success('Profile updated!');
+      reset(getValues(), { keepDirty: false, keepTouched: false });
+    },
     onError: (err) => {
-      // surface the exact DB message to debug quickly
       toast.error(err?.message || 'Failed to update profile.');
     },
   });
-
 
   const onSubmit = (data) => {
     if (!data.available_anytime && (!data.availability_matrix || data.availability_matrix.length === 0)) {
       toast.error('Please add at least one availability block.');
       return;
     }
-
     mutation.mutate(data);
   };
 
@@ -152,7 +243,6 @@ export default function VolunteerProfilePage() {
       toast.success('Changes discarded');
     }
   };
-
 
   if (loading || !hydrated) {
     return <p className="text-center mt-8">Loading profile...</p>;
@@ -246,8 +336,7 @@ export default function VolunteerProfilePage() {
         </div>
 
         <div className="check-row">
-          
-          {/* Generally Available */}
+          {/* Flexible Availability */}
           <label className="check-label">
             <input type="checkbox" {...register('available_anytime')} className="check" />
             Flexible Availability
@@ -255,9 +344,9 @@ export default function VolunteerProfilePage() {
 
           {/* Public Profile */}
           <label className="check-label">
-           <input type="checkbox" {...register('public_profile')} className="check" />
-           Allow organisations to view my profile and contact me
-         </label>
+            <input type="checkbox" {...register('public_profile')} className="check" />
+            Allow organisations to view my profile and contact me
+          </label>
         </div>
 
         {/* Availability Matrix */}
@@ -269,7 +358,7 @@ export default function VolunteerProfilePage() {
               <AvailabilityMatrix value={field.value} onChange={field.onChange} />
             )}
           />
-        )}        
+        )}
 
         {/* Actions */}
         <div className="flex gap-4 pt-2">
