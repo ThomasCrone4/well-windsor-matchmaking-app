@@ -1,3 +1,4 @@
+// src/main.jsx (or wherever your router is defined)
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -16,10 +17,10 @@ import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboa
 import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard';
 import OpportunitiesPage from './pages/OpportunitiesPage';
 import VolunteerProfilePage from './pages/VolunteerPages/VolunteerProfilePage';
+import OrganizationProfilePage from './pages/OrganizationPages/OrganizationProfilePage';
 import EnquireOpportunities from './pages/VolunteerPages/FindOpportunities/EnquireOpportunities';
 import PostOpportunity from './pages/OrganizationPages/PostOpportunities/PostOpportunity';
 import EditOpportunity from './pages/OrganizationPages/PostOpportunities/EditOpportunity';
-import OrganizationProfilePage from './pages/OrganizationPages/OrganizationProfilePage';
 import OpportunityApplicantsPage from './pages/OrganizationPages/PostOpportunities/OpportunityApplicantsPage';
 import LookingForVolunteersPage from './pages/OrganizationPages/FindVolunteers/LookingForVolunteers';
 import EnquireVolunteerPage from './pages/OrganizationPages/FindVolunteers/EnquireVolunteers';
@@ -38,8 +39,11 @@ import Footer from './components/Footer';
 import { SessionProvider } from './context/SessionContext';
 import ProtectedRoute from './components/ProtectedRoutes';
 
-const queryClient = new QueryClient();
 
+import AdminRoute from './pages/AdminPages/AdminRoute'; // create per earlier snippet
+import AdminDashboard from './pages/AdminPages/AdminDashboard'; // place the dashboard here
+
+const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -57,31 +61,129 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="/redirect" element={<Redirector />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-
                 {/* Organisation pages */}
-                <Route path="/organization/profile" element={<ProtectedRoute allowedRoles={['organization']}><OrganizationProfilePage /></ProtectedRoute>} />
-                <Route path="/organization-dashboard" element={<ProtectedRoute allowedRoles={['organization']}><OrganizationDashboard /></ProtectedRoute>} />
-                <Route path="/post-opportunity" element={<ProtectedRoute allowedRoles={['organization']}><PostOpportunity /></ProtectedRoute>} />
-                <Route path="/edit-opportunity/:id" element={<ProtectedRoute allowedRoles={['organization']}><EditOpportunity /></ProtectedRoute>} />
-                <Route path="/opportunity/:id/applicants" element={<ProtectedRoute allowedRoles={['organization']}><OpportunityApplicantsPage /></ProtectedRoute>} />
-                <Route path="/volunteers" element={<ProtectedRoute allowedRoles={['organization']}><LookingForVolunteersPage /></ProtectedRoute>} />
-                <Route path="/volunteers/:id/enquire" element={<ProtectedRoute allowedRoles={['organization']}><EnquireVolunteerPage /></ProtectedRoute>} />
-                <Route path="/organization/sent-enquiries" element={<ProtectedRoute allowedRoles={['organization']}><SentEnquiriesOrg /></ProtectedRoute>} />
+                <Route
+                  path="/organization/profile"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <OrganizationProfilePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/organization-dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <OrganizationDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/post-opportunity"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <PostOpportunity />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/edit-opportunity/:id"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <EditOpportunity />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/opportunity/:id/applicants"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <OpportunityApplicantsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/volunteers"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <LookingForVolunteersPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/volunteers/:id/enquire"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <EnquireVolunteerPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/organization/sent-enquiries"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <SentEnquiriesOrg />
+                    </ProtectedRoute>
+                  }
+                />
                 {/* <Route path="/opportunity/:id/logged-hours" element={<ProtectedRoute allowedRoles={['organization']}><PostLoggedHours /></ProtectedRoute>} />
-                 <Route path="/opportunity/:id/logged-hours/:id/edit" element={<ProtectedRoute allowedRoles={['organization']}><EditConfirmHours /></ProtectedRoute>} />
-                <Route path="/organization/logged-hours" element={<ProtectedRoute allowedRoles={['organization']}><AllLoggedHours /></ProtectedRoute>} />
-                 */}
+                <Route path="/opportunity/:id/logged-hours/:id/edit" element={<ProtectedRoute allowedRoles={['organization']}><EditConfirmHours /></ProtectedRoute>} />
+                <Route path="/organization/logged-hours" element={<ProtectedRoute allowedRoles={['organization']}><AllLoggedHours /></ProtectedRoute>} /> */}
+
                 {/* Volunteer pages */}
-                <Route path="/volunteer-dashboard" element={<ProtectedRoute allowedRoles={['volunteer']}><VolunteerDashboard /></ProtectedRoute>} />
-                <Route path="/volunteer/profile" element={<ProtectedRoute allowedRoles={['volunteer']}><VolunteerProfilePage /></ProtectedRoute>} />
-                <Route path="/opportunities/:id/enquire" element={<ProtectedRoute allowedRoles={['volunteer']}><EnquireOpportunities /></ProtectedRoute>} />
-                <Route path="/volunteer/sent-enquiries" element={<ProtectedRoute allowedRoles={['volunteer']}><SentEnquiriesVol /></ProtectedRoute>} />
+                <Route
+                  path="/volunteer-dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={['volunteer']}>
+                      <VolunteerDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/volunteer/profile"
+                  element={
+                    <ProtectedRoute allowedRoles={['volunteer']}>
+                      <VolunteerProfilePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/opportunities/:id/enquire"
+                  element={
+                    <ProtectedRoute allowedRoles={['volunteer']}>
+                      <EnquireOpportunities />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/volunteer/sent-enquiries"
+                  element={
+                    <ProtectedRoute allowedRoles={['volunteer']}>
+                      <SentEnquiriesVol />
+                    </ProtectedRoute>
+                  }
+                />
                 {/* <Route path="/volunteer/log-hours" element={<ProtectedRoute allowedRoles={['volunteer']}><ListLogHours /></ProtectedRoute>} />
-                <Route path="/volunteer/log-hours/new"element={<ProtectedRoute allowedRoles={['volunteer']}><NewLogHours /></ProtectedRoute>} />
+                <Route path="/volunteer/log-hours/new" element={<ProtectedRoute allowedRoles={['volunteer']}><NewLogHours /></ProtectedRoute>} />
                 <Route path="/volunteer/log-hours/edit/:id" element={<ProtectedRoute allowedRoles={['volunteer']}><EditLogHours /></ProtectedRoute>} /> */}
 
                 {/* Admin pages */}
-                <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserList /></ProtectedRoute>} />
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminRoute>
+                      <AdminDashboard />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/users"
+                  element={
+                    <AdminRoute>
+                      <UserList />
+                    </AdminRoute>
+                  }
+                />
 
                 {/* Catch-all redirect */}
                 <Route path="*" element={<Navigate to="/" replace />} />
@@ -92,8 +194,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </BrowserRouter>
 
         <ReactQueryDevtools initialIsOpen={false} />
-        <Toaster 
-          position="top-center" 
+        <Toaster
+          position="top-center"
           toastOptions={{
             duration: 5000,
           }}

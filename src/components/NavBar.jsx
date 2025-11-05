@@ -1,3 +1,4 @@
+// src/components/Navbar.jsx
 import { Link, useNavigate } from 'react-router-dom';
 import { UserCircle } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,9 +13,11 @@ export default function Navbar() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  // Invalidate profile on auth state changes
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(() => {
       queryClient.invalidateQueries(['user_profile']);
+      queryClient.invalidateQueries(['is-admin']);
     });
 
     return () => {
@@ -22,6 +25,7 @@ export default function Navbar() {
     };
   }, [queryClient]);
 
+  // Fetch profile for role-based links
   const { data: profileData } = useQuery({
     queryKey: ['user_profile', userId],
     queryFn: async () => {
@@ -34,6 +38,23 @@ export default function Navbar() {
       return data;
     },
     enabled: !!userId,
+  });
+
+  // Check admin membership
+  const { data: isAdmin } = useQuery({
+    queryKey: ['is-admin', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('admins')
+        .select('user_id')
+        .eq('user_id', userId)
+        .single();
+      // if not found, data is null/single() may 406; treat as false
+      if (error && error.code !== 'PGRST116') throw error; // ignore "Results contain 0 rows" style error
+      return Boolean(data);
+    },
+    enabled: !!userId,
+    staleTime: 60_000,
   });
 
   const handleLogout = async () => {
@@ -65,22 +86,19 @@ export default function Navbar() {
         {/* Show Looking for Volunteers only for organizations */}
         {isLoggedIn && role === 'organization' && (
           <>
-          <Link to="/volunteers" className="btn-secondary">
-            Looking for Volunteers
-          </Link>
-
-           {/* <Link to="/organization/logged-hours" className="btn-secondary">
-            Logged Hours
-          </Link> */}
+            <Link to="/volunteers" className="btn-secondary">
+              Looking for Volunteers
+            </Link>
+            {/* <Link to="/organization/logged-hours" className="btn-secondary">Logged Hours</Link> */}
           </>
         )}
 
-        {/* Show Log Hours only for volunteers */}
-         {/* {isLoggedIn && role === 'volunteer' && (
-          <Link to="/volunteer/log-hours" className="btn-secondary">
-            Log Hours
+        {/* Admin link (only visible to users in the `admins` table) */}
+        {isLoggedIn && isAdmin && (
+          <Link to="/admin" className="btn-secondary">
+            Admin
           </Link>
-        )} */}
+        )}
 
         {!isLoggedIn ? (
           <Link to="/auth" className="btn-primary">
@@ -88,18 +106,18 @@ export default function Navbar() {
           </Link>
         ) : (
           <>
-            {role == 'volunteer' && (
-            <Link to="/volunteer-dashboard" className="btn-secondary">
-              Dashboard
-            </Link>
+            {role === 'volunteer' && (
+              <Link to="/volunteer-dashboard" className="btn-secondary">
+                Dashboard
+              </Link>
             )}
 
-            {role == 'organization' && (
-            <Link to="/organization-dashboard" className="btn-secondary">
-              Dashboard
-            </Link>
+            {role === 'organization' && (
+              <Link to="/organization-dashboard" className="btn-secondary">
+                Dashboard
+              </Link>
             )}
-            
+
             <Link to={profileLink} className="text-brand-teal hover:text-blue-600 flex items-center gap-1">
               <UserCircle className="w-10 h-10" />
             </Link>
