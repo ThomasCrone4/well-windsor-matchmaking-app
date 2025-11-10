@@ -152,7 +152,7 @@ export default function HomePage() {
       <section className="bg-gradient-to-br from-brand-heroFrom to-brand-heroTo">
         <div className="container py-12 text-center">
           <h1 className= "text-3xl md:text-5xl font-bold text-red-500 mb-3">
-            This site is under development
+            This site is still under development
           </h1>
           <h1 className="text-3xl md:text-5xl font-bold text-brand-blue mb-3">
             Connect with volunteer opportunities in Windsor
