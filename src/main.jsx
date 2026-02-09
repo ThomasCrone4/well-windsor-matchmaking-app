@@ -36,7 +36,9 @@ import AllLoggedHours from './pages/OrganizationPages/LogHours/AllLoggedHours';
 
 import Navbar from './components/NavBar';
 import Footer from './components/Footer';
+import ErrorBoundary from './components/ErrorBoundary';
 import { SessionProvider } from './context/SessionContext';
+import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoutes';
 
 
@@ -47,17 +49,19 @@ const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <SessionProvider>
-        <BrowserRouter>
-          <div className="min-h-screen flex flex-col">
-            <Navbar />
-            <div className="flex-grow">
-              <Routes>
-                {/* Public pages */}
-                <Route path="/" element={<HomePage />} />
-                <Route path="/opportunities" element={<OpportunitiesPage />} />
-                <Route path="/auth" element={<AuthPage />} />
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider>
+          <ThemeProvider>
+            <BrowserRouter>
+              <div className="min-h-screen flex flex-col">
+                <Navbar />
+                <div className="flex-grow">
+                  <Routes>
+                    {/* Public pages */}
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/opportunities" element={<OpportunitiesPage />} />
+                    <Route path="/auth" element={<AuthPage />} />
                 <Route path="/redirect" element={<Redirector />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
 
@@ -200,7 +204,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             duration: 5000,
           }}
         />
+        </ThemeProvider>
       </SessionProvider>
     </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

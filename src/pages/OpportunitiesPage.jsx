@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { isThisWeek, isThisMonth } from 'date-fns';
 import { formatOpportunitySchedule } from '../utils/schedule';
+import CardSkeleton from '../components/skeletons/CardSkeleton';
 
 export default function OpportunitiesPage() {
   const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
@@ -213,7 +214,12 @@ export default function OpportunitiesPage() {
     });
   };
 
-  if (isLoading) return <p className="text-center mt-20">Loading opportunities...</p>;
+  if (isLoading) return (
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <h1 className="title">Volunteer Opportunities</h1>
+      <CardSkeleton count={6} />
+    </div>
+  );
   if (error)
     return (
       <p className="text-center text-red-500 mt-20">
@@ -254,11 +260,17 @@ export default function OpportunitiesPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="page-header">
+    <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
+      <div className="mb-8">
         <h1 className="title">Volunteer Opportunities</h1>
+        <p className="page-description">
+          Browse volunteer opportunities across Well-Windsor and apply to those matching your skills and availability. Use the filters below to find opportunities by location and start date.
+        </p>
+      </div>
+      
+      <div className="mb-6">
         {userProfile?.role === 'volunteer' && (
-          <div className="flex justify-center mb-6">
+          <div className="flex justify-center">
             <Link to="/volunteer/sent-enquiries" className="btn btn-success">
               Sent Enquiries
             </Link>

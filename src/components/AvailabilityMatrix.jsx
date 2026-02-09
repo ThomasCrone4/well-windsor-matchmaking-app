@@ -56,15 +56,16 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
   const daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
   return (
-    <div className="stack">
+    <div className="stack" role="region" aria-label="Availability schedule">
       {blocks.map((block, i) => (
-        <div key={i} className="fieldset space-y-3 relative">
+        <div key={i} className="fieldset space-y-3 relative" role="group" aria-labelledby={`block-legend-${i}`}>
           <div className="flex items-center justify-between">
-            <span className="legend">Availability Block {i + 1}</span>
+            <span id={`block-legend-${i}`} className="legend">Availability Block {i + 1}</span>
             <button
               type="button"
               className="btn btn-danger btn-sm"
               onClick={() => removeBlock(i)}
+              aria-label={`Remove availability block ${i + 1}`}
             >
               Remove
             </button>
@@ -72,8 +73,8 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
 
           {/* Days */}
           <div className="form-row">
-            <label className="label">Days</label>
-            <div className="flex flex-wrap gap-3">
+            <label className="label" id={`days-label-${i}`}>Days</label>
+            <div className="flex flex-wrap gap-3" role="group" aria-labelledby={`days-label-${i}`}>
               {daysOfWeek.map((day) => {
                 const checked = block.days.includes(day);
                 return (
@@ -88,6 +89,7 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
                           : [...block.days, day];
                         updateBlock(i, 'days', updatedDays);
                       }}
+                      aria-label={`${day} for block ${i + 1}`}
                     />
                     {day}
                   </label>
@@ -100,23 +102,27 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
           {/* Date range */}
           <div className="form-grid sm:grid-cols-2">
             <div className="form-row">
-              <label className="label">Start Date</label>
+              <label htmlFor={`start-date-${i}`} className="label">Start Date</label>
               <input
+                id={`start-date-${i}`}
                 type="date"
                 className="input"
                 value={block.start_date}
                 min={today}
                 onChange={(e) => updateBlock(i, 'start_date', e.target.value)}
+                aria-label={`Start date for availability block ${i + 1}`}
               />
             </div>
             <div className="form-row">
-              <label className="label">End Date</label>
+              <label htmlFor={`end-date-${i}`} className="label">End Date</label>
               <input
+                id={`end-date-${i}`}
                 type="date"
                 className="input"
                 value={block.end_date}
                 min={block.start_date || today}
                 onChange={(e) => updateBlock(i, 'end_date', e.target.value)}
+                aria-label={`End date for availability block ${i + 1}`}
               />
             </div>
           </div>
@@ -124,21 +130,25 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
           {/* Time range */}
           <div className="form-grid sm:grid-cols-2">
             <div className="form-row">
-              <label className="label">Start Time</label>
+              <label htmlFor={`start-time-${i}`} className="label">Start Time</label>
               <input
+                id={`start-time-${i}`}
                 type="time"
                 className="input"
                 value={block.start_time}
                 onChange={(e) => updateBlock(i, 'start_time', e.target.value)}
+                aria-label={`Start time for availability block ${i + 1}`}
               />
             </div>
             <div className="form-row">
-              <label className="label">End Time</label>
+              <label htmlFor={`end-time-${i}`} className="label">End Time</label>
               <input
+                id={`end-time-${i}`}
                 type="time"
                 className="input"
                 value={block.end_time}
                 onChange={(e) => updateBlock(i, 'end_time', e.target.value)}
+                aria-label={`End time for availability block ${i + 1}`}
               />
             </div>
           </div>
@@ -146,7 +156,12 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
       ))}
 
       <div className="flex justify-end">
-        <button type="button" className="btn btn-primary btn-sm" onClick={addBlock}>
+        <button 
+          type="button" 
+          className="btn btn-primary btn-sm" 
+          onClick={addBlock}
+          aria-label="Add new availability block"
+        >
           Add Availability Block
         </button>
       </div>

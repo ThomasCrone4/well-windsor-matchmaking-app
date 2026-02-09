@@ -8,6 +8,7 @@ import { supabase } from '../../utils/supabase';
 import AvailabilityMatrix from '../../components/AvailabilityMatrix';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
+import FormSkeleton from '../../components/skeletons/FormSkeleton';
 
 // ✅ import the schedule helpers you already have
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../utils/schedule';
@@ -47,6 +48,7 @@ export default function VolunteerProfilePage() {
     formState: { errors, isDirty },
     getValues,
   } = useForm({
+    mode: 'onChange', // Enable real-time validation
     resolver: zodResolver(profileSchema),
     defaultValues: {},
   });
@@ -245,12 +247,22 @@ export default function VolunteerProfilePage() {
   };
 
   if (loading || !hydrated) {
-    return <p className="text-center mt-8">Loading profile...</p>;
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-8">
+        <h1 className="title">Edit Your Volunteer Profile</h1>
+        <FormSkeleton fields={8} />
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="title">Edit Your Volunteer Profile</h1>
+    <div className="max-w-2xl mx-auto px-4 py-8" id="main-content">
+      <div className="mb-8">
+        <h1 className="title">Edit Your Volunteer Profile</h1>
+        <p className="page-description">
+          Update your profile, skills, and availability for organisations to discover you. Make your profile public to appear in volunteer searches.
+        </p>
+      </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="form">
         {/* Full Name */}

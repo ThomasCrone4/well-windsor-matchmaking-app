@@ -332,15 +332,15 @@ export default function AdminDashboard() {
                     : 'Ongoing';
                   
                   return (
-                    <div key={op.id} className="border rounded-lg p-4 hover:bg-gray-50 transition">
+                    <div key={op.id} className="border rounded-lg p-4 hover:opacity-90 transition" style={{ borderColor: 'var(--color-border)' }}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-semibold text-lg text-gray-900">{op.title}</h3>
+                            <h3 className="font-semibold text-lg" style={{ color: 'var(--color-text-primary)' }}>{op.title}</h3>
                             <StatusBadge status={op.status} />
                           </div>
                           
-                          <div className="space-y-1 text-sm text-gray-600">
+                          <div className="space-y-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                             <div className="flex items-center gap-2">
                               <Building size={14} />
                               <span>{getOrgName(op.org_id)}</span>
@@ -439,21 +439,21 @@ export default function AdminDashboard() {
             </h2>
             
             {!orgs ? (
-              <div className="py-12 text-center text-gray-500">Loading organizations...</div>
+              <div className="py-12 text-center" style={{ color: 'var(--color-text-muted)' }}>Loading organizations...</div>
             ) : filteredOrgs?.length === 0 ? (
-              <div className="py-12 text-center text-gray-500">No organizations found</div>
+              <div className="py-12 text-center" style={{ color: 'var(--color-text-muted)' }}>No organizations found</div>
             ) : (
               <div className="space-y-3">
                 {filteredOrgs?.map((org) => (
-                  <div key={org.id} className="border rounded-lg p-4 hover:bg-gray-50 transition">
+                  <div key={org.id} className="border rounded-lg p-4 hover:opacity-90 transition" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
                           <Building size={20} className="text-brand-teal shrink-0" />
-                          <h3 className="font-semibold text-lg text-gray-900">{org.name}</h3>
+                          <h3 className="font-semibold text-lg" style={{ color: 'var(--color-text-primary)' }}>{org.name}</h3>
                         </div>
                         
-                        <div className="space-y-1 text-sm text-gray-600">
+                        <div className="space-y-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                           {org.email && (
                             <div className="flex items-center gap-2">
                               <span className="font-medium">Email:</span>
@@ -559,28 +559,28 @@ export default function AdminDashboard() {
             </h2>
             
             {volLoading ? (
-              <div className="py-12 text-center text-gray-500">Loading volunteers...</div>
+              <div className="py-12 text-center" style={{ color: 'var(--color-text-muted)' }}>Loading volunteers...</div>
             ) : volunteers?.length === 0 ? (
-              <div className="py-12 text-center text-gray-500">No volunteers found</div>
+              <div className="py-12 text-center" style={{ color: 'var(--color-text-muted)' }}>No volunteers found</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full">
-                  <thead className="bg-gray-50 border-b">
+                  <thead style={{ backgroundColor: 'var(--color-background-secondary)', borderBottom: '1px solid var(--color-border)' }}>
                     <tr>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Town</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">DBS</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Profile</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Email</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Town</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>DBS</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Profile</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
                     {volunteers?.map((v) => (
-                      <tr key={v.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm">{v.name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{v.email}</td>
-                        <td className="px-4 py-3 text-sm">{v.home_town || '—'}</td>
+                      <tr key={v.id} className="hover:opacity-90">
+                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-primary)' }}>{v.name}</td>
+                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{v.email}</td>
+                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-primary)' }}>{v.home_town || '—'}</td>
                         <td className="px-4 py-3">
                           {v.dbs_checked ? (
                             <span className="flex items-center gap-1 text-green-700 text-sm">
@@ -651,11 +651,11 @@ export default function AdminDashboard() {
 
                 {/* Lists */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="border rounded-lg">
-                    <div className="bg-gray-50 px-4 py-3 border-b">
-                      <h3 className="font-semibold text-gray-900">Hours by Organisation</h3>
+                  <div className="border rounded-lg" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="px-4 py-3 border-b" style={{ backgroundColor: 'var(--color-background-secondary)', borderColor: 'var(--color-border)' }}>
+                      <h3 className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Hours by Organisation</h3>
                     </div>
-                    <div className="divide-y max-h-96 overflow-y-auto">
+                    <div className="divide-y max-h-96 overflow-y-auto" style={{ borderColor: 'var(--color-border)' }}>
                       {hours?.perOrg?.length > 0 ? (
                         hours.perOrg.map((row) => (
                           <RowItem
@@ -665,16 +665,16 @@ export default function AdminDashboard() {
                           />
                         ))
                       ) : (
-                        <div className="p-6 text-center text-gray-500">No data yet</div>
+                        <div className="p-6 text-center" style={{ color: 'var(--color-text-muted)' }}>No data yet</div>
                       )}
                     </div>
                   </div>
 
-                  <div className="border rounded-lg">
-                    <div className="bg-gray-50 px-4 py-3 border-b">
-                      <h3 className="font-semibold text-gray-900">Hours by Volunteer</h3>
+                  <div className="border rounded-lg" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="px-4 py-3 border-b" style={{ backgroundColor: 'var(--color-background-secondary)', borderColor: 'var(--color-border)' }}>
+                      <h3 className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Hours by Volunteer</h3>
                     </div>
-                    <div className="divide-y max-h-96 overflow-y-auto">
+                    <div className="divide-y max-h-96 overflow-y-auto" style={{ borderColor: 'var(--color-border)' }}>
                       {hours?.perVol?.length > 0 ? (
                         hours.perVol.map((row) => (
                           <RowItem
@@ -729,9 +729,9 @@ function StatCard({ label, value, icon }) {
 
 function RowItem({ left, right }) {
   return (
-    <div className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
-      <span className="text-sm font-medium text-gray-900">{left}</span>
-      <span className="text-sm text-gray-600">{right}</span>
+    <div className="px-4 py-3 flex items-center justify-between hover:opacity-90">
+      <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{left}</span>
+      <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{right}</span>
     </div>
   );
 }
@@ -784,11 +784,11 @@ function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
               Active Towns ({active.length})
             </h3>
           </div>
-          <ul className="divide-y">
+          <ul className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
             {active.length > 0 ? (
               active.map((t) => (
-                <li key={t.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
-                  <span className="font-medium">{t.name}</span>
+                <li key={t.id} className="px-4 py-3 flex items-center justify-between hover:opacity-90">
+                  <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{t.name}</span>
                   <button
                     onClick={() => onToggle(t.id, false)}
                     disabled={isToggling}
@@ -799,24 +799,24 @@ function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
                 </li>
               ))
             ) : (
-              <li className="p-6 text-center text-gray-500">No active towns</li>
+              <li className="p-6 text-center" style={{ color: 'var(--color-text-muted)' }}>No active towns</li>
             )}
           </ul>
         </div>
 
         {/* Inactive */}
-        <div className="border rounded-lg">
-          <div className="bg-gray-50 px-4 py-3 border-b">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+        <div className="border rounded-lg" style={{ borderColor: 'var(--color-border)' }}>
+          <div className="px-4 py-3 border-b" style={{ backgroundColor: 'var(--color-background-secondary)', borderColor: 'var(--color-border)' }}>
+            <h3 className="font-semibold flex items-center gap-2" style={{ color: 'var(--color-text-primary)' }}>
               <XCircle size={18} />
               Inactive Towns ({inactive.length})
             </h3>
           </div>
-          <ul className="divide-y">
+          <ul className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
             {inactive.length > 0 ? (
               inactive.map((t) => (
-                <li key={t.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
-                  <span className="text-gray-600">{t.name}</span>
+                <li key={t.id} className="px-4 py-3 flex items-center justify-between hover:opacity-90">
+                  <span style={{ color: 'var(--color-text-secondary)' }}>{t.name}</span>
                   <button
                     onClick={() => onToggle(t.id, true)}
                     disabled={isToggling}
@@ -827,7 +827,7 @@ function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
                 </li>
               ))
             ) : (
-              <li className="p-6 text-center text-gray-500">No inactive towns</li>
+              <li className="p-6 text-center" style={{ color: 'var(--color-text-muted)' }}>No inactive towns</li>
             )}
           </ul>
         </div>

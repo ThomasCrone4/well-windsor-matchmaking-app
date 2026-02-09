@@ -38,6 +38,7 @@ export default function PostOpportunity() {
     reset,
     formState: { errors },
   } = useForm({
+    mode: 'onChange', // Enable real-time validation
     resolver: zodResolver(schema),
     defaultValues: {
       title: '',
@@ -198,13 +199,15 @@ export default function PostOpportunity() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="page-header">
-        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
+    <div className="max-w-2xl mx-auto px-4 py-8" id="main-content">
+      <div className="mb-8">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm" aria-label="Go back">
           ← Back
         </button>
         <h1 className="title !mb-0">Post a New Opportunity</h1>
-        <div className="spacer" />
+        <p className="page-description">
+          Create a new volunteer opportunity with scheduling details and requirements. Save as a draft to edit later or publish immediately.
+        </p>
       </div>
 
       <form className="card-post">

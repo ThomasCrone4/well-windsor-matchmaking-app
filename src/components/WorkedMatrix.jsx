@@ -66,20 +66,25 @@ export default function WorkedMatrix({ value = [], onChange }) {
   const daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
   return (
-    <div className="stack">
+    <div className="stack" role="region" aria-label="Worked hours schedule">
       {blocks.map((block, i) => (
-        <div key={i} className="fieldset space-y-3 relative">
+        <div key={i} className="fieldset space-y-3 relative" role="group" aria-labelledby={`worked-block-legend-${i}`}>
           <div className="flex items-center justify-between">
-            <span className="legend">Worked Block {i + 1}</span>
-            <button type="button" className="btn btn-danger btn-sm" onClick={() => removeBlock(i)}>
+            <span id={`worked-block-legend-${i}`} className="legend">Worked Block {i + 1}</span>
+            <button 
+              type="button" 
+              className="btn btn-danger btn-sm" 
+              onClick={() => removeBlock(i)}
+              aria-label={`Remove worked hours block ${i + 1}`}
+            >
               Remove
             </button>
           </div>
 
           {/* Days */}
           <div className="form-row">
-            <label className="label">Days</label>
-            <div className="flex flex-wrap gap-3">
+            <label className="label" id={`worked-days-label-${i}`}>Days</label>
+            <div className="flex flex-wrap gap-3" role="group" aria-labelledby={`worked-days-label-${i}`}>
               {daysOfWeek.map((day) => {
                 const checked = block.days.includes(day);
                 return (
@@ -94,6 +99,7 @@ export default function WorkedMatrix({ value = [], onChange }) {
                           : [...block.days, day];
                         updateBlock(i, 'days', updatedDays);
                       }}
+                      aria-label={`${day} for worked block ${i + 1}`}
                     />
                     {day}
                   </label>
@@ -105,22 +111,26 @@ export default function WorkedMatrix({ value = [], onChange }) {
           {/* Date range (past allowed). Keep end ≥ start. */}
           <div className="form-grid sm:grid-cols-2">
             <div className="form-row">
-              <label className="label">Start Date</label>
+              <label htmlFor={`worked-start-date-${i}`} className="label">Start Date</label>
               <input
+                id={`worked-start-date-${i}`}
                 type="date"
                 className="input"
                 value={block.start_date}
                 onChange={(e) => updateBlock(i, 'start_date', e.target.value)}
+                aria-label={`Start date for worked block ${i + 1}`}
               />
             </div>
             <div className="form-row">
-              <label className="label">End Date</label>
+              <label htmlFor={`worked-end-date-${i}`} className="label">End Date</label>
               <input
+                id={`worked-end-date-${i}`}
                 type="date"
                 className="input"
                 value={block.end_date}
                 min={block.start_date || undefined}
                 onChange={(e) => updateBlock(i, 'end_date', e.target.value)}
+                aria-label={`End date for worked block ${i + 1}`}
               />
             </div>
           </div>
@@ -128,21 +138,25 @@ export default function WorkedMatrix({ value = [], onChange }) {
           {/* Time range */}
           <div className="form-grid sm:grid-cols-2">
             <div className="form-row">
-              <label className="label">Start Time</label>
+              <label htmlFor={`worked-start-time-${i}`} className="label">Start Time</label>
               <input
+                id={`worked-start-time-${i}`}
                 type="time"
                 className="input"
                 value={block.start_time}
                 onChange={(e) => updateBlock(i, 'start_time', e.target.value)}
+                aria-label={`Start time for worked block ${i + 1}`}
               />
             </div>
             <div className="form-row">
-              <label className="label">End Time</label>
+              <label htmlFor={`worked-end-time-${i}`} className="label">End Time</label>
               <input
+                id={`worked-end-time-${i}`}
                 type="time"
                 className="input"
                 value={block.end_time}
                 onChange={(e) => updateBlock(i, 'end_time', e.target.value)}
+                aria-label={`End time for worked block ${i + 1}`}
               />
             </div>
           </div>
@@ -150,7 +164,12 @@ export default function WorkedMatrix({ value = [], onChange }) {
       ))}
 
       <div className="flex justify-end">
-        <button type="button" className="btn btn-primary btn-sm" onClick={addBlock}>
+        <button 
+          type="button" 
+          className="btn btn-primary btn-sm" 
+          onClick={addBlock}
+          aria-label="Add new worked hours block"
+        >
           Add Worked Block
         </button>
       </div>

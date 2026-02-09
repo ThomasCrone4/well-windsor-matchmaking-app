@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import { format, parseISO, isValid } from 'date-fns';
 
 import { Edit2, Trash2 } from 'lucide-react';
+import ListSkeleton from '../../components/skeletons/ListSkeleton';
 
 
 export default function OrganizationDashboard() {
@@ -294,21 +295,25 @@ export default function OrganizationDashboard() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="page-header">
+    <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
+      <div className="mb-8">
         <h1 className="title">Organisation Dashboard</h1>
-        <div className="flex gap-2">
-          <Link to="/organization/sent-enquiries" className="btn btn-success">
-            Sent Enquiries
-          </Link>
-          <Link to="/post-opportunity" className="btn btn-primary">
-            + New Post
-          </Link>
-        </div>
+        <p className="page-description">
+          Manage your posted opportunities and track volunteer applications. Create new posts, edit existing ones, and close opportunities when filled.
+        </p>
+      </div>
+      
+      <div className="flex gap-2 mb-6">
+        <Link to="/organization/sent-enquiries" className="btn btn-success">
+          Sent Enquiries
+        </Link>
+        <Link to="/post-opportunity" className="btn btn-primary">
+          + New Post
+        </Link>
       </div>
 
       {loading ? (
-        <p className="muted">Loading your posts...</p>
+        <ListSkeleton items={5} />
       ) : opportunities.length === 0 ? (
         <p className="muted">You haven’t posted any opportunities yet.</p>
       ) : (

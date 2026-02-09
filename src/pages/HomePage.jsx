@@ -147,9 +147,9 @@ export default function HomePage() {
   }, [opportunities]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--color-background)' }}>
       {/* HERO */}
-      <section className="bg-gradient-to-br from-brand-heroFrom to-brand-heroTo">
+      <section style={{ backgroundColor: 'var(--color-background)' }}>
         <div className="container py-12 text-center">
           <h1 className= "text-3xl md:text-5xl font-bold text-red-500 mb-3">
             This site is still under development
@@ -157,7 +157,7 @@ export default function HomePage() {
           <h1 className="text-3xl md:text-5xl font-bold text-brand-blue mb-3">
             Connect with volunteer opportunities in Windsor
           </h1>
-          <p className="text-gray-700 mb-6 max-w-2xl mx-auto">
+          <p className="mb-6 max-w-2xl mx-auto" style={{ color: 'var(--color-text-primary)' }}>
             Sign up to support local schools and organisations. Find roles that match your skills, location, and availability.
           </p>
 
@@ -175,19 +175,19 @@ export default function HomePage() {
               <p className="text-3xl font-bold text-brand-blue">
                 {stats.hours.toLocaleString()}
               </p>
-              <p className="text-sm text-gray-600">Volunteer Hours</p>
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Volunteer Hours</p>
             </div>
             <div className="card">
               <p className="text-3xl font-bold text-brand-blue">
                 {stats.volunteers.toLocaleString()}
               </p>
-              <p className="text-sm text-gray-600">Volunteers Engaged</p>
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Volunteers Engaged</p>
             </div>
             <div className="card">
               <p className="text-3xl font-bold text-brand-blue">
                 {stats.opportunities.toLocaleString()}
               </p>
-              <p className="text-sm text-gray-600">Opportunities Posted</p>
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Opportunities Posted</p>
             </div>
           </div>
         </div>
@@ -197,8 +197,8 @@ export default function HomePage() {
         {/* Two-up cards */}
         <div className="container grid md:grid-cols-2 gap-6 py-10">
           <div className="card">
-            <h2 className="text-xl font-semibold mb-2 text-gray-900">For Volunteers</h2>
-            <ul className="text-gray-700 list-disc list-inside space-y-1">
+            <h2 className="text-xl font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>For Volunteers</h2>
+            <ul className="list-disc list-inside space-y-1" style={{ color: 'var(--color-text-secondary)' }}>
               <li>Browse opportunities</li>
               <li>Sign up to volunteer</li>
               <li>Track your impact</li>
@@ -212,8 +212,8 @@ export default function HomePage() {
           </div>
 
           <div className="card">
-            <h2 className="text-xl font-semibold mb-2 text-gray-900">For Organisations</h2>
-            <ul className="text-gray-700 list-disc list-inside space-y-1">
+            <h2 className="text-xl font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>For Organisations</h2>
+            <ul className="list-disc list-inside space-y-1" style={{ color: 'var(--color-text-secondary)' }}>
               <li>Browse public volunteer profiles</li>
               <li>Submit volunteer needs</li>
               <li>Engage with the community</li>
@@ -229,37 +229,38 @@ export default function HomePage() {
 
         {/* Upcoming opportunities */}
         <section className="container pb-12">
-          <div className="page-header">
-            <h2 className="text-2xl font-bold mb-4 text-gray-900">📅 Upcoming Opportunities</h2>
-            <div className="flex gap-2">
+          <div className="mb-4">
+            <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--color-text-primary)' }}>📅 Upcoming Opportunities</h2>
+          </div>
+
+          <div className="card">
+            <div className="flex justify-end mb-4">
               <Link to="/opportunities" className="btn-primary rounded-xl">
                 More
               </Link>
             </div>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-card">
+            
             {isLoading ? (
-              <p className="p-6 text-gray-600">Loading...</p>
+              <p className="p-6" style={{ color: 'var(--color-text-secondary)' }}>Loading...</p>
             ) : topThree.length > 0 ? (
-              <ul className="divide-y">
+              <ul className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
                 {topThree.map((op) => {
                   const orgName = orgNameById.get(op.org_id) ?? 'Organisation';
                   return (
                     <li key={op.id}>
                       <Link
                         to={`/opportunities?opId=${op.id}`}
-                        className="flex items-center justify-between py-4 px-6 block hover:bg-gray-50 transition rounded-xl"
+                        className="flex items-center justify-between py-4 px-6 block hover:opacity-80 transition rounded-xl"
                         aria-label={`View ${op.title}`}
                       >
                         <div>
-                          <p className="text-lg font-medium text-gray-900">{op.title}</p>
+                          <p className="text-lg font-medium" style={{ color: 'var(--color-text-primary)' }}>{op.title}</p>
                           {/* 👇 Replaced location with org name */}
-                          <p className="text-sm text-gray-600">by {orgName}</p>
+                          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>by {orgName}</p>
                         </div>
 
                         {/* Unified schedule label (Days • Time • Date) from schedule.js */}
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                           Dates & Times:
                           <span className="ml-2">{formatOpportunitySchedule(op)}</span>
                         </p>
@@ -269,7 +270,7 @@ export default function HomePage() {
                 })}
               </ul>
             ) : (
-              <p className="p-6 text-gray-600">No upcoming opportunities.</p>
+              <p className="p-6" style={{ color: 'var(--color-text-secondary)' }}>No upcoming opportunities.</p>
             )}
           </div>
         </section>

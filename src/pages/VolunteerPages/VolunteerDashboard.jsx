@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
+import ListSkeleton from '../../components/skeletons/ListSkeleton';
 
 export default function VolunteerDashboard() {
   const [userId, setUserId] = useState(null);
@@ -127,6 +128,14 @@ export default function VolunteerDashboard() {
       return cp;
     });
   };
+
+  if (isLoading) return (
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <h1 className="title">Volunteer Dashboard</h1>
+      <ListSkeleton items={5} />
+    </div>
+  );
+  if (error) return <p className="text-center text-red-600 mt-20">Failed to load enquiries.</p>;
 
   // Group enquiries by status
   const grouped = { pending: [], accepted: [], denied: [] };
@@ -322,30 +331,23 @@ export default function VolunteerDashboard() {
   );
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="page-header">
-        <h1 className="title">Received Enquiries</h1>
-        <div className="flex gap-2">
-          <Link to="/volunteer/sent-enquiries" className="btn btn-success">
-            Sent Enquiries
-          </Link>
-        </div>
+    <div className="max-w-3xl mx-auto px-4 py-8" id="main-content">
+      <div className="mb-8">
+        <h1 className="title">Volunteer Dashboard</h1>
+        <p className="page-description">
+          Manage enquiries from organisations and respond to opportunities. Accept enquiries you're interested in or decline those that don't fit your schedule.
+        </p>
+      </div>
+      
+      <div className="flex gap-2 mb-6">
+        <Link to="/volunteer/sent-enquiries" className="btn btn-success">
+          Sent Enquiries
+        </Link>
       </div>
 
-      {isLoading ? (
-        <p className="text-center mt-10">Loading your dashboard...</p>
-      ) : error ? (
-        <div className="text-center text-red-600 mt-10">
-          <p>⚠️ Failed to load enquiries.</p>
-          <p className="error-text">{error.message}</p>
-        </div>
-      ) : (
-        <>
-          {renderList('Accepted', grouped.accepted, 'accepted')}
-          {renderList('Denied', grouped.denied, 'denied')}
-          {renderList('Awaiting Response', grouped.pending, 'pending')}
-        </>
-      )}
+      {renderList('Pending', grouped.pending, 'pending')}
+      {renderList('Accepted', grouped.accepted, 'accepted')}
+      {renderList('Denied', grouped.denied, 'denied')}
     </div>
   );
 }

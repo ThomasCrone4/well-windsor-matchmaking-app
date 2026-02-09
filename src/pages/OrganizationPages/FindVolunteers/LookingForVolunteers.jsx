@@ -3,6 +3,7 @@ import { supabase } from '../../../utils/supabase';
 import { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { Link, useNavigate } from 'react-router-dom';
+import CardSkeleton from '../../../components/skeletons/CardSkeleton';
 
 export default function LookingForVolunteersPage() {
   const [filters, setFilters] = useState({ town: 'All'});
@@ -104,16 +105,27 @@ export default function LookingForVolunteersPage() {
     }
   };
 
-  if (isLoading) return <p className="text-center mt-20">Loading volunteers...</p>;
+  if (isLoading) return (
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <h1 className="title">Find Volunteers</h1>
+      <CardSkeleton count={6} />
+    </div>
+  );
   if (error) return <p className="text-center text-red-600 mt-20">Failed to load volunteers.</p>;
 
   const filtered = filterVolunteers(data || []);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="page-header">
+    <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
+      <div className="mb-8">
         <h1 className="title">Find Volunteers</h1>
-        <div className="flex justify-center mb-6">
+        <p className="page-description">
+          Search public volunteer profiles to find skilled individuals for your opportunities. Contact volunteers directly to discuss potential matches.
+        </p>
+      </div>
+      
+      <div className="mb-6">
+        <div className="flex justify-center">
           <Link to="/organization/sent-enquiries" className="btn-success">Sent Enquiries</Link>
         </div>
       </div>
