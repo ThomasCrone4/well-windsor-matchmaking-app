@@ -1,16 +1,18 @@
 // src/components/Navbar.jsx
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { UserCircle, Moon, Sun } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { useSession } from '../context/SessionContext';
 import { useTheme } from '../context/ThemeContext';
+import NotificationsDropdown from './NotificationsDropdown';
 
 export default function Navbar() {
   const { session } = useSession();
   const userId = session?.user?.id;
   const { theme, toggleTheme, isDark } = useTheme();
+  const location = useLocation();
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -46,14 +48,22 @@ export default function Navbar() {
   const { data: isAdmin } = useQuery({
     queryKey: ['is-admin', userId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('admins')
-        .select('user_id')
-        .eq('user_id', userId)
-        .single();
-      // if not found, data is null/single() may 406; treat as false
-      if (error && error.code !== 'PGRST116') throw error; // ignore "Results contain 0 rows" style error
-      return Boolean(data);
+      try {
+        const { data, error } = await supabase
+          .from('admins')
+          .select('user_id')
+          .eq('user_id', userId)
+          .maybeSingle(); // Use maybeSingle instead of single to avoid 406
+        
+        if (error && error.code !== 'PGRST116') {
+          console.warn('Admin check error:', error.message);
+          return false;
+        }
+        return Boolean(data);
+      } catch (err) {
+        console.warn('Admin check failed:', err.message);
+        return false;
+      }
     },
     enabled: !!userId,
     staleTime: 60_000,
@@ -99,10 +109,20 @@ export default function Navbar() {
             <>
               <Link to="/volunteers" className="btn-secondary">
                 Looking for Volunteers
-            </Link>
-            {/* <Link to="/organization/logged-hours" className="btn-secondary">Logged Hours</Link> */}
-          </>
-        )}
+              </Link>
+              <Link 
+                to="/organization/logged-hours" 
+                className="btn-secondary"
+                style={location.pathname === '/organization/logged-hours' ? {
+                  backgroundColor: 'var(--color-brand-teal)',
+                  color: 'white',
+                  fontWeight: '600'
+                } : {}}
+              >
+                Log Hours
+              </Link>
+            </>
+          )}
 
         {/* Admin link (only visible to users in the `admins` table) */}
         {isLoggedIn && isAdmin && (
@@ -118,20 +138,37 @@ export default function Navbar() {
         ) : (
           <>
             {role === 'volunteer' && (
-              <Link to="/volunteer-dashboard" className="btn-secondary">
-                Dashboard
-              </Link>
+              <>
+                <Link to="/volunteer-dashboard" className="btn-secondary">
+                  Dashboard
+                </Link>
+                <Link 
+                  to="/volunteer/log-hours" 
+                  className="btn-secondary"
+                  style={location.pathname.startsWith('/volunteer/log-hours') ? {
+                    backgroundColor: 'var(--color-brand-teal)',
+                    color: 'white',
+                    fontWeight: '600'
+                  } : {}}
+                >
+                  Log Hours
+                </Link>
+              </>
             )}
 
             {role === 'organization' && (
-              <Link to="/organization-dashboard" className="btn-secondary">
-                Dashboard
-              </Link>
+              <>
+                <Link to="/organization-dashboard" className="btn-secondary">
+                  Dashboard
+                </Link>
+              </>
             )}
 
             <Link to={profileLink} className="text-brand-teal hover:text-blue-600 flex items-center gap-1" aria-label="Profile">
               <UserCircle className="w-10 h-10" aria-hidden="true" />
             </Link>
+
+            <NotificationsDropdown />
 
             <button
               onClick={handleLogout}

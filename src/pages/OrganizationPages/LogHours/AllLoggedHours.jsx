@@ -225,6 +225,7 @@ export default function OrgLoggedHoursPage() {
 
   /** ---------------- Card renderer (matches volunteer layout) ---------------- */
   const LogCard = ({ log }) => {
+    const isEditing = editingId === log.id;
     const totalMinutes =
       typeof log.total_minutes === 'number' && !Number.isNaN(log.total_minutes)
         ? log.total_minutes

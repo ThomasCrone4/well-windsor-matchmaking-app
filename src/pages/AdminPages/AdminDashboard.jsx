@@ -52,14 +52,11 @@ async function getAllOpportunities({ status, orgId, showExpired, q, orgs }) {
 async function getAllVolunteers({ q, town, dbsStatus }) {
   let query = supabase
     .from('user_profiles')
-    .select('id,name,email,home_town,dbs_checked,created_at,public_profile')
-    .eq('role', 'volunteer')
+    .select('id,name,email,home_town,created_at,public_profile')
     .order('created_at', { ascending: false });
 
   if (q) query = query.ilike('name', `%${q}%`);
   if (town && town !== 'All') query = query.eq('home_town', town);
-  if (dbsStatus === 'checked') query = query.eq('dbs_checked', true);
-  if (dbsStatus === 'unchecked') query = query.eq('dbs_checked', false);
   
   const { data, error } = await query;
   if (error) throw error;
@@ -214,6 +211,16 @@ export default function AdminDashboard() {
         <p className="text-gray-600 mt-2">
           Manage opportunities, volunteers, hours tracking, and location settings
         </p>
+      </div>
+
+      {/* Navigation Buttons */}
+      <div className="flex gap-3 mb-6">
+        <Link to="/admin/analytics" className="btn btn-secondary">
+          Analytics
+        </Link>
+        <Link to="/admin/users" className="btn btn-secondary">
+          User Management
+        </Link>
       </div>
 
       {/* Tabs */}

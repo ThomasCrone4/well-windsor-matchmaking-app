@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'react-hot-toast';
 
 export default function AvailabilityMatrix({ value = [], onChange }) {
   const startRefs = useRef([]);
@@ -44,6 +45,21 @@ export default function AvailabilityMatrix({ value = [], onChange }) {
         const minEnd = next.start_date && next.start_date > today ? next.start_date : today;
         if (next.end_date && next.end_date < minEnd) next.end_date = minEnd;
       }
+
+      // Validate end_time > start_time
+      if ((field === 'start_time' || field === 'end_time') && next.start_time && next.end_time) {
+        const [startHour, startMin] = next.start_time.split(':').map(Number);
+        const [endHour, endMin] = next.end_time.split(':').map(Number);
+        
+        const startMinutes = startHour * 60 + startMin;
+        const endMinutes = endHour * 60 + endMin;
+        
+        if (endMinutes <= startMinutes) {
+          toast.error('End time must be after start time');
+          return b; // Return unchanged block
+        }
+      }
+
       return next;
     });
     handleUpdate(updated);

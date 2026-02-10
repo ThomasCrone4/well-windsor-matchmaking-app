@@ -36,6 +36,13 @@ export default function SendVolunteerEnquiry() {
   }, [volunteerId]);
 
   const onSubmit = async ({ subject, message }) => {
+    // Validate word count (max 500 words)
+    const wordCount = message.trim().split(/\s+/).length;
+    if (wordCount > 500) {
+      toast.error(`Message is too long (${wordCount} words). Maximum 500 words allowed.`);
+      return;
+    }
+
     const confirm = window.confirm(
       'Are you sure you want to send this enquiry to the volunteer?\n\nThis will be logged and cannot be undone.'
     );
@@ -45,6 +52,24 @@ export default function SendVolunteerEnquiry() {
     const orgUser = sessionData?.session?.user;
     if (!orgUser) {
       toast.error('You must be logged in to send an enquiry.');
+      return;
+    }
+
+    // Check for recent enquiry within 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    const { data: recentEnquiry } = await supabase
+      .from('applications')
+      .select('id, created_at')
+      .eq('org_id', orgUser.id)
+      .eq('volunteer_id', volunteerId)
+      .eq('direction', 'to_volunteer')
+      .gte('created_at', twentyFourHoursAgo)
+      .maybeSingle();
+
+    if (recentEnquiry) {
+      const hoursAgo = Math.floor((Date.now() - new Date(recentEnquiry.created_at)) / (1000 * 60 * 60));
+      toast.error(`You already contacted this volunteer ${hoursAgo} hour${hoursAgo !== 1 ? 's' : ''} ago. Please wait 24 hours between enquiries.`);
       return;
     }
 

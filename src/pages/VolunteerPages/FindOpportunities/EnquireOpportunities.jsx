@@ -36,6 +36,13 @@ export default function EnquiryPage() {
   }, [opportunityId]);
 
   const onSubmit = async ({ subject, message }) => {
+    // Validate word count (max 500 words)
+    const wordCount = message.trim().split(/\s+/).length;
+    if (wordCount > 500) {
+      toast.error(`Message is too long (${wordCount} words). Maximum 500 words allowed.`);
+      return;
+    }
+
     const confirmation = window.confirm(
       'Are you sure you want to send this enquiry?\n\nAn email will be sent to the organisation and this action cannot be undone.'
     );
@@ -50,16 +57,21 @@ export default function EnquiryPage() {
       return;
     }
 
+    // Check for existing application (including denied ones)
     const { data: existing } = await supabase
       .from('applications')
-      .select('id')
+      .select('id, status')
       .eq('opportunity_id', opportunityId)
       .eq('volunteer_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (existing) {
-      toast.error('You have already enquired about this opportunity.');
-      navigate('/volunteer/sent-enquiries')
+      if (existing.status === 'denied') {
+        toast.error('Your application to this opportunity was previously rejected.');
+      } else {
+        toast.error('You have already enquired about this opportunity.');
+      }
+      navigate('/volunteer/sent-enquiries');
       return;
     }
 
