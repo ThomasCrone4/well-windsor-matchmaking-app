@@ -140,7 +140,7 @@ export const useSmartMatching = (volunteerId) => {
             opportunity_id: match.opportunity_id,
             opportunityTitle: match.volunteer_opportunities?.title || 'Unknown',
             composite_score: Math.round((match.match_score || 0) * 100), // Convert 0-1 to 0-100
-            semantic_similarity: match.bio_similarity || 0,
+            semantic_similarity: Math.round((match.bio_similarity || 0) * 100), // Convert to percentage
             skills_match_percentage: Math.round((match.skills_similarity || 0) * 100),
             availability_match: Math.round((match.availability_match || 0) * 100),
             explanation: {

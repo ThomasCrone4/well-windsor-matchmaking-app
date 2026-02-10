@@ -47,7 +47,7 @@ import ProtectedRoute from './components/ProtectedRoutes';
 import AdminRoute from './pages/AdminPages/AdminRoute'; // create per earlier snippet
 import AdminDashboard from './pages/AdminPages/AdminDashboard'; // place the dashboard here
 import AdminAnalytics from './pages/AdminPages/AdminAnalytics';
-import { generateSampleData } from './utils/sampleDataGenerator.js';
+import { generateSampleData, generateMatchesOnly } from './utils/sampleDataGenerator.js';
 
 // Expose to window for console access
 window.seedData = async () => {
@@ -55,6 +55,18 @@ window.seedData = async () => {
   try {
     await generateSampleData();
     console.log('✅ Sample data generated! Reloading page...');
+    setTimeout(() => window.location.reload(), 1000);
+  } catch (err) {
+    console.error('❌ Error:', err);
+  }
+};
+
+// Generate ONLY matches (no volunteers/opportunities)
+window.seedMatches = async () => {
+  console.log('🔄 Generating matches only...');
+  try {
+    await generateMatchesOnly();
+    console.log('✅ Matches generated! Reloading page...');
     setTimeout(() => window.location.reload(), 1000);
   } catch (err) {
     console.error('❌ Error:', err);

@@ -217,6 +217,75 @@ const SAMPLE_OPPORTUNITIES = [
 ];
 
 /**
+ * Generate ONLY match records for existing opportunities
+ */
+export async function generateMatchesOnly() {
+  try {
+    console.log('🎯 Generating match records for existing opportunities...');
+
+    // Get current user
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+
+    if (!authUser) {
+      throw new Error('Must be logged in to generate matches');
+    }
+
+    // Fetch ALL active opportunities
+    const { data: allActiveOpps, error: fetchOppsError } = await supabase
+      .from('volunteer_opportunities')
+      .select('id')
+      .eq('status', 'active');
+
+    if (fetchOppsError) {
+      throw new Error(`Could not fetch opportunities: ${fetchOppsError.message}`);
+    }
+
+    if (!allActiveOpps || allActiveOpps.length === 0) {
+      console.warn('⚠️ No active opportunities found to match against');
+      return { matchesCreated: 0 };
+    }
+
+    const matchData = [];
+
+    // Create matches for the CURRENT USER against all active opportunities
+    for (let j = 0; j < allActiveOpps.length; j++) {
+      // Generate component scores with varied but generally good matches for demo
+      const semanticSimilarity = Math.random() * 0.4 + 0.55; // 0.55-0.95 (55-95%)
+      const skillsSimilarity = Math.random() * 0.45 + 0.45; // 0.45-0.90 (45-90%)
+      const availabilityMatch = Math.random() * 0.35 + 0.60; // 0.60-0.95 (60-95%)
+      
+      // Calculate composite score using formula: 50% Profile + 25% Skills + 25% Availability
+      const compositeScore = (semanticSimilarity * 0.5) + (skillsSimilarity * 0.25) + (availabilityMatch * 0.25);
+      
+      matchData.push({
+        volunteer_id: authUser.id,
+        opportunity_id: allActiveOpps[j].id,
+        match_score: compositeScore,
+        skills_similarity: skillsSimilarity,
+        bio_similarity: semanticSimilarity,
+        availability_match: availabilityMatch,
+      });
+    }
+
+    const { error: matchError } = await supabase
+      .from('match_results')
+      .insert(matchData);
+
+    if (matchError) throw matchError;
+    
+    console.log(`✅ Created ${matchData.length} match records`);
+    console.log('🎉 Match generation complete!');
+    
+    return { matchesCreated: matchData.length };
+  } catch (error) {
+    console.error('❌ Error generating matches:', error);
+    throw error;
+  }
+}
+
+/**
  * Generate sample data with embeddings
  */
 export async function generateSampleData() {
@@ -323,10 +392,10 @@ export async function generateSampleData() {
     if (opportunitiesForMatching && opportunitiesForMatching.length > 0) {
       // Create matches for the CURRENT USER against all active opportunities
       for (let j = 0; j < opportunitiesForMatching.length; j++) {
-        // Generate component scores
-        const semanticSimilarity = Math.random() * 0.7 + 0.3; // 0.3-1.0
-        const skillsSimilarity = Math.random() * 0.7 + 0.2; // 0.2-0.9
-        const availabilityMatch = Math.random() * 0.8 + 0.2; // 0.2-1.0
+        // Generate component scores with varied but generally good matches for demo
+        const semanticSimilarity = Math.random() * 0.4 + 0.55; // 0.55-0.95 (55-95%)
+        const skillsSimilarity = Math.random() * 0.45 + 0.45; // 0.45-0.90 (45-90%)
+        const availabilityMatch = Math.random() * 0.35 + 0.60; // 0.60-0.95 (60-95%)
         
         // Calculate composite score using formula: 50% Profile + 25% Skills + 25% Availability
         const compositeScore = (semanticSimilarity * 0.5) + (skillsSimilarity * 0.25) + (availabilityMatch * 0.25);
