@@ -251,9 +251,20 @@ export default function OpportunitiesPage() {
     );
 
   const filtered = filterOpportunities(opps || []);
-  const finalList = onlyId
+  let finalList = onlyId
     ? (filtered || []).filter((op) => String(op.id) === String(onlyId))
     : filtered || [];
+
+  // Sort opportunities by match score (highest first) for volunteers
+  if (userProfile?.role === 'volunteer' && matchScoreMap.size > 0) {
+    finalList = [...finalList].sort((a, b) => {
+      const matchA = matchScoreMap.get(a.id);
+      const matchB = matchScoreMap.get(b.id);
+      const scoreA = matchA?.composite_score || 0;
+      const scoreB = matchB?.composite_score || 0;
+      return scoreB - scoreA; // Descending order (highest first)
+    });
+  }
 
   // ---- UI helpers for the top-right badge ----
   const getMatchBadge = (matchKind) => {

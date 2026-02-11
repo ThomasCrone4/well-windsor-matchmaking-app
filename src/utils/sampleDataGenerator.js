@@ -232,10 +232,44 @@ export async function generateMatchesOnly() {
       throw new Error('Must be logged in to generate matches');
     }
 
-    // Fetch ALL active opportunities
+    // Fetch current user's profile with skills
+    const { data: userProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('skills, available_anytime')
+      .eq('id', authUser.id)
+      .single();
+
+    if (profileError) {
+      throw new Error(`Could not fetch user profile: ${profileError.message}`);
+    }
+
+    // Parse user skills - handle multiple formats
+    let userSkills = [];
+    if (userProfile?.skills) {
+      try {
+        if (Array.isArray(userProfile.skills)) {
+          // Already an array
+          userSkills = userProfile.skills;
+        } else if (typeof userProfile.skills === 'string') {
+          // Try parsing as JSON first
+          try {
+            userSkills = JSON.parse(userProfile.skills);
+          } catch (jsonError) {
+            // If not JSON, treat as comma-separated string
+            userSkills = userProfile.skills.split(',').map(s => s.trim()).filter(Boolean);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not parse user skills:', e.message);
+      }
+    }
+    
+    console.log('✅ User skills loaded:', userSkills.length, 'skills:', userSkills);
+
+    // Fetch ALL active opportunities with their skills
     const { data: allActiveOpps, error: fetchOppsError } = await supabase
       .from('volunteer_opportunities')
-      .select('id')
+      .select('id, skills')
       .eq('status', 'active');
 
     if (fetchOppsError) {
@@ -251,20 +285,64 @@ export async function generateMatchesOnly() {
 
     // Create matches for the CURRENT USER against all active opportunities
     for (let j = 0; j < allActiveOpps.length; j++) {
-      // Generate component scores with varied but generally good matches for demo
-      const semanticSimilarity = Math.random() * 0.4 + 0.55; // 0.55-0.95 (55-95%)
-      const skillsSimilarity = Math.random() * 0.45 + 0.45; // 0.45-0.90 (45-90%)
-      const availabilityMatch = Math.random() * 0.35 + 0.60; // 0.60-0.95 (60-95%)
+      const opportunity = allActiveOpps[j];
       
-      // Calculate composite score using formula: 50% Profile + 25% Skills + 25% Availability
-      const compositeScore = (semanticSimilarity * 0.5) + (skillsSimilarity * 0.25) + (availabilityMatch * 0.25);
+      // Parse opportunity skills - handle multiple formats
+      let oppSkills = [];
+      if (opportunity.skills) {
+        try {
+          if (Array.isArray(opportunity.skills)) {
+            oppSkills = opportunity.skills;
+          } else if (typeof opportunity.skills === 'string') {
+            try {
+              oppSkills = JSON.parse(opportunity.skills);
+            } catch (jsonError) {
+              // If not JSON, treat as comma-separated string
+              oppSkills = opportunity.skills.split(',').map(s => s.trim()).filter(Boolean);
+            }
+          }
+        } catch (e) {
+          console.warn(`Could not parse skills for opportunity ${opportunity.id}:`, e.message);
+        }
+      }
+
+      // Calculate ACTUAL skills similarity
+      // Use: "What % of required skills does the user have?"
+      let skillsSimilarity = 0;
+      if (userSkills.length > 0 && oppSkills.length > 0) {
+        const userSkillsSet = new Set(userSkills.map(s => String(s).toLowerCase().trim()));
+        const oppSkillsSet = new Set(oppSkills.map(s => String(s).toLowerCase().trim()));
+        
+        const intersection = Array.from(oppSkillsSet).filter(skill => userSkillsSet.has(skill));
+        
+        // Calculate: matching skills / required skills (better for job matching)
+        skillsSimilarity = intersection.length / oppSkills.length;
+        
+        if (intersection.length > 0) {
+          console.log(`Match found for opp ${opportunity.id}: ${intersection.length}/${oppSkills.length} required skills:`, intersection);
+        }
+      } else {
+        // If no skills to compare, use a small random value to show some variation
+        skillsSimilarity = Math.random() * 0.2; // 0-20% for opportunities without skills comparison
+      }
+
+      // Bio similarity - keep random for demo (would use embeddings in production)
+      const bioSimilarity = Math.random() * 0.4 + 0.55; // 0.55-0.95 (55-95%)
+      
+      // Availability - use actual available_anytime value, with some variation
+      const availabilityMatch = userProfile.available_anytime 
+        ? Math.random() * 0.15 + 0.85 // 0.85-1.0 if available anytime
+        : Math.random() * 0.4 + 0.40; // 0.40-0.80 if limited availability
+      
+      // Calculate composite score using formula: 50% Bio + 25% Skills + 25% Availability
+      const compositeScore = (bioSimilarity * 0.5) + (skillsSimilarity * 0.25) + (availabilityMatch * 0.25);
       
       matchData.push({
         volunteer_id: authUser.id,
-        opportunity_id: allActiveOpps[j].id,
+        opportunity_id: opportunity.id,
         match_score: compositeScore,
         skills_similarity: skillsSimilarity,
-        bio_similarity: semanticSimilarity,
+        bio_similarity: bioSimilarity,
         availability_match: availabilityMatch,
       });
     }

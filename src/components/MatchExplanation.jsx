@@ -72,11 +72,11 @@ export default function MatchExplanation({
       {/* Detailed breakdown */}
       {isExpanded && (
         <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 p-4 space-y-3">
-          {/* Semantic Similarity */}
+          {/* Bio Similarity */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Profile Match
+                Bio Match
               </span>
               <span className="text-sm font-semibold text-gray-900 dark:text-white">
                 {semanticSimilarity}%
@@ -89,7 +89,7 @@ export default function MatchExplanation({
               />
             </div>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-              How well your profile matches this opportunity
+              How well your bio matches this opportunity
             </p>
           </div>
 
@@ -138,7 +138,7 @@ export default function MatchExplanation({
           {/* Overall calculation */}
           <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
             <p className="text-xs text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Overall Score =</span> 50% Profile + 25% Skills + 25% Availability
+              <span className="font-medium">Overall Score =</span> 50% Bio + 25% Skills + 25% Availability
             </p>
           </div>
         </div>
