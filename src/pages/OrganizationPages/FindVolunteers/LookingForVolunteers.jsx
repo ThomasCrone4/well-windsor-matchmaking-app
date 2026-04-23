@@ -42,7 +42,7 @@ export default function LookingForVolunteersPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
-        .select('volunteer_id')
+        .select('volunteer_id, created_at')
         .eq('org_id', orgId)
         .eq('direction', 'to_volunteer');
       if (error) throw error;
@@ -69,10 +69,17 @@ export default function LookingForVolunteersPage() {
       navigate('/auth');
       return;
     }
-    if (contactedSet.has(volunteerId)) {
-      toast('You’ve already contacted this volunteer.');
-      return;
+    
+    // Check if contacted within 24 hours
+    const contact = contactedRows?.find(r => r.volunteer_id === volunteerId);
+    if (contact) {
+      const hoursSince = Math.floor((Date.now() - new Date(contact.created_at)) / (1000 * 60 * 60));
+      if (hoursSince < 24) {
+        toast.error(`You contacted this volunteer ${hoursSince} hour${hoursSince !== 1 ? 's' : ''} ago. Please wait 24 hours between enquiries.`);
+        return;
+      }
     }
+    
     navigate(`/volunteers/${volunteerId}/enquire`);
   };
 

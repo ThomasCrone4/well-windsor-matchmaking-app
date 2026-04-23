@@ -13,6 +13,7 @@ import AuthPage from './pages/AuthPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import Redirector from './pages/Redirector';
 import UserList from './pages/AdminPages/UserList';
+import UserManagement from './pages/AdminPages/UserManagement';
 import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard';
 import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard';
 import OpportunitiesPage from './pages/OpportunitiesPage';
@@ -39,11 +40,38 @@ import Footer from './components/Footer';
 import ErrorBoundary from './components/ErrorBoundary';
 import { SessionProvider } from './context/SessionContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { NotificationsProvider } from './context/NotificationsContext';
 import ProtectedRoute from './components/ProtectedRoutes';
 
 
 import AdminRoute from './pages/AdminPages/AdminRoute'; // create per earlier snippet
 import AdminDashboard from './pages/AdminPages/AdminDashboard'; // place the dashboard here
+import AdminAnalytics from './pages/AdminPages/AdminAnalytics';
+import { generateSampleData, generateMatchesOnly } from './utils/sampleDataGenerator.js';
+
+// Expose to window for console access
+window.seedData = async () => {
+  console.log('🔄 Generating sample data...');
+  try {
+    await generateSampleData();
+    console.log('✅ Sample data generated! Reloading page...');
+    setTimeout(() => window.location.reload(), 1000);
+  } catch (err) {
+    console.error('❌ Error:', err);
+  }
+};
+
+// Generate ONLY matches (no volunteers/opportunities)
+window.seedMatches = async () => {
+  console.log('🔄 Generating matches only...');
+  try {
+    await generateMatchesOnly();
+    console.log('✅ Matches generated! Reloading page...');
+    setTimeout(() => window.location.reload(), 1000);
+  } catch (err) {
+    console.error('❌ Error:', err);
+  }
+};
 
 const queryClient = new QueryClient();
 
@@ -53,11 +81,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <ThemeProvider>
-            <BrowserRouter>
-              <div className="min-h-screen flex flex-col">
-                <Navbar />
-                <div className="flex-grow">
-                  <Routes>
+            <NotificationsProvider>
+              <BrowserRouter>
+                <div className="min-h-screen flex flex-col">
+                  <Navbar />
+                  <div className="flex-grow">
+                    <Routes>
                     {/* Public pages */}
                     <Route path="/" element={<HomePage />} />
                     <Route path="/opportunities" element={<OpportunitiesPage />} />
@@ -130,9 +159,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     </ProtectedRoute>
                   }
                 />
-                {/* <Route path="/opportunity/:id/logged-hours" element={<ProtectedRoute allowedRoles={['organization']}><PostLoggedHours /></ProtectedRoute>} />
-                <Route path="/opportunity/:id/logged-hours/:id/edit" element={<ProtectedRoute allowedRoles={['organization']}><EditConfirmHours /></ProtectedRoute>} />
-                <Route path="/organization/logged-hours" element={<ProtectedRoute allowedRoles={['organization']}><AllLoggedHours /></ProtectedRoute>} /> */}
+                <Route
+                  path="/organization/logged-hours"
+                  element={
+                    <ProtectedRoute allowedRoles={['organization']}>
+                      <AllLoggedHours />
+                    </ProtectedRoute>
+                  }
+                />
 
                 {/* Volunteer pages */}
                 <Route
@@ -167,9 +201,30 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     </ProtectedRoute>
                   }
                 />
-                {/* <Route path="/volunteer/log-hours" element={<ProtectedRoute allowedRoles={['volunteer']}><ListLogHours /></ProtectedRoute>} />
-                <Route path="/volunteer/log-hours/new" element={<ProtectedRoute allowedRoles={['volunteer']}><NewLogHours /></ProtectedRoute>} />
-                <Route path="/volunteer/log-hours/edit/:id" element={<ProtectedRoute allowedRoles={['volunteer']}><EditLogHours /></ProtectedRoute>} /> */}
+                <Route
+                  path="/volunteer/log-hours"
+                  element={
+                    <ProtectedRoute allowedRoles={['volunteer']}>
+                      <ListLogHours />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/volunteer/log-hours/new"
+                  element={
+                    <ProtectedRoute allowedRoles={['volunteer']}>
+                      <NewLogHours />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/volunteer/log-hours/edit/:id"
+                  element={
+                    <ProtectedRoute allowedRoles={['volunteer']}>
+                      <EditLogHours />
+                    </ProtectedRoute>
+                  }
+                />
 
                 {/* Admin pages */}
                 <Route
@@ -181,10 +236,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                   }
                 />
                 <Route
-                  path="/users"
+                  path="/admin/users"
                   element={
                     <AdminRoute>
-                      <UserList />
+                      <UserManagement />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/analytics"
+                  element={
+                    <AdminRoute>
+                      <AdminAnalytics />
                     </AdminRoute>
                   }
                 />
@@ -204,6 +267,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             duration: 5000,
           }}
         />
+        </NotificationsProvider>
         </ThemeProvider>
       </SessionProvider>
     </QueryClientProvider>

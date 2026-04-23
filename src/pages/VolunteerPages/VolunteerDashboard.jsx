@@ -12,8 +12,7 @@ export default function VolunteerDashboard() {
   const queryClient = useQueryClient();
   const [draftStatus, setDraftStatus] = useState({});
   const [messages, setMessages] = useState({});
-  const [loadingId, setLoadingId] = useState(null);
-
+  const [loadingId, setLoadingId] = useState(null);  const [statusChanges, setStatusChanges] = useState(new Map());
   const DEFAULT_REPLIES = {
     accepted: 'Thank you! I’m happy to volunteer.',
     denied:   'Thanks for reaching out, but I won’t be able to volunteer.',
@@ -116,10 +115,28 @@ export default function VolunteerDashboard() {
     const message = messages[id]?.trim();
     if (!status || !message) return;
 
+    // Check rate limit (max 5 changes per hour)
+    const now = Date.now();
+    const history = statusChanges.get(id) || [];
+    const lastHour = history.filter(timestamp => now - timestamp < 60 * 60 * 1000);
+    
+    if (lastHour.length >= 5) {
+      toast.error('Too many status changes for this enquiry. Please wait before changing it again.');
+      return;
+    }
+
     setLoadingId(id);
     await updateStatus.mutateAsync({ id, status, rejection_message: message });
     setLoadingId(null);
     cancelDraft(id);
+
+    // Track this status change
+    setStatusChanges(prev => {
+      const updatedHistory = [...(prev.get(id) || []), now];
+      const updated = new Map(prev);
+      updated.set(id, updatedHistory);
+      return updated;
+    });
 
     // Clear cached message so future toggles evaluate from server state
     setMessages(prev => {

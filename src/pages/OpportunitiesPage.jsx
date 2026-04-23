@@ -7,15 +7,24 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { isThisWeek, isThisMonth } from 'date-fns';
 import { formatOpportunitySchedule } from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
+import { useSmartMatching } from '../hooks/useSmartMatching';
+import MatchScore from '../components/MatchScore';
+import MatchExplanation from '../components/MatchExplanation';
 
 export default function OpportunitiesPage() {
   const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
   const [matchedOnly, setMatchedOnly] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedMatch, setExpandedMatch] = useState(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const onlyId = searchParams.get('opId');
+
+  // ML Matching hook - only for volunteers with embeddings
+  const { matches, loading: matchLoading } = useSmartMatching(
+    userProfile?.role === 'volunteer' ? userProfile?.id : null
+  );
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -34,14 +43,14 @@ export default function OpportunitiesPage() {
     fetchProfile();
   }, []);
 
-  // preload opportunity_ids this volunteer has already enquired about
+  // preload opportunity_ids and status this volunteer has already enquired about
   const { data: myApps } = useQuery({
     queryKey: ['my_applied_opportunity_ids', userProfile?.id],
     enabled: !!userProfile?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
-        .select('opportunity_id')
+        .select('opportunity_id, status')
         .eq('volunteer_id', userProfile.id);
       if (error) throw error;
       return data ?? [];
@@ -53,6 +62,20 @@ export default function OpportunitiesPage() {
     () => new Set((myApps ?? []).map((r) => r.opportunity_id)),
     [myApps]
   );
+
+  const appStatusMap = useMemo(
+    () => new Map((myApps ?? []).map((r) => [r.opportunity_id, r.status])),
+    [myApps]
+  );
+
+  // ML Matching score lookup
+  const matchScoreMap = useMemo(() => {
+    const map = new Map();
+    (matches ?? []).forEach((match) => {
+      map.set(match.opportunity_id, match);
+    });
+    return map;
+  }, [matches]);
 
   // Fetch opportunities (volunteers use RPC to get match_kind etc.)
   const {
@@ -228,9 +251,20 @@ export default function OpportunitiesPage() {
     );
 
   const filtered = filterOpportunities(opps || []);
-  const finalList = onlyId
+  let finalList = onlyId
     ? (filtered || []).filter((op) => String(op.id) === String(onlyId))
     : filtered || [];
+
+  // Sort opportunities by match score (highest first) for volunteers
+  if (userProfile?.role === 'volunteer' && matchScoreMap.size > 0) {
+    finalList = [...finalList].sort((a, b) => {
+      const matchA = matchScoreMap.get(a.id);
+      const matchB = matchScoreMap.get(b.id);
+      const scoreA = matchA?.composite_score || 0;
+      const scoreB = matchB?.composite_score || 0;
+      return scoreB - scoreA; // Descending order (highest first)
+    });
+  }
 
   // ---- UI helpers for the top-right badge ----
   const getMatchBadge = (matchKind) => {
@@ -370,16 +404,17 @@ export default function OpportunitiesPage() {
             const showBadge = userProfile?.role === 'volunteer' && op.match_kind;
             const badge = showBadge ? getMatchBadge(op.match_kind) : null;
 
+            // ML Matching score (for volunteers)
+            const mlMatch = userProfile?.role === 'volunteer' ? matchScoreMap.get(op.id) : null;
+            const isExpanded = expandedMatch === op.id;
+
             return (
               <li key={op.id} className="card p-6 space-y-2 relative">
-                {/* top-right match badge */}
-                {badge && (
-                  <span
-                    className={`absolute right-4 top-4 text-[11px] md:text-xs px-2.5 py-1 rounded-full font-medium ${badge.classes}`}
-                    title={badge.title}
-                  >
-                    {badge.label}
-                  </span>
+                {/* ML MatchScore badge - positioned top-right */}
+                {mlMatch && userProfile?.role === 'volunteer' && (
+                  <div className="absolute right-4 top-4 z-10">
+                    <MatchScore score={mlMatch.composite_score} />
+                  </div>
                 )}
 
                 <h2 className="text-xl font-semibold">{op.title}</h2>
@@ -403,15 +438,62 @@ export default function OpportunitiesPage() {
                   </div>
                 ) : null}
 
+                {/* ML Match Explanation */}
+                {mlMatch && userProfile?.role === 'volunteer' && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <button
+                      onClick={() => setExpandedMatch(isExpanded ? null : op.id)}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-800 transition flex items-center gap-2"
+                    >
+                      {isExpanded ? '▼' : '▶'} View match details
+                    </button>
+                    {isExpanded && (
+                      <div className="mt-3">
+                        <MatchExplanation 
+                          matchData={{
+                            matchScore: mlMatch.composite_score || 0,
+                            semanticSimilarity: Math.round(mlMatch.semantic_similarity || 0),
+                            skillsSimilarity: Math.round(mlMatch.skills_match_percentage || 0),
+                            availabilityMatch: Math.round(mlMatch.availability_match || 0),
+                            explanation: `Based on your profile, skills, and availability for this opportunity.`
+                          }}
+                          showDetails={true}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3 pt-2">
-                  <button
-                    className={`btn-primary ${alreadyEnquired ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    disabled={alreadyEnquired}
-                    onClick={() => handleApply(op.id)}
-                    title={alreadyEnquired ? 'You already enquired' : 'Enquire'}
-                  >
-                    {alreadyEnquired ? 'Already enquired' : 'Enquire'}
-                  </button>
+                  {userProfile?.role === 'volunteer' && (
+                    <>
+                      {appStatusMap.get(op.id) === 'denied' ? (
+                        <button
+                          className="btn-secondary opacity-60 cursor-not-allowed"
+                          disabled
+                          title="Your application was rejected"
+                        >
+                          Rejected
+                        </button>
+                      ) : alreadyEnquired ? (
+                        <button
+                          className="btn-secondary opacity-60 cursor-not-allowed"
+                          disabled
+                          title="You already enquired"
+                        >
+                          Already enquired
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-primary"
+                          onClick={() => handleApply(op.id)}
+                          title="Enquire about this opportunity"
+                        >
+                          Enquire
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </li>
             );

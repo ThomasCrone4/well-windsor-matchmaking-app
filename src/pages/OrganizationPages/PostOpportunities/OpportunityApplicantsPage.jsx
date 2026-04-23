@@ -14,8 +14,7 @@ export default function OpportunityApplicantsPage() {
   const [draftStatus, setDraftStatus] = useState({});
   const [messages, setMessages] = useState({});
   const [loadingId, setLoadingId] = useState(null);
-  const [expandedMessages, setExpandedMessages] = useState({});
-
+  const [expandedMessages, setExpandedMessages] = useState({});  const [statusChanges, setStatusChanges] = useState(new Map());
   const DEFAULT_REPLIES = {
     accepted: "Congratulations! We’d love to have you join us.",
     denied:   "Hi, unfortunately we have decided not to work with you.",
@@ -113,10 +112,28 @@ export default function OpportunityApplicantsPage() {
     const message = messages[appId]?.trim();
     if (!status || !message) return;
 
+    // Check rate limit (max 5 changes per hour)
+    const now = Date.now();
+    const history = statusChanges.get(appId) || [];
+    const lastHour = history.filter(timestamp => now - timestamp < 60 * 60 * 1000);
+    
+    if (lastHour.length >= 5) {
+      toast.error('Too many status changes for this application. Please wait before changing it again.');
+      return;
+    }
+
     setLoadingId(appId);
     await updateStatus.mutateAsync({ appId, status, rejection_message: message });
     setLoadingId(null);
     cancelDraft(appId);
+
+    // Track this status change
+    setStatusChanges(prev => {
+      const updatedHistory = [...(prev.get(appId) || []), now];
+      const updated = new Map(prev);
+      updated.set(appId, updatedHistory);
+      return updated;
+    });
   };
 
   const toggleMessage = (id) => {

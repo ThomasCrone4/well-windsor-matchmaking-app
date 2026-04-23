@@ -146,7 +146,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'var(--color-background)' }}>
       <form onSubmit={handleSubmit} className="card w-full max-w-lg form">
         <h2 className="title">{isSigningUp ? 'Sign Up' : 'Log In'}</h2>
 
