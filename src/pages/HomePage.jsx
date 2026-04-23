@@ -151,9 +151,6 @@ export default function HomePage() {
       {/* HERO */}
       <section style={{ backgroundColor: 'var(--color-background)' }}>
         <div className="container py-12 text-center">
-          <h1 className= "text-3xl md:text-5xl font-bold text-red-500 mb-3">
-            This site is still under development
-          </h1>
           <h1 className="text-3xl md:text-5xl font-bold text-brand-blue mb-3">
             Connect with volunteer opportunities in Windsor
           </h1>
