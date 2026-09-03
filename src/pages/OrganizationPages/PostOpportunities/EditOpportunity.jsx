@@ -13,14 +13,28 @@ import useUnsavedChangesWarning from '../../../hooks/useUnsavedWarning';
 
 // 🔁 schedule.js helpers
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
+import { TOWNS } from '../../../utils/towns';
+
+// This form is reset() straight from the database row, so every field that
+// is nullable in the database arrives here as null -- and z.string().optional()
+// rejects null, it only permits undefined. `skills` is null on almost every
+// opportunity, which made "Save Changes" fail validation and return silently:
+// no toast, no error text, no saved row, because the skills input has no error
+// slot to render into. Any nullable column reaching this schema needs
+// .nullable(), not just .optional().
+const nullableText = z.string().nullable().optional();
 
 const getSchema = (isDraft) =>
   z.object({
-    title: isDraft ? z.string().optional() : z.string().min(2, 'Title is required'),
-    description: z.string().optional(),
-    location: isDraft ? z.string().optional() : z.string().min(2, 'Location is required'),
-    contact: isDraft ? z.string().optional() : z.string().min(3, 'Contact mail is required'),
-    skills: z.string().optional(),
+    title: isDraft ? nullableText : z.string().min(2, 'Title is required'),
+    description: nullableText,
+    location: isDraft ? nullableText : z.string().min(2, 'Location is required'),
+    // See PostOpportunity: draft may be blank, active may not.
+    town: isDraft
+      ? nullableText
+      : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
+    contact: isDraft ? nullableText : z.string().min(3, 'Contact mail is required'),
+    skills: nullableText,
     volunteers_needed: isDraft
       ? z.coerce.number().optional()
       : z.coerce.number().min(1, 'Must be at least 1'),
@@ -37,7 +51,8 @@ const getSchema = (isDraft) =>
       .nullable()
       .optional(),
     generally_needed: z.boolean(),
-    requires_dbs: z.boolean(),
+    // Nullable in the database, so the same trap as above.
+    requires_dbs: z.boolean().nullable().optional(),
   });
 
 export default function EditOpportunity() {
@@ -62,6 +77,7 @@ export default function EditOpportunity() {
       title: '',
       description: '',
       location: '',
+      town: '',
       contact: '',
       skills: '',
       volunteers_needed: 1,
@@ -89,8 +105,14 @@ export default function EditOpportunity() {
 
   useEffect(() => {
     if (opportunity) {
-      // Ensure the matrix is always an array for the UI
-      const defaults = { ...opportunity, when_needed: opportunity.when_needed ?? [] };
+      // Ensure the matrix is always an array, and town always a string --
+      // a null value on a controlled <select> makes React fall back to
+      // uncontrolled and warn.
+      const defaults = {
+        ...opportunity,
+        when_needed: opportunity.when_needed ?? [],
+        town: opportunity.town ?? '',
+      };
       reset(defaults, { keepDirty: false, keepTouched: false });
       originalData.current = defaults;
       setIsDraft(opportunity.status === 'draft');
@@ -219,6 +241,7 @@ export default function EditOpportunity() {
       title: formData.title ?? '',
       description: formData.description ?? '',
       location: formData.location ?? '',
+      town: formData.town || null,
       contact: formData.contact ?? '',
       skills: formData.skills || null,
       volunteers_needed: Number(formData.volunteers_needed ?? 1),
@@ -240,6 +263,21 @@ export default function EditOpportunity() {
     }
 
     mutation.mutate(updateData);
+  };
+
+  /**
+   * Never let a validation failure be silent again. Not every field on this
+   * form renders an error slot, so without this a rejected submit looks
+   * exactly like a save that worked.
+   */
+  const onInvalid = (formErrors) => {
+    const fields = Object.keys(formErrors ?? {});
+    console.warn('EditOpportunity validation failed:', formErrors);
+    toast.error(
+      fields.length
+        ? `Could not save — please check: ${fields.join(', ')}`
+        : 'Could not save — please check the form.'
+    );
   };
 
   const handleDiscard = () => {
@@ -297,7 +335,27 @@ export default function EditOpportunity() {
               {errors.description && <p className="error-text">{errors.description.message}</p>}
             </div>
 
-            {/* Location */}
+            {/* Town — the filter key volunteers browse by */}
+            <div className="form-row">
+              <label className="label">
+                Town {!isDraft && <span className="required" />}
+              </label>
+              <select
+                {...register('town')}
+                className={`select ${errors.town ? 'input-invalid' : ''}`}
+                aria-invalid={!!errors.town}
+              >
+                <option value="">Select a town…</option>
+                {TOWNS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              {errors.town
+                ? <p className="error-text">{errors.town.message}</p>
+                : <p className="help-text">Volunteers filter the browse by town.</p>}
+            </div>
+
+            {/* Location — free text, the human-readable place */}
             <div className="form-row">
               <label className="label">
                 Location {!isDraft && <span className="required" />}
@@ -306,8 +364,11 @@ export default function EditOpportunity() {
                 {...register('location')}
                 className={`input ${errors.location ? 'input-invalid' : ''}`}
                 aria-invalid={!!errors.location}
+                placeholder="e.g. St Edward's First School, Parsonage Lane"
               />
-              {errors.location && <p className="error-text">{errors.location.message}</p>}
+              {errors.location
+                ? <p className="error-text">{errors.location.message}</p>
+                : <p className="help-text">The venue or address. Free text — the town above does the filtering.</p>}
             </div>
 
             {/* Contact Email */}
@@ -401,7 +462,7 @@ export default function EditOpportunity() {
                     }
 
                     handleSave(data, 'active');
-                  })}
+                  }, onInvalid)}
                   className="btn btn-success"
                 >
                   Post Opportunity
@@ -412,7 +473,7 @@ export default function EditOpportunity() {
                 <button
                   type="button"
                   disabled={!isDirty || isSubmitting || mutation.isPending}
-                  onClick={handleSubmit((data) => handleSave(data))}
+                  onClick={handleSubmit((data) => handleSave(data), onInvalid)}
                   className="btn btn-primary"
                 >
                   Save Changes

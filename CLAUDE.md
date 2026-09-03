@@ -48,15 +48,57 @@ volunteer's profile row, and adding one is not the answer. Use a view:
 | `public_volunteers` | volunteers who set `public_profile = true` |
 | `opportunity_applicants` | people who applied to *your* opportunities |
 | `org_outreach_sent` | *your* outreach log, with the volunteer's name |
+| `public_organisations` | every organisation: id, name, home_town, bio |
 
-All three run with owner rights (`security_invoker = false`), carry no
-contact columns, and gate on `auth.uid()`. Organisations *are* readable on
-the base table; they're public entities.
+All four run with owner rights (`security_invoker = false`) and carry no
+contact columns; the first three gate on `auth.uid()`, and
+`public_organisations` is readable by `anon` too. Supabase's linter flags
+all of them as "Security Definer View" — that is the design, not a finding.
+
+**Organisations are public entities, and `anon` can already read them on
+the base table.** `20260903121939` revoked anon's *table* SELECT on
+`user_profiles` and granted back ten named columns (id, role, name,
+home_town, skills, bio, available_anytime, availability_matrix,
+public_profile, created_at); the `profiles: organizations are public`
+policy then limits anon to `role = 'organization'` rows. So a logged-out
+visitor does see real organisation names — verify before "fixing" that.
+Prefer `public_organisations` in new code anyway: a fixed column list
+cannot widen the way a column-grant list can if someone ever adds an
+anon-readable row policy.
 
 **An organisation never gets a volunteer's email address.** `send-outreach`
 resolves it server-side and sets `Reply-To` to the org. The client passes a
 `volunteer_id` and never an address — do not add a parameter that carries
 one.
+
+**`town` filters, `location` describes.** `volunteer_opportunities` has
+both. `town` is the filter key, CHECK-constrained to the list in
+`src/utils/towns.js`, and required once `status = 'active'` (a second
+CHECK). `location` is free text for the venue — "St Edward's, Parsonage
+Lane". Filtering on `location` is the bug this split fixed: it was an exact
+string match that only worked because every seed row happened to say
+exactly "Windsor", and the first org to type a real address vanished from a
+filtered browse with no error.
+
+**`match_kind` has five values, and it is not `match_rank`.**
+`match_opportunities_by_availability` returns both. `match_rank` (1/2/3)
+orders the list; `match_kind` is the claim shown to the user — `FULL`,
+`PARTIAL`, `NONE`, `FLEXIBLE` (the opportunity is `generally_needed`, so
+there is no constraint to match) and `UNSPECIFIED` (the organisation gave
+no schedule, so there is nothing to compare). Deriving one from the other
+is what shipped "Full availability match" on every flexible role — six of
+the fourteen live opportunities.
+
+**Zod `.optional()` does not accept `null`, and `reset()` feeds it the raw
+database row.** `EditOpportunity` resets the form from `select('*')`, so
+every nullable column arrives as `null`. `skills: z.string().optional()`
+rejected that, `handleSubmit` refused to fire, and because the skills input
+has no error slot the page showed *nothing at all* — no toast, no message,
+no saved row. Saving an opportunity had been silently impossible whenever
+`skills` was null, which is most of them. Any nullable column reaching a
+form schema needs `.nullable()`, and every `handleSubmit` on that page now
+passes an `onInvalid` handler so a rejected submit can never be silent
+again.
 
 **A disabled React Query is not "loading".** With `enabled: !!userId`,
 v5 reports `isLoading: false` while the query is disabled, so a

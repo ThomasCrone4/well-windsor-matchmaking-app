@@ -7,24 +7,59 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { isThisWeek, isThisMonth } from 'date-fns';
 import { formatOpportunitySchedule } from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
-import { useSmartMatching } from '../hooks/useSmartMatching';
-import MatchScore from '../components/MatchScore';
-import MatchExplanation from '../components/MatchExplanation';
+import { TOWN_FILTER_OPTIONS } from '../utils/towns';
+
+/**
+ * The availability badge shown to a signed-in volunteer.
+ *
+ * match_kind comes from the match_opportunities_by_availability RPC and is
+ * deliberately NOT derived from match_rank -- rank is an ordering key, and
+ * collapsing these five cases into three buckets is what previously put
+ * "Full availability match" on every flexible role.
+ */
+const MATCH_BADGES = {
+  FULL: {
+    label: 'Full availability match',
+    classes: 'badge-success',
+    title: 'Your availability covers all of the times this role needs',
+  },
+  PARTIAL: {
+    label: 'Partial availability overlap',
+    classes: 'badge-warning',
+    title: 'Some of your availability overlaps the times this role needs',
+  },
+  FLEXIBLE: {
+    label: 'Flexible timing',
+    classes: 'badge-info',
+    title: 'This role can be done at flexible times, so any availability works',
+  },
+  UNSPECIFIED: {
+    label: 'Schedule not specified',
+    classes: 'badge-neutral',
+    title: 'This organisation has not given specific times, so we cannot compare',
+  },
+  NONE: {
+    label: 'No availability overlap',
+    classes: 'badge-neutral',
+    title: 'None of your availability overlaps the times this role needs',
+  },
+};
+
+/**
+ * What "Show Matches Only" keeps. UNSPECIFIED is excluded on purpose: with
+ * no schedule on the opportunity there is nothing to match against, and
+ * calling that a match would be the same overclaim the badge just fixed.
+ */
+const MATCHING_KINDS = new Set(['FULL', 'PARTIAL', 'FLEXIBLE']);
 
 export default function OpportunitiesPage() {
   const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
   const [matchedOnly, setMatchedOnly] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedMatch, setExpandedMatch] = useState(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const onlyId = searchParams.get('opId');
-
-  // ML Matching hook - only for volunteers with embeddings
-  const { matches, loading: matchLoading } = useSmartMatching(
-    userProfile?.role === 'volunteer' ? userProfile?.id : null
-  );
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -63,15 +98,6 @@ export default function OpportunitiesPage() {
     [myApps]
   );
 
-  // ML Matching score lookup
-  const matchScoreMap = useMemo(() => {
-    const map = new Map();
-    (matches ?? []).forEach((match) => {
-      map.set(match.opportunity_id, match);
-    });
-    return map;
-  }, [matches]);
-
   // Fetch opportunities (volunteers use RPC to get match_kind etc.)
   const {
     data: opps,
@@ -94,7 +120,9 @@ export default function OpportunitiesPage() {
               title,
               description,
               location,
+              town,
               contact,
+              requires_dbs,
               when_needed,
               generally_needed,
               volunteers_needed,
@@ -110,7 +138,7 @@ export default function OpportunitiesPage() {
         return rpcData ?? [];
       }
 
-      // non-volunteer path
+      // non-volunteer path (logged-out visitors and organisations)
       const { data, error } = await supabase
         .from('volunteer_opportunities')
         .select(`
@@ -118,7 +146,9 @@ export default function OpportunitiesPage() {
           title,
           description,
           location,
+          town,
           contact,
+          requires_dbs,
           when_needed,
           generally_needed,
           volunteers_needed,
@@ -144,8 +174,10 @@ export default function OpportunitiesPage() {
     queryKey: ['org_names_by_id', orgIds],
     enabled: nonVolunteer && orgIds.length > 0,
     queryFn: async () => {
+      // public_organisations, not user_profiles: a fixed, contact-free
+      // column list rather than a read of the profile row itself.
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('public_organisations')
         .select('id,name')
         .in('id', orgIds);
       if (error) throw error;
@@ -213,7 +245,9 @@ export default function OpportunitiesPage() {
 
   const filterOpportunities = (items) => {
     return items.filter((op) => {
-      const matchesTown = filters.town === 'All' || op.location === filters.town;
+      // town, not location. location is free text ("St Edward's, Windsor")
+      // and comparing it to a town name dropped real listings silently.
+      const matchesTown = filters.town === 'All' || op.town === filters.town;
 
       const start = getEarliestStart(op);
       const matchesStart =
@@ -221,10 +255,11 @@ export default function OpportunitiesPage() {
         (filters.start === 'This Week' && start && isThisWeek(start)) ||
         (filters.start === 'This Month' && start && isThisMonth(start));
 
-      const matched =
-        !matchedOnly ||
-        (userProfile &&
-          (!userProfile.home_town_only || op.location === userProfile.home_town));
+      // Previously read userProfile.home_town_only -- a column that has
+      // never existed, so !undefined was always true and this toggle did
+      // nothing at all. It filters on the availability match now, which is
+      // what its label has always promised.
+      const matched = !matchedOnly || MATCHING_KINDS.has(op.match_kind);
 
       const matchesSearch = (op.title || '').toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -246,54 +281,23 @@ export default function OpportunitiesPage() {
     );
 
   const filtered = filterOpportunities(opps || []);
-  let finalList = onlyId
-    ? (filtered || []).filter((op) => String(op.id) === String(onlyId))
-    : filtered || [];
-
-  // Sort opportunities by match score (highest first) for volunteers
-  if (userProfile?.role === 'volunteer' && matchScoreMap.size > 0) {
-    finalList = [...finalList].sort((a, b) => {
-      const matchA = matchScoreMap.get(a.id);
-      const matchB = matchScoreMap.get(b.id);
-      const scoreA = matchA?.composite_score || 0;
-      const scoreB = matchB?.composite_score || 0;
-      return scoreB - scoreA; // Descending order (highest first)
-    });
-  }
-
-  // ---- UI helpers for the top-right badge ----
-  const getMatchBadge = (matchKind) => {
-    switch (matchKind) {
-      case 'FULL':
-        return {
-          label: 'Full availability match',
-          classes:
-            'bg-green-100 text-green-800 border border-green-200',
-          title: 'Your availability fully covers the required times',
-        };
-      case 'PARTIAL':
-        return {
-          label: 'Partial availability overlap',
-          classes:
-            'bg-amber-100 text-amber-800 border border-amber-200',
-          title: 'Some overlap between your availability and the required times',
-        };
-      default:
-        return {
-          label: 'No availability overlap',
-          classes:
-            'bg-gray-100 text-gray-700 border border-gray-200',
-          title: 'None of your availability overlaps the required times',
-        };
-    }
-  };
+  // The RPC already returns the volunteer's list ordered by match_rank,
+  // then newest first. Nothing to re-sort client-side.
+  const finalList = onlyId
+    ? filtered.filter((op) => String(op.id) === String(onlyId))
+    : filtered;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
       <div className="mb-8">
         <h1 className="title">Volunteer Opportunities</h1>
         <p className="page-description">
-          Browse volunteer opportunities across Well-Windsor and apply to those matching your skills and availability. Use the filters below to find opportunities by location and start date.
+          Browse volunteer opportunities across Well-Windsor and apply to those matching your skills and availability. Use the filters below to find opportunities by town and start date.
+        </p>
+        <p className="help-text mt-2">
+          Some roles need a DBS check. Well Windsor does not vet or DBS-check
+          anyone — each organisation is responsible for its own checks, and
+          will tell you what it needs.
         </p>
       </div>
       
@@ -332,10 +336,9 @@ export default function OpportunitiesPage() {
               onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
               className="select"
             >
-              <option value="All">All</option>
-              <option value="Windsor">Windsor</option>
-              <option value="Maidenhead">Maidenhead</option>
-              <option value="Slough">Slough</option>
+              {TOWN_FILTER_OPTIONS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
             </select>
           </div>
 
@@ -388,37 +391,42 @@ export default function OpportunitiesPage() {
 
       {/* Results */}
       {finalList.length === 0 ? (
-        <p className="text-center text-gray-600">No opportunities available right now.</p>
+        <p className="text-center text-gray-600">
+          {(opps ?? []).length === 0
+            ? 'No opportunities available right now.'
+            : 'No opportunities match these filters. Try clearing them.'}
+        </p>
       ) : (
         <ul className="space-y-6">
           {finalList.map((op) => {
             const alreadyEnquired = !!userProfile?.id && appliedSet.has(op.id);
             const orgName = (op.org_name ?? orgNameById.get(op.org_id)) || 'Organisation';
 
-            // Badge (volunteer only)
-            const showBadge = userProfile?.role === 'volunteer' && op.match_kind;
-            const badge = showBadge ? getMatchBadge(op.match_kind) : null;
-
-            // ML Matching score (for volunteers)
-            const mlMatch = userProfile?.role === 'volunteer' ? matchScoreMap.get(op.id) : null;
-            const isExpanded = expandedMatch === op.id;
+            // Availability badge, volunteers only -- it is a statement about
+            // *your* schedule, so it means nothing to a logged-out visitor.
+            const badge =
+              userProfile?.role === 'volunteer' ? MATCH_BADGES[op.match_kind] : null;
 
             return (
-              <li key={op.id} className="card p-6 space-y-2 relative">
-                {/* ML MatchScore badge - positioned top-right */}
-                {mlMatch && userProfile?.role === 'volunteer' && (
-                  <div className="absolute right-4 top-4 z-10">
-                    <MatchScore score={mlMatch.composite_score} />
-                  </div>
-                )}
+              <li key={op.id} className="card p-6 space-y-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h2 className="text-xl font-semibold">{op.title}</h2>
+                  {badge && (
+                    <span className={badge.classes} title={badge.title}>
+                      {badge.label}
+                    </span>
+                  )}
+                </div>
 
-                <h2 className="text-xl font-semibold">{op.title}</h2>
                 <p className="text-sm text-gray-500 -mt-1">
                   by <span className="font-medium">{orgName}</span>
                 </p>
 
                 <p className="text-gray-700">{op.description}</p>
-                <div className="text-sm text-gray-600">📍 Location: {op.location}</div>
+                <div className="text-sm text-gray-600">
+                  📍 {op.location}
+                  {op.town && op.town !== op.location ? ` (${op.town})` : ''}
+                </div>
                 <div className="text-sm text-gray-600">
                   👥 Volunteers Needed: {op.volunteers_needed ?? 'N/A'}
                 </div>
@@ -433,30 +441,15 @@ export default function OpportunitiesPage() {
                   </div>
                 ) : null}
 
-                {/* ML Match Explanation */}
-                {mlMatch && userProfile?.role === 'volunteer' && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <button
-                      onClick={() => setExpandedMatch(isExpanded ? null : op.id)}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-800 transition flex items-center gap-2"
-                    >
-                      {isExpanded ? '▼' : '▶'} View match details
-                    </button>
-                    {isExpanded && (
-                      <div className="mt-3">
-                        <MatchExplanation 
-                          matchData={{
-                            matchScore: mlMatch.composite_score || 0,
-                            semanticSimilarity: Math.round(mlMatch.semantic_similarity || 0),
-                            skillsSimilarity: Math.round(mlMatch.skills_match_percentage || 0),
-                            availabilityMatch: Math.round(mlMatch.availability_match || 0),
-                            explanation: `Based on your profile, skills, and availability for this opportunity.`
-                          }}
-                          showDetails={true}
-                        />
-                      </div>
-                    )}
-                  </div>
+                {/* Safeguarding. The platform vets nobody; say so where the
+                    requirement is, not only in the page preamble. */}
+                {op.requires_dbs && (
+                  <p className="text-sm mt-2">
+                    <span className="badge-warning">DBS check required</span>{' '}
+                    <span className="text-gray-600">
+                      — arranged by the organisation, not by Well Windsor.
+                    </span>
+                  </p>
                 )}
 
                 <div className="flex items-center gap-3 pt-2">

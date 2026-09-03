@@ -10,12 +10,20 @@ import { useNavigate } from 'react-router-dom';
 
 // 🔁 use your schedule.js
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
+import { TOWNS } from '../../../utils/towns';
 
 const getOpportunitySchema = (isDraft) =>
   z.object({
     title: isDraft ? z.string().optional() : z.string().min(1, 'Title is required'),
     description: z.string().optional(),
     location: isDraft ? z.string().optional() : z.string().min(1, 'Location is required'),
+    // The filter key volunteers browse by. A draft may leave it blank; a
+    // published opportunity may not (there is a CHECK constraint saying so),
+    // because an active listing with no town is unreachable from a filtered
+    // browse.
+    town: isDraft
+      ? z.string().optional()
+      : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
     contact: isDraft ? z.string().optional() : z.string().min(1, 'Contact method is required'),
     generally_needed: z.boolean(),
     when_needed: z.any(),
@@ -44,6 +52,7 @@ export default function PostOpportunity() {
       title: '',
       description: '',
       location: '',
+      town: '',
       contact: '',
       generally_needed: true,
       when_needed: [],
@@ -158,6 +167,9 @@ export default function PostOpportunity() {
       title: data.title || '',
       description: data.description || '',
       location: data.location || '',
+      // null rather than '' -- the CHECK only accepts a real town or NULL,
+      // and a draft is allowed to have neither yet.
+      town: data.town || null,
       contact: data.contact || '',
       generally_needed: !!data.generally_needed,
       when_needed: data.generally_needed ? null : (data.when_needed ?? []), // keep JSON for editing UX
@@ -238,7 +250,26 @@ export default function PostOpportunity() {
             />
           </div>
 
-          {/* Location */}
+          {/* Town — the filter key volunteers browse by */}
+          <div className="form-row">
+            <label htmlFor="town" className="label required">Town</label>
+            <select
+              id="town"
+              {...register('town')}
+              className={`select ${errors.town ? 'input-invalid' : ''}`}
+              aria-invalid={!!errors.town}
+            >
+              <option value="">Select a town…</option>
+              {TOWNS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            {errors.town
+              ? <p className="error-text">{errors.town.message}</p>
+              : <p className="help-text">Volunteers filter the browse by town.</p>}
+          </div>
+
+          {/* Location — free text, the human-readable place */}
           <div className="form-row">
             <label htmlFor="location" className="label required">Location</label>
             <input
@@ -246,9 +277,11 @@ export default function PostOpportunity() {
               {...register('location')}
               className={`input ${errors.location ? 'input-invalid' : ''}`}
               aria-invalid={!!errors.location}
-              placeholder="e.g. Windsor"
+              placeholder="e.g. St Edward's First School, Parsonage Lane"
             />
-            {errors.location && <p className="error-text">{errors.location.message}</p>}
+            {errors.location
+              ? <p className="error-text">{errors.location.message}</p>
+              : <p className="help-text">The venue or address. Free text — the town above does the filtering.</p>}
           </div>
 
           {/* Contact */}
@@ -300,6 +333,20 @@ export default function PostOpportunity() {
               Generally Needed (any time)
             </label>
             <p className="help-text">Tick if this role can be done at flexible times.</p>
+          </div>
+
+          {/* DBS. The field existed in the schema and the insert but had no
+              input on this form, so it could only ever be set by editing the
+              opportunity afterwards. */}
+          <div className="form-row">
+            <label className="check-label">
+              <input type="checkbox" {...register('requires_dbs')} className="check" />
+              Requires DBS Check
+            </label>
+            <p className="help-text">
+              Shown on the listing. Well Windsor does not vet or DBS-check
+              volunteers — arranging and verifying the check is yours to do.
+            </p>
           </div>
 
           {/* Specific Times Needed */}

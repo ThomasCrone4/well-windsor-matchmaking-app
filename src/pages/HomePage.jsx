@@ -127,8 +127,12 @@ export default function HomePage() {
     queryKey: ['org_names_home', orgIds],
     enabled: orgIds.length > 0,
     queryFn: async () => {
+      // public_organisations, not user_profiles. This page is mostly read
+      // by logged-out visitors, and the view is a fixed column list that
+      // cannot start returning an email or phone number the way a profile
+      // row can.
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('public_organisations')
         .select('id, name')
         .in('id', orgIds);
       if (error) throw error;
