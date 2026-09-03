@@ -4,7 +4,11 @@ export default {
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
   ],
-  darkMode: "class",
+  // ThemeContext sets data-theme="dark" on <html>, not a .dark class.
+  // With darkMode:"class" every dark: utility in the app was inert.
+  // Tailwind appends the descendant relationship itself, so the custom
+  // selector must NOT contain '&'.
+  darkMode: ["class", '[data-theme="dark"]'],
   theme: {
     container: {
       center: true,

@@ -40,3 +40,6 @@ Thumbs.db
 package-lock.yaml
 yarn.lock
 pnpm-lock.yaml
+
+# Local scratch/working notes
+.scratch/

@@ -17,11 +17,13 @@ export default function SendVolunteerEnquiry() {
 
   useEffect(() => {
     const fetchVolunteer = async () => {
+      // public_volunteers is a consent-gated view: role='volunteer' AND
+      // public_profile=true, exposing no contact fields. Reading the base
+      // table here is no longer permitted by RLS.
       const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
+        .from('public_volunteers')
+        .select('id, name, home_town')
         .eq('id', volunteerId)
-        .eq('role', 'volunteer')
         .single();
 
       if (error) {

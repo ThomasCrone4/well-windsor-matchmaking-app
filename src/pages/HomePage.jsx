@@ -48,8 +48,10 @@ export default function HomePage() {
 
   const getStartedPath = useMemo(() => {
     if (!isLoggedIn) return '/auth';
-    // NOTE: using 'organisation' (UK spelling) to match your DB
-    if (role === 'organisation') return '/post-opportunity';
+    // The DB and the rest of the app use the US spelling 'organization'.
+    // This previously tested 'organisation', so every logged-in org fell
+    // through to the /auth fallback below.
+    if (role === 'organization') return '/post-opportunity';
     if (role === 'volunteer') return '/opportunities';
     // fallback if some other role appears
     return '/auth';

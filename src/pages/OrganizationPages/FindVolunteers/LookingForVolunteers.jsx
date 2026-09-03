@@ -25,11 +25,13 @@ export default function LookingForVolunteersPage() {
   const { data, error, isLoading } = useQuery({
     queryKey: ['volunteer_profiles'],
     queryFn: async () => {
+      // The role and public_profile filters used to live here, in the
+      // client, where anyone could bypass them by calling the API directly.
+      // They are now enforced by the public_volunteers view, which also
+      // omits dob, email and contact_number entirely.
       const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, name, home_town, skills, available_anytime, availability_matrix, bio')
-        .eq('role', 'volunteer')
-        .eq('public_profile', true);
+        .from('public_volunteers')
+        .select('id, name, home_town, skills, available_anytime, availability_matrix, bio');
       if (error) throw error;
       return data;
     },
