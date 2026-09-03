@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
 import AvailabilityMatrix from '../components/AvailabilityMatrix';
 import { useNavigate } from 'react-router-dom';
+import { TOWNS } from '../utils/towns';
 
 export default function AuthPage() {
   const [email, setEmail] = useState('');
@@ -16,7 +17,6 @@ export default function AuthPage() {
   // Volunteer fields
   const [bio, setBio] = useState('');
   const [skills, setSkills] = useState('');
-  const [postcode, setPostcode] = useState('');
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [homeTown, setHomeTown] = useState('');
@@ -37,9 +37,27 @@ export default function AuthPage() {
     if (!name) newErrors.name = 'Name is required';
 
     if (isSigningUp) {
+      if (password.length < 8) {
+        newErrors.password = 'Password must be at least 8 characters';
+      }
+
+      // Both roles need a town: volunteers to be matched locally,
+      // organisations so their listings can be filtered by area.
+      if (!homeTown) newErrors.homeTown = 'Town is required';
+
       if (role === 'volunteer') {
-        if (!dob) newErrors.dob = 'Date of birth is required';
-        if (!homeTown) newErrors.homeTown = 'Home town is required';
+        if (!dob) {
+          newErrors.dob = 'Date of birth is required';
+        } else {
+          // Mirrors the user_profiles_min_age constraint, so the user gets
+          // a readable message instead of a Postgres error.
+          const thirteenthBirthday = new Date(dob);
+          thirteenthBirthday.setFullYear(thirteenthBirthday.getFullYear() + 13);
+          if (thirteenthBirthday > new Date()) {
+            newErrors.dob = 'You must be at least 13 years old to sign up';
+          }
+        }
+
         // Bio & Skills only required if public
         if (publicProfile) {
           if (!bio?.trim()) newErrors.bio = 'Bio is required when profile is visible to organisations';
@@ -48,10 +66,6 @@ export default function AuthPage() {
         if (!availableAnytime && (!availabilityMatrix || availabilityMatrix.length === 0)) {
           newErrors.availabilityMatrix = 'Please add at least one availability slot or mark "Flexible Availability".';
         }
-      }
-
-      if (role === 'organization') {
-        if (!postcode) newErrors.postcode = 'Postcode is required';
       }
     }
 
@@ -64,49 +78,56 @@ export default function AuthPage() {
 
     if (isSigningUp && !validateFields()) return;
 
-    let authResponse;
-    if (isSigningUp) {
-      authResponse = await supabase.auth.signUp({ email, password });
-    } else {
-      authResponse = await supabase.auth.signInWithPassword({ email, password });
-    }
-
-    const { error: authError } = authResponse;
-    if (authError) {
-      toast.error(authError.message);
-      return;
-    }
-
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user?.id) {
-      toast.error('Could not verify user login.');
-      return;
-    }
-    const sessionUserId = userData.user.id;
-
-    if (isSigningUp) {
-      const profileData = {
-        id: sessionUserId,
-        role,
-        name,
-        ...(role === 'organization' && { postcode }),
-        ...(role === 'volunteer' && {
-          dob,
-          bio: bio?.trim() || null,
-          skills: skills?.trim() || null,
-          contact_number: contactNumber || null,
-          home_town: homeTown,
-          available_anytime: availableAnytime,
-          availability_matrix: availableAnytime ? null : availabilityMatrix,
-          public_profile: publicProfile,
-        }),
-      };
-
-      const { error: insertError } = await supabase.from('user_profiles').insert([profileData]);
-      if (insertError) {
-        toast.error(insertError.message);
+    if (!isSigningUp) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        toast.error(error.message);
         return;
       }
+      toast.success('Welcome back!');
+      navigate('/');
+      return;
+    }
+
+    // Profile fields travel as auth metadata; the on_auth_user_created
+    // trigger writes the user_profiles row. Previously this was signUp()
+    // followed by a separate insert, which had two failure modes: it sent
+    // a `postcode` column that does not exist (so no organisation could
+    // ever complete signup), and it assumed signUp returns a session,
+    // which is false when email confirmation is on -- leaving an auth
+    // account with no profile and no way to recover.
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          role,
+          name: name.trim(),
+          home_town: homeTown,
+          ...(role === 'volunteer' && {
+            dob,
+            contact_number: contactNumber?.trim() || null,
+            bio: bio?.trim() || null,
+            skills: skills?.trim() || null,
+            available_anytime: availableAnytime,
+            availability_matrix: availableAnytime ? null : availabilityMatrix,
+            public_profile: publicProfile,
+          }),
+        },
+      },
+    });
+
+    if (signUpError) {
+      toast.error(signUpError.message);
+      return;
+    }
+
+    // No session means Supabase is waiting on email confirmation. The
+    // profile already exists either way, so the account is not stranded.
+    if (!data?.session) {
+      toast.success('Account created. Check your email to confirm, then log in.');
+      setIsSigningUp(false);
+      return;
     }
 
     toast.success('Success! You are now logged in.');
@@ -118,7 +139,9 @@ export default function AuthPage() {
     // Clear conditional errors if turning visibility off
     if (!checked) {
       setErrors((prev) => {
-        const { bio, skills, ...rest } = prev;
+        // Deliberately dropping the bio/skills errors; underscore prefix
+        // marks them as intentionally unused for eslint.
+        const { bio: _bio, skills: _skills, ...rest } = prev;
         return rest;
       });
     }
@@ -226,45 +249,33 @@ export default function AuthPage() {
               {errors.name && <p className="error-text">{errors.name}</p>}
             </div>
 
-            {/* Org-only: Postcode */}
-            {role === 'organization' && (
-              <div className="form-row">
-                <label className="label">
-                  Postcode <span className="required" />
-                </label>
-                <input
-                  type="text"
-                  className="input"
-                  value={postcode}
-                  onChange={(e) => setPostcode(e.target.value)}
-                  aria-invalid={!!errors.postcode}
-                />
-                {errors.postcode && <p className="error-text">{errors.postcode}</p>}
-              </div>
-            )}
+            {/* Town — both roles. Organisations previously had a free-text
+                postcode field that was written to a column which does not
+                exist, so organisation signup always failed. */}
+            <div className="form-row">
+              <label className="label">
+                {role === 'organization' ? 'Town' : 'Home Town'}{' '}
+                <span className="required" />
+              </label>
+              <select
+                className={`select ${errors.homeTown ? 'select-invalid' : ''}`}
+                value={homeTown}
+                onChange={(e) => setHomeTown(e.target.value)}
+                aria-invalid={!!errors.homeTown}
+              >
+                <option value="">
+                  {role === 'organization' ? 'Select your town' : 'Select your home town'}
+                </option>
+                {TOWNS.map((town) => (
+                  <option key={town} value={town}>{town}</option>
+                ))}
+              </select>
+              {errors.homeTown && <p className="error-text">{errors.homeTown}</p>}
+            </div>
 
             {/* Volunteer-only fields */}
             {role === 'volunteer' && (
               <>
-                {/* Home Town */}
-                <div className="form-row">
-                  <label className="label">
-                    Home Town <span className="required" />
-                  </label>
-                  <select
-                    className={`select ${errors.homeTown ? 'select-invalid' : ''}`}
-                    value={homeTown}
-                    onChange={(e) => setHomeTown(e.target.value)}
-                    aria-invalid={!!errors.homeTown}
-                  >
-                    <option value="">Select your home town</option>
-                    <option value="Windsor">Windsor</option>
-                    <option value="Maidenhead">Maidenhead</option>
-                    <option value="Slough">Slough</option>
-                  </select>
-                  {errors.homeTown && <p className="error-text">{errors.homeTown}</p>}
-                </div>
-
                 {/* Date of Birth */}
                 <div className="form-row">
                   <label className="label">
