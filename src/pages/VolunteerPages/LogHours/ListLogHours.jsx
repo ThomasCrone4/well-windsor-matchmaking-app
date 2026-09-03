@@ -52,7 +52,6 @@ export default function ListLogHours() {
           application:applications (
             opportunity_title,
             subject,
-            direction,
             volunteer_id
           )
         `)
@@ -241,9 +240,9 @@ export default function ListLogHours() {
   /** ---------------- Card renderer ---------------- */
   const EntryCard = ({ entry }) => {
     const title =
-      entry.application?.direction === 'to_volunteer'
-        ? entry.application?.subject || 'Untitled Opportunity'
-        : entry.application?.opportunity_title || 'Untitled Opportunity';
+      entry.application?.opportunity_title ||
+      entry.application?.subject ||
+      'Untitled Opportunity';
 
     const totalMinutes =
       typeof entry.total_minutes === 'number'

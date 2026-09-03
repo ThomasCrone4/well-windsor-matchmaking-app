@@ -1,154 +1,86 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { toast } from 'react-hot-toast';
-import { useEffect, useState } from 'react';
-import { supabase } from '../../../utils/supabase';
+// Cold approach to a volunteer from the volunteers browse.
+//
+// Same compose form as the applicants page, without an opportunity
+// attached. This used to write a row to `applications` with
+// direction = 'to_volunteer' and send nothing; an approach is now an
+// email, sent by the server, logged in org_outreach.
 
-export default function SendVolunteerEnquiry() {
+import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../../../utils/supabase';
+import ContactVolunteerForm from '../../../components/ContactVolunteerForm';
+import { summariseOutreach } from '../../../utils/outreach';
+
+export default function EnquireVolunteersPage() {
   const { id: volunteerId } = useParams();
   const navigate = useNavigate();
-  const [volunteer, setVolunteer] = useState(null);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm();
-
-  useEffect(() => {
-    const fetchVolunteer = async () => {
-      // public_volunteers is a consent-gated view: role='volunteer' AND
-      // public_profile=true, exposing no contact fields. Reading the base
-      // table here is no longer permitted by RLS.
+  const { data: volunteer, isLoading, error } = useQuery({
+    queryKey: ['public_volunteer', volunteerId],
+    queryFn: async () => {
+      // public_volunteers is consent-gated on public_profile and omits
+      // every contact field. The base table is not readable here.
       const { data, error } = await supabase
         .from('public_volunteers')
-        .select('id, name, home_town')
+        .select('id, name, home_town, skills, bio')
         .eq('id', volunteerId)
-        .single();
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
-      if (error) {
-        toast.error('Failed to load volunteer profile');
-        console.error('Volunteer fetch error:', error);
-      } else {
-        setVolunteer(data);
-      }
-    };
+  const { data: outreachRows } = useQuery({
+    queryKey: ['org_outreach_sent'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_outreach_sent')
+        .select('volunteer_id, created_at, status')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
-    fetchVolunteer();
-  }, [volunteerId]);
-
-  const onSubmit = async ({ subject, message }) => {
-    // Validate word count (max 500 words)
-    const wordCount = message.trim().split(/\s+/).length;
-    if (wordCount > 500) {
-      toast.error(`Message is too long (${wordCount} words). Maximum 500 words allowed.`);
-      return;
-    }
-
-    const confirm = window.confirm(
-      'Are you sure you want to send this enquiry to the volunteer?\n\nThis will be logged and cannot be undone.'
-    );
-    if (!confirm) return;
-
-    const { data: sessionData } = await supabase.auth.getSession();
-    const orgUser = sessionData?.session?.user;
-    if (!orgUser) {
-      toast.error('You must be logged in to send an enquiry.');
-      return;
-    }
-
-    // Check for recent enquiry within 24 hours
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
-    const { data: recentEnquiry } = await supabase
-      .from('applications')
-      .select('id, created_at')
-      .eq('org_id', orgUser.id)
-      .eq('volunteer_id', volunteerId)
-      .eq('direction', 'to_volunteer')
-      .gte('created_at', twentyFourHoursAgo)
-      .maybeSingle();
-
-    if (recentEnquiry) {
-      const hoursAgo = Math.floor((Date.now() - new Date(recentEnquiry.created_at)) / (1000 * 60 * 60));
-      toast.error(`You already contacted this volunteer ${hoursAgo} hour${hoursAgo !== 1 ? 's' : ''} ago. Please wait 24 hours between enquiries.`);
-      return;
-    }
-
-    const finalMessage = message?.trim()
-      ? message.trim()
-      : "Hi, I'd like to apply for your position!";
-
-    const { error } = await supabase.from('applications').insert([
-      {
-        org_id: orgUser.id,
-        volunteer_id: volunteerId,
-        subject: subject || null,
-        message: finalMessage,
-        direction: 'to_volunteer',
-      },
-    ]);
-
-    if (error) {
-      toast.error('Failed to send enquiry');
-      console.error('Insert error:', error);
-      return;
-    }
-
-    toast.success('Enquiry sent!');
-    setTimeout(() => navigate('/organization-dashboard'), 1200);
-  };
-
-  if (!volunteer) {
-    return <p className="text-center mt-8">Loading volunteer profile...</p>;
-  }
+  const lastSentAt = summariseOutreach(outreachRows).get(volunteerId)?.lastSentAt ?? null;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-3xl mx-auto px-4 py-8" id="main-content">
       <div className="page-header">
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title !mb-0">Contact Volunteer</h1>
+        <h1 className="title !mb-0">Contact volunteer</h1>
         <div className="spacer" />
       </div>
 
-      <p className="muted mb-4">
-        You're contacting <strong>{volunteer.name || 'Unnamed Volunteer'}</strong>{' '}
-        from {volunteer.home_town || 'Unknown Town'}
-      </p>
+      {isLoading ? (
+        <p className="text-center muted mt-8">Loading volunteer profile…</p>
+      ) : error ? (
+        <p className="error-text text-center mt-8">Failed to load this volunteer.</p>
+      ) : !volunteer ? (
+        <p className="muted text-center mt-8">
+          This volunteer is no longer listed. Only volunteers who have made their profile
+          discoverable can be contacted this way.
+        </p>
+      ) : (
+        <>
+          <div className="card stack mb-4">
+            <h2 className="card-title">{volunteer.name || 'Unnamed volunteer'}</h2>
+            <p className="caption">{volunteer.home_town || 'Town not given'}</p>
+            {volunteer.skills?.trim() && <p className="muted">🛠️ Skills: {volunteer.skills}</p>}
+            {volunteer.bio?.trim() && <p className="text">{volunteer.bio}</p>}
+          </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="card form">
-        <div className="form-row">
-          <label className="label">
-            Subject <span className="required" />
-          </label>
-          <textarea
-            {...register('subject', { required: 'Subject is required' })}
-            placeholder="Write your subject"
-            className={`input textarea textarea-sm ${errors.subject ? 'textarea-invalid' : ''}`}
-            aria-invalid={!!errors.subject}
+          <ContactVolunteerForm
+            volunteerId={volunteer.id}
+            volunteerName={volunteer.name}
+            lastSentAt={lastSentAt}
+            onSent={() => navigate('/organization/sent-enquiries')}
+            onCancel={() => navigate(-1)}
           />
-          {errors.subject && <p className="error-text">{errors.subject.message}</p>}
-        </div>
-
-        <div className="form-row">
-          <label className="label">
-            Message <span className="required" />
-          </label>
-          <textarea
-            {...register('message', { required: 'Message is required' })}
-            placeholder="Write your message"
-            className={`input textarea textarea-lg ${errors.message ? 'textarea-invalid' : ''}`}
-            aria-invalid={!!errors.message}
-          />
-          {errors.message && <p className="error-text">{errors.message.message}</p>}
-        </div>
-
-        <button type="submit" className="btn btn-primary btn-block">
-          Send Enquiry
-        </button>
-      </form>
+        </>
+      )}
     </div>
   );
 }

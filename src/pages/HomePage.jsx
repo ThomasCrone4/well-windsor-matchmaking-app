@@ -11,7 +11,7 @@ import {
 } from '../utils/schedule';
 
 export default function HomePage() {
-  const [stats, setStats] = useState({ hours: 0, volunteers: 0, opportunities: 0 });
+  const [stats, setStats] = useState({ organisations: 0, volunteers: 0, opportunities: 0 });
 
   /**
    * Auth & profile
@@ -60,26 +60,27 @@ export default function HomePage() {
   /**
    * Fetch real-time stats
    */
+  // Three counts that are all real. The fourth used to be "Volunteer
+  // Hours", summed from applications.logged_hours — a column that was
+  // never written to and has now been dropped, so the number was
+  // always 0 dressed up as an achievement.
   useEffect(() => {
     const fetchStats = async () => {
-      const { data: hoursRows } = await supabase
-        .from('applications')
-        .select('logged_hours');
-
+      // Both counts go through SECURITY DEFINER functions: anon holds no
+      // read grant on user_profiles, so counting from the table would
+      // show 0 to exactly the logged-out visitors this page is for.
       const { data: volunteerCount } = await supabase.rpc('count_volunteers');
+      const { data: organisationCount } = await supabase.rpc('count_organisations');
 
-      const { data: oppRows } = await supabase
+      const { count: opportunityCount } = await supabase
         .from('volunteer_opportunities')
-        .select('id');
-
-      const totalHours = (hoursRows || [])
-        .map((r) => Number(r.logged_hours) || 0)
-        .reduce((a, b) => a + b, 0);
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active');
 
       setStats({
-        hours: totalHours,
+        organisations: organisationCount ?? 0,
         volunteers: volunteerCount ?? 0,
-        opportunities: oppRows?.length || 0,
+        opportunities: opportunityCount ?? 0,
       });
     };
     fetchStats();
@@ -172,21 +173,21 @@ export default function HomePage() {
           <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
             <div className="card">
               <p className="text-3xl font-bold text-brand-blue">
-                {stats.hours.toLocaleString()}
+                {stats.volunteers.toLocaleString()}
               </p>
-              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Volunteer Hours</p>
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Volunteers Registered</p>
             </div>
             <div className="card">
               <p className="text-3xl font-bold text-brand-blue">
-                {stats.volunteers.toLocaleString()}
+                {stats.organisations.toLocaleString()}
               </p>
-              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Volunteers Engaged</p>
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Local Organisations</p>
             </div>
             <div className="card">
               <p className="text-3xl font-bold text-brand-blue">
                 {stats.opportunities.toLocaleString()}
               </p>
-              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Opportunities Posted</p>
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Open Opportunities</p>
             </div>
           </div>
         </div>

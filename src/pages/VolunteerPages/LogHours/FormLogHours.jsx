@@ -41,18 +41,14 @@ export default function FormLogHours({ isEdit }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
-        .select('id, opportunity_id, opportunity_title, subject, direction')
-        .eq('volunteer_id', userId)
-        .eq('status', 'accepted');
+        .select('id, opportunity_id, opportunity_title, subject')
+        .eq('volunteer_id', userId);
 
       if (error) throw error;
 
       const apps = (data ?? []).map((app) => ({
         id: app.id,
-        label:
-          app.direction === 'to_volunteer'
-            ? app.subject || 'Untitled Opportunity'
-            : app.opportunity_title || 'Untitled Opportunity',
+        label: app.opportunity_title || app.subject || 'Untitled Opportunity',
       }));
 
       setApplications(apps);
@@ -108,7 +104,7 @@ export default function FormLogHours({ isEdit }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
-        .select('id, opportunity_title, subject, direction')
+        .select('id, opportunity_title, subject')
         .eq('id', editEntry.application_id)
         .single();
       if (error) throw error;
@@ -252,9 +248,7 @@ export default function FormLogHours({ isEdit }) {
           const found = applications.find((a) => a.id === editEntry.application_id);
           if (found) return found.label;
           if (editAppInfo) {
-            return editAppInfo.direction === 'to_volunteer'
-              ? editAppInfo.subject || 'Untitled Opportunity'
-              : editAppInfo.opportunity_title || 'Untitled Opportunity';
+            return editAppInfo.opportunity_title || editAppInfo.subject || 'Untitled Opportunity';
           }
           return '';
         })()

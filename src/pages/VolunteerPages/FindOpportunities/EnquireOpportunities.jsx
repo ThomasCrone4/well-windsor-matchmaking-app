@@ -1,159 +1,192 @@
+// Applying to an opportunity.
+//
+// Two things this deliberately does not do. It does not send the
+// organisation an email — that would let anyone spam a small charity
+// by applying repeatedly, and the page used to claim it did. And it
+// does not set org_id: a trigger derives that from the opportunity, so
+// the column is not even granted to the client.
+
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../../../utils/supabase';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 
-export default function EnquiryPage() {
+const MESSAGE_MAX = 3000;
+
+export default function EnquireOpportunitiesPage() {
   const { id: opportunityId } = useParams();
   const navigate = useNavigate();
-  const [opportunity, setOpportunity] = useState(null);
+  const [confirming, setConfirming] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors },
   } = useForm();
 
-  useEffect(() => {
-    const fetchOpportunity = async () => {
+  const { data: opportunity, isLoading, error } = useQuery({
+    queryKey: ['opportunity', opportunityId],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('volunteer_opportunities')
-        .select('*')
+        .select('id, title, location, requires_dbs, status')
         .eq('id', opportunityId)
-        .single();
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
-      if (error) {
-        toast.error('Failed to load opportunity');
-        console.error('Opportunity fetch error:', error);
-      } else {
-        setOpportunity(data);
-      }
-    };
-
-    fetchOpportunity();
-  }, [opportunityId]);
-
-  const onSubmit = async ({ subject, message }) => {
-    // Validate word count (max 500 words)
-    const wordCount = message.trim().split(/\s+/).length;
-    if (wordCount > 500) {
-      toast.error(`Message is too long (${wordCount} words). Maximum 500 words allowed.`);
-      return;
-    }
-
-    const confirmation = window.confirm(
-      'Are you sure you want to send this enquiry?\n\nAn email will be sent to the organisation and this action cannot be undone.'
-    );
-
-    if (!confirmation) return;
+  const apply = async ({ subject, message }) => {
+    setSubmitting(true);
 
     const { data: sessionData } = await supabase.auth.getSession();
     const user = sessionData?.session?.user;
-
     if (!user) {
-      toast.error('You must be logged in to send an enquiry.');
+      toast.error('You must be logged in to apply.');
+      setSubmitting(false);
       return;
     }
 
-    // Check for existing application (including denied ones)
-    const { data: existing } = await supabase
-      .from('applications')
-      .select('id, status')
-      .eq('opportunity_id', opportunityId)
-      .eq('volunteer_id', user.id)
-      .maybeSingle();
-
-    if (existing) {
-      if (existing.status === 'denied') {
-        toast.error('Your application to this opportunity was previously rejected.');
-      } else {
-        toast.error('You have already enquired about this opportunity.');
-      }
-      navigate('/volunteer/sent-enquiries');
-      return;
-    }
-
-    const { error } = await supabase.from('applications').insert([
+    const { error: insertError } = await supabase.from('applications').insert([
       {
         opportunity_id: opportunityId,
         volunteer_id: user.id,
-        org_id: opportunity?.org_id,
         subject: subject.trim(),
         message: message.trim(),
-        direction: 'to_opportunity',
-        opportunity_title: opportunity?.title || null, // ✅ include title
+        opportunity_title: opportunity?.title ?? null,
       },
     ]);
 
-    if (error) {
-      toast.error('Failed to send enquiry');
-      console.error('Application insert error:', error);
+    setSubmitting(false);
+
+    if (insertError) {
+      // A unique constraint now enforces one application per
+      // opportunity, rather than a client-side check that a direct API
+      // call could skip.
+      if (insertError.code === '23505') {
+        toast.error('You have already applied to this opportunity.');
+        navigate('/volunteer-dashboard');
+        return;
+      }
+      toast.error(insertError.message || 'Failed to send your application');
+      console.error('Application insert error:', insertError);
       return;
     }
 
-    toast.success('Enquiry sent!');
-    setTimeout(() => {
-      navigate('/volunteer/sent-enquiries');
-    }, 1500);
+    toast.success('Application sent');
+    navigate('/volunteer-dashboard');
   };
 
-  if (!opportunity) {
-    return <p className="text-center mt-8">Loading opportunity...</p>;
+  if (isLoading) return <p className="text-center muted mt-8">Loading opportunity…</p>;
+  if (error || !opportunity) {
+    return (
+      <p className="error-text text-center mt-8">
+        This opportunity could not be loaded. It may have been closed.
+      </p>
+    );
   }
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-8">
-       <div className="page-header">
-        <button
-          onClick={() => navigate(-1)}
-          className="btn btn-secondary btn-sm"
-        >
+    <div className="max-w-xl mx-auto px-4 py-8" id="main-content">
+      <div className="page-header">
+        <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title">Send Enquiry</h1>
+        <h1 className="title !mb-0">Apply</h1>
         <div className="spacer" />
       </div>
 
-      <p className="muted mb-4">
-        You're sending an enquiry to{' '}
-        <strong>{opportunity.title || 'Unnamed Role'}</strong> – {opportunity.location || 'Unknown Location'}
+      <p className="muted mb-2">
+        You&rsquo;re applying to <strong>{opportunity.title || 'this role'}</strong>
+        {opportunity.location ? ` – ${opportunity.location}` : ''}
       </p>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="card form space-y-4">
-        <div className="field">
-          <label className="label">
-            Subject <span className="required"></span>
+      {opportunity.requires_dbs && (
+        <p className="badge badge-warning mb-4">This role requires a DBS check</p>
+      )}
+
+      <div className="card stack mb-4">
+        <p className="text">
+          Your application goes onto the organisation&rsquo;s list of applicants. They will
+          email you directly if they would like to hear more.
+        </p>
+        <p className="caption">
+          You may not hear back from every application — organisations only contact the
+          people they want to take further, and silence is not a rejection you need to read
+          anything into. Well Windsor does not vet or DBS-check organisations, and is not
+          party to any arrangement you make with them.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit((values) => setConfirming(values))} className="card form">
+        <div className="form-row">
+          <label htmlFor="application-subject" className="label required">
+            Subject
           </label>
-          <textarea
-            {...register('subject', { required: 'Subject is required' })}
-            placeholder="Enter your subject"
-            className="input textarea textarea-sm"
+          <input
+            id="application-subject"
+            type="text"
+            {...register('subject', {
+              required: 'A subject is required',
+              maxLength: { value: 200, message: 'Keep the subject under 200 characters' },
+            })}
+            placeholder="Interested in helping with…"
+            className={`input ${errors.subject ? 'input-invalid' : ''}`}
+            aria-invalid={!!errors.subject}
           />
-          {errors.subject && (
-            <p className="error">{errors.subject.message}</p>
-          )}
+          {errors.subject && <p className="error-text">{errors.subject.message}</p>}
         </div>
 
-        <div className="field">
-          <label className="label">
-            Message <span className="required"></span>
+        <div className="form-row">
+          <label htmlFor="application-message" className="label required">
+            Message
           </label>
           <textarea
-            {...register('message', { required: 'Message is required' })}
-            placeholder="Write your message"
-            className="input textarea textarea-lg"
+            id="application-message"
+            {...register('message', {
+              required: 'A message is required',
+              maxLength: {
+                value: MESSAGE_MAX,
+                message: `Keep your message under ${MESSAGE_MAX} characters`,
+              },
+            })}
+            placeholder="Tell them a little about yourself and why this role appeals to you."
+            className={`input textarea textarea-lg ${errors.message ? 'textarea-invalid' : ''}`}
+            aria-invalid={!!errors.message}
           />
-          {errors.message && (
-            <p className="error">{errors.message.message}</p>
-          )}
+          {errors.message && <p className="error-text">{errors.message.message}</p>}
         </div>
 
-        <button type="submit" className="btn btn-primary btn-block">
-          Send Enquiry
+        <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+          {submitting ? 'Sending…' : 'Send application'}
         </button>
       </form>
+
+      <ConfirmDialog
+        isOpen={!!confirming}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => apply(confirming)}
+        title="Send this application?"
+        confirmText="Send"
+        confirmStyle="primary"
+        message={
+          <>
+            <p>
+              <strong>{opportunity.title || 'This organisation'}</strong> will be able to see
+              your name, your profile and this message.
+            </p>
+            <p className="mt-2">
+              They will not see your email address, phone number or date of birth unless you
+              reply to them yourself. You can withdraw the application from your dashboard.
+            </p>
+          </>
+        }
+      />
     </div>
   );
 }

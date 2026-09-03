@@ -1,154 +1,91 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
-import { supabase } from '../../../utils/supabase';
+// Everything this organisation has sent to volunteers.
+//
+// Reads org_outreach_sent, which is the send-outreach function's own
+// log filtered to the calling organisation. It is append-only: there is
+// no delete here, because the log is what the 24-hour cooldown and the
+// daily cap are counted from, and because a sent email cannot be
+// unsent. Failed sends are shown too — a silent failure is worse than
+// a visible one.
+
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import toast from 'react-hot-toast';
-import { Trash2 } from 'lucide-react';
+import { supabase } from '../../../utils/supabase';
+import ListSkeleton from '../../../components/skeletons/ListSkeleton';
 
-export default function SentEnquiriesPage() {
-  const [orgId, setOrgId] = useState(null);
+export default function SentEnquiriesOrgPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    const getOrgId = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const user = sessionData?.session?.user;
-      if (!user) {
-        toast.error('Please log in');
-        navigate('/auth');
-        return;
-      }
-
-      const { data: profile, error } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        toast.error('Failed to load profile');
-        return;
-      }
-
-      setOrgId(profile.id);
-    };
-
-    getOrgId();
-  }, [navigate]);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['sent_enquiries', orgId],
-    enabled: !!orgId,
+    queryKey: ['org_outreach_sent_full'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('applications')
-        .select(`
-          id,
-          created_at,
-          subject,
-          message,
-          direction,
-          volunteer_id,
-          opportunity_id,
-          volunteer:volunteer_id (
-            name,
-            home_town,
-            contact_number,
-            skills
-          ),
-          volunteer_opportunities (
-            title
-          )
-        `)
-        .eq('org_id', orgId)
-        .eq('direction', 'to_volunteer')
+        .from('org_outreach_sent')
+        .select('*')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
-  const handleDelete = async (id) => {
-    const confirm = window.confirm(
-      'Are you sure you want to delete this enquiry?\n\nThe enquiry email has already been sent and this action cannot be undone.'
-    );
-    if (!confirm) return;
-
-    const { error } = await supabase.from('applications').delete().eq('id', id);
-    if (error) {
-      toast.error('Failed to delete enquiry.');
-      return;
-    }
-
-    toast.success('Enquiry deleted.');
-    await queryClient.invalidateQueries(['sent_enquiries', orgId]);
-  };
-
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-3xl mx-auto px-4 py-8" id="main-content">
       <div className="page-header">
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title mb-0">My Sent Enquiries</h1>
+        <h1 className="title !mb-0">Messages sent</h1>
         <div className="spacer" />
       </div>
 
+      <p className="page-description">
+        Messages Well Windsor has sent to volunteers on your behalf. Replies go directly to
+        your organisation&rsquo;s email address, not back through here.
+      </p>
+
       {isLoading ? (
-        <p className="text-center mt-10">Loading enquiries...</p>
+        <ListSkeleton items={4} />
       ) : error ? (
-        <div className="text-center text-red-600 mt-10">
-          <p>⚠️ Failed to load enquiries.</p>
-          <p className="error-text">{error.message}</p>
+        <div className="text-center mt-10">
+          <p className="error-text">Failed to load your messages.</p>
+          <p className="caption">{error.message}</p>
         </div>
-      ) : !Array.isArray(data) || data.length === 0 ? (
-        <p className="text-center muted">You haven’t sent any enquiries yet.</p>
+      ) : data.length === 0 ? (
+        <p className="muted italic mt-6">
+          You haven&rsquo;t written to any volunteers yet. You can write to applicants from an
+          opportunity&rsquo;s applicants list, or to anyone on the Find Volunteers page.
+        </p>
       ) : (
-        <ul className="space-y-4">
-          {data.map((enquiry) => (
-            <li key={enquiry.id} className="card relative space-y-1">
-              {/* top-right delete icon (matches your shared icon styles) */}
-              <button
-                onClick={() => handleDelete(enquiry.id)}
-                className="icon-btn icon-btn-danger absolute top-2 right-2"
-                title="Delete Enquiry"
-                aria-label="Delete Enquiry"
-              >
-                <Trash2 size={30} />
-              </button>
-
-              {/* title */}
-              <div className="card-title">
-                {enquiry.volunteer?.name || 'Unknown volunteer'}
+        <ul className="stack-lg">
+          {data.map((message) => (
+            <li key={message.id} className="card stack">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <h2 className="card-title">
+                  {message.volunteer_name || 'Unknown volunteer'}
+                </h2>
+                <span
+                  className={`badge ${
+                    message.status === 'sent' ? 'badge-success' : 'badge-danger'
+                  }`}
+                >
+                  {message.status === 'sent' ? 'Sent' : 'Not delivered'}
+                </span>
               </div>
 
-              {/* subject */}
-              <div className="highlight">
-                📝 Subject: {enquiry.subject || 'No subject'}
-              </div>
+              <p className="caption">
+                {format(new Date(message.created_at), 'PPP p')}
+                {message.volunteer_home_town ? ` · ${message.volunteer_home_town}` : ''}
+                {message.opportunity_title ? ` · about ${message.opportunity_title}` : ''}
+              </p>
 
-              {/* meta rows */}
-              <div className="muted">
-                🏠 Home Town: {enquiry.volunteer?.home_town || 'Unknown'}
-              </div>
-              <div className="muted">
-                📞 Contact: {enquiry.volunteer?.contact_number || 'N/A'}
-              </div>
-              <div className="muted">
-                🛠️ Skills: {enquiry.volunteer?.skills || 'Not provided'}
-              </div>
+              <p className="highlight">📝 {message.subject}</p>
+              <p className="text whitespace-pre-line">{message.message}</p>
 
-              <div className="caption">
-                📅 Sent: {format(new Date(enquiry.created_at), 'PPP p')}
-              </div>
-
-              {enquiry.message && (
-                <div className="text mt-2 whitespace-pre-line">
-                  <strong>📨 Message:</strong> {enquiry.message}
-                </div>
+              {message.status !== 'sent' && (
+                <p className="error-text">
+                  This one did not reach them. Nothing was delivered, and it does not count
+                  against your daily limit — you can write to them again.
+                </p>
               )}
             </li>
           ))}

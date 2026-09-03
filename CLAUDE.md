@@ -37,12 +37,33 @@ stores `'organization'` and `'volunteer'`. User-facing text says
 "organisation". A comparison against `role === 'organisation'` silently fails
 — this shipped once and broke Get Started for every org.
 
-**Never read `user_profiles` to browse volunteers.** RLS deliberately hides
-other users' volunteer rows on the base table, because RLS filters rows and
-not columns — a browse policy there would re-expose `dob`, `email` and
-`contact_number`. Use the `public_volunteers` view, which is consent-gated on
-`public_profile` and omits every contact field. Organisations *are* readable
-on the base table; they're public entities.
+**Never read `user_profiles` to see another volunteer.** RLS deliberately
+hides other users' volunteer rows on the base table, because RLS filters rows
+and not columns — a policy there would re-expose `dob`, `email` and
+`contact_number`. There is no policy that lets an organisation read a
+volunteer's profile row, and adding one is not the answer. Use a view:
+
+| View | Who sees what |
+|---|---|
+| `public_volunteers` | volunteers who set `public_profile = true` |
+| `opportunity_applicants` | people who applied to *your* opportunities |
+| `org_outreach_sent` | *your* outreach log, with the volunteer's name |
+
+All three run with owner rights (`security_invoker = false`), carry no
+contact columns, and gate on `auth.uid()`. Organisations *are* readable on
+the base table; they're public entities.
+
+**An organisation never gets a volunteer's email address.** `send-outreach`
+resolves it server-side and sets `Reply-To` to the org. The client passes a
+`volunteer_id` and never an address — do not add a parameter that carries
+one.
+
+**A disabled React Query is not "loading".** With `enabled: !!userId`,
+v5 reports `isLoading: false` while the query is disabled, so a
+`if (isLoading) return <Skeleton/>` guard falls straight through and the
+component renders with `data === undefined`. This crashed the volunteer
+dashboard on first render. Use `isPending`, or default the data
+(`const rows = data ?? []`).
 
 **Never put a secret in a `VITE_` variable.** Vite inlines them into the
 client bundle. Anything privileged belongs in a Supabase Edge Function.
@@ -107,13 +128,27 @@ row in `admins` and reads everything by policy, which looks like a leak.
    `REVOKE ... FROM PUBLIC`. Same applies to functions created later —
    `handle_new_user()` picked up the default grant the moment it was
    created and needed a separate revoke.
+1b. **And the mirror image, for tables and views: `REVOKE ... FROM PUBLIC`
+   does nothing.** Supabase ships
+   `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO
+   anon, authenticated, service_role`, so every new table and view is born
+   with `ALL` granted *to those roles by name*, not via `PUBLIC`. A tidy
+   looking `revoke all ... from public` leaves anon holding SELECT,
+   INSERT, UPDATE, DELETE and TRUNCATE. Name the roles:
+   `revoke all on <rel> from anon, authenticated;` then grant back only
+   what is needed. Caught on `opportunity_applicants` by an anon probe
+   returning `200 []` where `42501` was expected — reading the migration
+   back would never have shown it.
 2. A `DELETE`/`PATCH` matching zero rows returns `HTTP 204` whether it was
    permitted or blocked. That is not proof of denial — probe a real row id
    and look for `42501`.
 3. Any policy on `user_profiles` that queries another RLS-protected table
    causes `42P17 infinite recursion` (`applications` →
    `volunteer_opportunities` → `user_profiles`). Wrap the lookup in a
-   `SECURITY DEFINER` function, as `has_application_with()` does.
+   `SECURITY DEFINER` function. (`has_application_with()` did this and is
+   now deleted — Phase 1.2 removed the counterparty-read policy it served,
+   since the organisation no longer needs contact details at all. The
+   recursion trap is still live for any future policy there.)
 4. **Writing "requires an accepted application" into a helper function's
    comment is not the same as writing `WHERE status = 'accepted'` into its
    SQL.** `has_application_with()` shipped with no status filter at all —
@@ -124,6 +159,14 @@ row in `admins` and reads everything by policy, which looks like a leak.
    caught that the code didn't match the description. Reading a policy
    back is not verification — provoke the specific case that should fail
    and confirm it does.
+4b. A permission check that counts rows in a table the *caller* can write
+   is not a permission check. `send-outreach` unlocks emailing a volunteer
+   if they have "applied to one of your opportunities" — and the old
+   `applications` INSERT policy let an organisation insert rows naming any
+   volunteer (`direction = 'to_volunteer'`). Any org could therefore email
+   any volunteer, `public_profile` or not, by writing its own evidence
+   first. Fixed by making the table volunteer-insert-only. When a function
+   trusts a table, check who can write to that table.
 5. Testing a "does X unlock access" policy against a pair of users that
    already have an unrelated permitting relationship proves nothing —
    the earlier relationship, not the one under test, explains a pass.
@@ -172,3 +215,12 @@ Being removed: Log Hours (whole feature), ML/embedding matching (scores were
 
 Being kept and finished: availability-overlap matching, which is real,
 DB-side, and computed by `match_opportunities_by_availability`.
+
+**The flow, as of Phase 1.2 (2026-09-03).** There is no accept/deny anywhere.
+A volunteer applies; the application is read-only interest, and sends the
+organisation no email. The organisation reads its applicants, writes to the
+ones it wants through `send-outreach`, or dismisses them — dismissal is
+invisible to the volunteer, because silence means no. Everything after the
+introduction happens over the two parties' own email; we are not a mailbox.
+The UI must keep saying so plainly: "you may not hear back from every
+application."

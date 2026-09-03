@@ -1,37 +1,53 @@
-// src/pages/volunteer/VolunteerDashboard.jsx
+// One page for everything a volunteer has going on.
+//
+// Previously this showed only enquiries *received* from organisations,
+// with an accept/deny state machine, while applications the volunteer
+// had *sent* lived on a separate page. Both halves have changed: there
+// is nothing to accept or deny any more, and an approach from an
+// organisation arrives as an email rather than as a row to action here.
+//
+// So this page is a record, not an inbox: what you applied for, and who
+// has written to you.
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../../utils/supabase';
 import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
+import { supabase } from '../../utils/supabase';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import ListSkeleton from '../../components/skeletons/ListSkeleton';
 
 export default function VolunteerDashboard() {
   const [userId, setUserId] = useState(null);
+  const [withdrawing, setWithdrawing] = useState(null);
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [draftStatus, setDraftStatus] = useState({});
-  const [messages, setMessages] = useState({});
-  const [loadingId, setLoadingId] = useState(null);  const [statusChanges, setStatusChanges] = useState(new Map());
-  const DEFAULT_REPLIES = {
-    accepted: 'Thank you! I’m happy to volunteer.',
-    denied:   'Thanks for reaching out, but I won’t be able to volunteer.',
-  };
 
   useEffect(() => {
     const fetchUser = async () => {
       const { data, error } = await supabase.auth.getUser();
       if (error || !data?.user?.id) {
-        toast.error('Unable to load user ID');
+        toast.error('Please log in');
+        navigate('/auth');
         return;
       }
       setUserId(data.user.id);
     };
     fetchUser();
-  }, []);
+  }, [navigate]);
 
-  const { data: receivedData, isLoading, error } = useQuery({
-    queryKey: ['applications_received', userId],
+  // isPending rather than isLoading: both queries are disabled until the
+  // session resolves, and react-query v5 reports isLoading false for a
+  // disabled query — so a loading guard on isLoading falls through to
+  // rendering with data still undefined.
+  const {
+    data: applicationsData,
+    isPending: loadingApplications,
+    error: applicationsError,
+  } = useQuery({
+    queryKey: ['my_applications', userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
@@ -40,331 +56,175 @@ export default function VolunteerDashboard() {
           created_at,
           subject,
           message,
-          status,
-          rejection_message,
-          org:org_id (
-            name,
-            contact_number,
-            email,
-            home_town
-          ),
-          volunteer_opportunities (
-            title
-          )
+          org:org_id ( name ),
+          volunteer_opportunities ( title, location, date_needed )
         `)
         .eq('volunteer_id', userId)
-        .eq('direction', 'to_volunteer')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
-    enabled: !!userId,
   });
 
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status, rejection_message }) => {
-      const { error } = await supabase
-        .from('applications')
-        .update({ status, rejection_message })
-        .eq('id', id);
+  // Approaches from organisations. The email itself has already been
+  // delivered; this is the record of it, so nothing here needs actioning.
+  const { data: approachesData, isPending: loadingApproaches } = useQuery({
+    queryKey: ['my_approaches', userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_outreach')
+        .select('id, created_at, subject, message, org:org_id ( name, home_town, email )')
+        .eq('volunteer_id', userId)
+        .eq('status', 'sent')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const applications = applicationsData ?? [];
+  const approaches = approachesData ?? [];
+
+  const withdraw = useMutation({
+    mutationFn: async (applicationId) => {
+      const { error } = await supabase.from('applications').delete().eq('id', applicationId);
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Response sent');
-      queryClient.invalidateQueries(['applications_received', userId]);
+      toast.success('Application withdrawn');
+      queryClient.invalidateQueries({ queryKey: ['my_applications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['my_applied_opportunity_ids'] });
     },
-    onError: () => toast.error('Failed to respond to enquiry'),
+    onError: () => toast.error('Could not withdraw this application'),
   });
-
-  /**
-   * Start/modify a draft decision for an enquiry.
-   * Swaps to the correct default message when the prior text is empty
-   * or matches the previous default.
-   */
-  const handleAction = (id, targetStatus, currentStatus = null, serverMsg = '') => {
-    const prevDraft = draftStatus[id];                      // 'accepted' | 'denied' | undefined
-    const prevMsgInState = (messages[id] ?? '').trim();
-
-    // What the textarea currently shows (local edit if present, else what's on the server)
-    const baseline = prevMsgInState !== '' ? prevMsgInState : (serverMsg ?? '').trim();
-    const currentDefault = currentStatus ? DEFAULT_REPLIES[currentStatus] : null;
-
-    // Swap to the new default if the baseline was empty or still equal to the previous default
-    const shouldUseNewDefault =
-      baseline === '' ||
-      (currentDefault && baseline === currentDefault) ||
-      (prevDraft && baseline === DEFAULT_REPLIES[prevDraft]);
-
-    const nextMsg = shouldUseNewDefault ? DEFAULT_REPLIES[targetStatus] : baseline;
-
-    setDraftStatus(prev => ({ ...prev, [id]: targetStatus }));
-    setMessages(prev => ({ ...prev, [id]: nextMsg }));
-  };
-
-  const cancelDraft = (id) => {
-    setDraftStatus((prev) => {
-      const copy = { ...prev };
-      delete copy[id];
-      return copy;
-    });
-  };
-
-  const handleSend = async (id) => {
-    const status = draftStatus[id];
-    const message = messages[id]?.trim();
-    if (!status || !message) return;
-
-    // Check rate limit (max 5 changes per hour)
-    const now = Date.now();
-    const history = statusChanges.get(id) || [];
-    const lastHour = history.filter(timestamp => now - timestamp < 60 * 60 * 1000);
-    
-    if (lastHour.length >= 5) {
-      toast.error('Too many status changes for this enquiry. Please wait before changing it again.');
-      return;
-    }
-
-    setLoadingId(id);
-    await updateStatus.mutateAsync({ id, status, rejection_message: message });
-    setLoadingId(null);
-    cancelDraft(id);
-
-    // Track this status change
-    setStatusChanges(prev => {
-      const updatedHistory = [...(prev.get(id) || []), now];
-      const updated = new Map(prev);
-      updated.set(id, updatedHistory);
-      return updated;
-    });
-
-    // Clear cached message so future toggles evaluate from server state
-    setMessages(prev => {
-      const cp = { ...prev };
-      delete cp[id];
-      return cp;
-    });
-  };
-
-  if (isLoading) return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="title">Volunteer Dashboard</h1>
-      <ListSkeleton items={5} />
-    </div>
-  );
-  if (error) return <p className="text-center text-red-600 mt-20">Failed to load enquiries.</p>;
-
-  // Group enquiries by status
-  const grouped = { pending: [], accepted: [], denied: [] };
-  if (receivedData) {
-    for (const entry of receivedData) {
-      grouped[entry.status || 'pending'].push(entry);
-    }
-  }
-
-  const renderList = (title, list, statusKey) => (
-    <div>
-      <h2 className="section-title mt-6 mb-2 text-left">{title}</h2>
-      {list.length === 0 ? (
-        <p className="muted italic">No {title.toLowerCase()} enquiries.</p>
-      ) : (
-        <ul className="stack">
-          {list.map((enquiry) => {
-            const draft = draftStatus[enquiry.id];
-            const msg = messages[enquiry.id] || '';
-
-            return (
-              <li key={enquiry.id} className="card space-y-2">
-                <h3 className="card-title text-black-800">
-                  {enquiry.subject || 'No subject'}
-                </h3>
-
-                <p className="text text-sm">🏢 Organisation: {enquiry.org?.name || 'Unknown'}</p>
-
-                {enquiry.org?.contact_number && (
-                  <p className="text text-sm">📞 Contact: {enquiry.org.contact_number}</p>
-                )}
-
-                <p className="text text-sm">📧 Email: {enquiry.org?.email || 'Unknown'}</p>
-                <p className="text text-sm">🏠 Town: {enquiry.org?.home_town || 'Unknown'}</p>
-
-                <p className="caption">
-                  📅 Sent: {format(new Date(enquiry.created_at), 'PPP p')}
-                </p>
-
-                {enquiry.message && (
-                  <p className="text text-sm mt-1 whitespace-pre-line">
-                    <strong>📨 Message:</strong> {enquiry.message}
-                  </p>
-                )}
-
-                <p className="text-sm">
-                  <strong>Status:</strong>{' '}
-                  <span
-                    className={
-                      statusKey === 'accepted'
-                        ? 'badge badge-success'
-                        : statusKey === 'denied'
-                        ? 'badge badge-danger'
-                        : 'badge badge-neutral'
-                    }
-                  >
-                    {statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}
-                  </span>
-                </p>
-
-                {/* Pending actions */}
-                {statusKey === 'pending' && !draft && (
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={() => handleAction(enquiry.id, 'accepted')}
-                      className="btn btn-success btn-sm"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      onClick={() => handleAction(enquiry.id, 'denied')}
-                      className="btn btn-danger btn-sm"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                )}
-
-                {/* Accepted/Denied → change buttons */}
-                {statusKey === 'accepted' && !draft && (
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={() =>
-                        handleAction(
-                          enquiry.id,
-                          'denied',
-                          'accepted',
-                          enquiry.rejection_message
-                        )
-                      }
-                      className="btn btn-danger btn-sm"
-                    >
-                      Change to Denied
-                    </button>
-                  </div>
-                )}
-
-                {statusKey === 'denied' && !draft && (
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={() =>
-                        handleAction(
-                          enquiry.id,
-                          'accepted',
-                          'denied',
-                          enquiry.rejection_message
-                        )
-                      }
-                      className="btn btn-success btn-sm"
-                    >
-                      Change to Accepted
-                    </button>
-                  </div>
-                )}
-
-                {/* Draft UI (shown for any list if a draft exists) */}
-                {draft && (
-                  <div className="stack">
-                    <p className="text-sm font-medium">
-                      You’ve chosen to{' '}
-                      <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>
-                        {draft === 'accepted' ? 'accept' : 'deny'}
-                      </span>{' '}
-                      this opportunity.
-                    </p>
-
-                    <textarea
-                      className="input textarea textarea-sm text-sm"
-                      value={msg}
-                      onChange={(e) =>
-                        setMessages({ ...messages, [enquiry.id]: e.target.value })
-                      }
-                    />
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSend(enquiry.id)}
-                        disabled={loadingId === enquiry.id}
-                        className="btn btn-primary btn-sm"
-                      >
-                        {loadingId === enquiry.id ? 'Sending…' : 'Send'}
-                      </button>
-                      <button
-                        onClick={() => cancelDraft(enquiry.id)}
-                        className="btn btn-ghost btn-sm"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-
-                    <div className="caption italic">
-                      Changed your mind? You can switch to{' '}
-                      <button
-                        onClick={() =>
-                          handleAction(
-                            enquiry.id,
-                            draft === 'accepted' ? 'denied' : 'accepted',
-                            statusKey,
-                            enquiry.rejection_message
-                          )
-                        }
-                        className="underline text-brand-teal"
-                      >
-                        {draft === 'accepted' ? 'Reject' : 'Accept'}
-                      </button>{' '}
-                      instead.
-                    </div>
-                  </div>
-                )}
-
-                {/* Final summaries when not editing */}
-                {!draft && statusKey === 'denied' && enquiry.rejection_message && (
-                  <div className="text-sm text-red-600">
-                    ❌ You declined this opportunity.
-                    <br />
-                    <strong>Message:</strong> {enquiry.rejection_message}
-                  </div>
-                )}
-
-                {!draft && statusKey === 'accepted' && enquiry.rejection_message && (
-                  <div className="text-sm text-green-700">
-                    ✅ You’ve accepted this opportunity.
-                    <br />
-                    <strong>Message:</strong> {enquiry.rejection_message}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8" id="main-content">
       <div className="mb-8">
-        <h1 className="title">Volunteer Dashboard</h1>
+        <h1 className="title">Your volunteering</h1>
         <p className="page-description">
-          Manage enquiries from organisations and respond to opportunities. Accept enquiries you're interested in or decline those that don't fit your schedule.
+          Roles you have applied for, and organisations that have been in touch.
+          Organisations get in touch by email with the people they would like to hear more
+          from, so check your inbox — and don&rsquo;t worry if you don&rsquo;t hear back
+          from every application. That is normal, and it isn&rsquo;t a reflection on you.
         </p>
       </div>
-      
+
       <div className="flex gap-2 mb-6">
-        <Link to="/volunteer/sent-enquiries" className="btn btn-success">
-          Sent Enquiries
+        <Link to="/opportunities" className="btn btn-primary">
+          Find opportunities
         </Link>
       </div>
 
-      {renderList('Pending', grouped.pending, 'pending')}
-      {renderList('Accepted', grouped.accepted, 'accepted')}
-      {renderList('Denied', grouped.denied, 'denied')}
+      <h2 className="section-title mt-6 mb-2 text-left">
+        Applications you&rsquo;ve sent{applications.length ? ` (${applications.length})` : ''}
+      </h2>
+
+      {loadingApplications ? (
+        <ListSkeleton items={3} />
+      ) : applicationsError ? (
+        <p className="error-text">Failed to load your applications.</p>
+      ) : applications.length === 0 ? (
+        <p className="muted italic">
+          You haven&rsquo;t applied for anything yet.{' '}
+          <Link to="/opportunities" className="underline">
+            Browse opportunities
+          </Link>
+          .
+        </p>
+      ) : (
+        <ul className="stack-lg">
+          {applications.map((application) => (
+            <li key={application.id} className="card stack">
+              <h3 className="card-title">
+                {application.volunteer_opportunities?.title || 'Opportunity'}
+              </h3>
+              <p className="caption">
+                {application.org?.name || 'Organisation'} ·{' '}
+                {application.volunteer_opportunities?.location || 'Location not given'}
+              </p>
+              <p className="caption">
+                Applied {format(new Date(application.created_at), 'PPP')}
+              </p>
+
+              {application.subject?.trim() && (
+                <p className="highlight">📝 {application.subject}</p>
+              )}
+              {application.message?.trim() && (
+                <p className="text whitespace-pre-line">{application.message}</p>
+              )}
+
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm self-start"
+                onClick={() => setWithdrawing(application)}
+              >
+                Withdraw
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h2 className="section-title mt-10 mb-2 text-left">
+        Organisations that have contacted you{approaches.length ? ` (${approaches.length})` : ''}
+      </h2>
+
+      {loadingApproaches ? (
+        <ListSkeleton items={2} />
+      ) : approaches.length === 0 ? (
+        <p className="muted italic">
+          No one has written to you yet. When an organisation does, the message goes to your
+          email address and a copy appears here.
+        </p>
+      ) : (
+        <ul className="stack-lg">
+          {approaches.map((approach) => (
+            <li key={approach.id} className="card stack">
+              <h3 className="card-title">{approach.org?.name || 'An organisation'}</h3>
+              <p className="caption">
+                {format(new Date(approach.created_at), 'PPP p')}
+                {approach.org?.home_town ? ` · ${approach.org.home_town}` : ''}
+              </p>
+              <p className="highlight">📝 {approach.subject}</p>
+              <p className="text whitespace-pre-line">{approach.message}</p>
+              {approach.org?.email && (
+                <p className="caption">
+                  Reply to them at{' '}
+                  <a href={`mailto:${approach.org.email}`} className="underline">
+                    {approach.org.email}
+                  </a>{' '}
+                  — or just reply to their email.
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <ConfirmDialog
+        isOpen={!!withdrawing}
+        onClose={() => setWithdrawing(null)}
+        onConfirm={() => withdraw.mutate(withdrawing.id)}
+        title="Withdraw this application?"
+        confirmText="Withdraw"
+        confirmStyle="danger"
+        message={
+          <>
+            <p>
+              This removes your application to{' '}
+              <strong>
+                {withdrawing?.volunteer_opportunities?.title || 'this opportunity'}
+              </strong>{' '}
+              from the organisation&rsquo;s list.
+            </p>
+            <p className="mt-2">
+              You can apply again later if you change your mind.
+            </p>
+          </>
+        }
+      />
     </div>
   );
 }

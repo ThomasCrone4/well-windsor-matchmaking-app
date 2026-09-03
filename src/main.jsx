@@ -28,7 +28,6 @@ import EnquireVolunteerPage from './pages/OrganizationPages/FindVolunteers/Enqui
 import SentEnquiriesOrg from './pages/OrganizationPages/FindVolunteers/SentEnquiriesOrg';
 import PostLoggedHours from './pages/OrganizationPages/LogHours/PostLoggedHours';
 
-import SentEnquiriesVol from './pages/VolunteerPages/FindOpportunities/SentEnquiriesVol';
 import ListLogHours from './pages/VolunteerPages/LogHours/ListLogHours';
 import NewLogHours from './pages/VolunteerPages/LogHours/NewLogHours';
 import EditLogHours from './pages/VolunteerPages/LogHours/EditLogHours';
@@ -193,13 +192,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     </ProtectedRoute>
                   }
                 />
+                {/* Sent applications and approaches received are one list
+                    on the dashboard now; keep the old path working. */}
                 <Route
                   path="/volunteer/sent-enquiries"
-                  element={
-                    <ProtectedRoute allowedRoles={['volunteer']}>
-                      <SentEnquiriesVol />
-                    </ProtectedRoute>
-                  }
+                  element={<Navigate to="/volunteer-dashboard" replace />}
                 />
                 <Route
                   path="/volunteer/log-hours"

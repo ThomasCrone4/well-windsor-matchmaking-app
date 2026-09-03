@@ -43,14 +43,14 @@ export default function OpportunitiesPage() {
     fetchProfile();
   }, []);
 
-  // preload opportunity_ids and status this volunteer has already enquired about
+  // preload the opportunities this volunteer has already applied to
   const { data: myApps } = useQuery({
     queryKey: ['my_applied_opportunity_ids', userProfile?.id],
     enabled: !!userProfile?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
-        .select('opportunity_id, status')
+        .select('opportunity_id')
         .eq('volunteer_id', userProfile.id);
       if (error) throw error;
       return data ?? [];
@@ -60,11 +60,6 @@ export default function OpportunitiesPage() {
 
   const appliedSet = useMemo(
     () => new Set((myApps ?? []).map((r) => r.opportunity_id)),
-    [myApps]
-  );
-
-  const appStatusMap = useMemo(
-    () => new Map((myApps ?? []).map((r) => [r.opportunity_id, r.status])),
     [myApps]
   );
 
@@ -170,7 +165,7 @@ export default function OpportunitiesPage() {
     const user = sessionData?.session?.user;
 
     if (!user) {
-      toast.error('Please log in to enquire.');
+      toast.error('Please log in to apply.');
       navigate('/auth');
       return;
     }
@@ -182,7 +177,7 @@ export default function OpportunitiesPage() {
       .single();
 
     if (error || profile?.role !== 'volunteer') {
-      toast.error('Only volunteers can make enquiries.');
+      toast.error('Only volunteers can apply for opportunities.');
       return;
     }
 
@@ -194,8 +189,8 @@ export default function OpportunitiesPage() {
       .maybeSingle();
 
     if (existing) {
-      toast.error('You have already enquired about this opportunity.');
-      navigate('/volunteer/sent-enquiries');
+      toast.error('You have already applied to this opportunity.');
+      navigate('/volunteer-dashboard');
       return;
     }
 
@@ -305,8 +300,8 @@ export default function OpportunitiesPage() {
       <div className="mb-6">
         {userProfile?.role === 'volunteer' && (
           <div className="flex justify-center">
-            <Link to="/volunteer/sent-enquiries" className="btn btn-success">
-              Sent Enquiries
+            <Link to="/volunteer-dashboard" className="btn btn-success">
+              Your applications
             </Link>
           </div>
         )}
@@ -467,29 +462,21 @@ export default function OpportunitiesPage() {
                 <div className="flex items-center gap-3 pt-2">
                   {userProfile?.role === 'volunteer' && (
                     <>
-                      {appStatusMap.get(op.id) === 'denied' ? (
+                      {alreadyEnquired ? (
                         <button
                           className="btn-secondary opacity-60 cursor-not-allowed"
                           disabled
-                          title="Your application was rejected"
+                          title="You have applied to this opportunity"
                         >
-                          Rejected
-                        </button>
-                      ) : alreadyEnquired ? (
-                        <button
-                          className="btn-secondary opacity-60 cursor-not-allowed"
-                          disabled
-                          title="You already enquired"
-                        >
-                          Already enquired
+                          Applied
                         </button>
                       ) : (
                         <button
                           className="btn-primary"
                           onClick={() => handleApply(op.id)}
-                          title="Enquire about this opportunity"
+                          title="Apply for this opportunity"
                         >
-                          Enquire
+                          Apply
                         </button>
                       )}
                     </>
