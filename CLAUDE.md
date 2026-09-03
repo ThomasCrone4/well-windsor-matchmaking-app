@@ -100,11 +100,13 @@ SET LOCAL request.jwt.claims = '{"sub":"<uuid>","role":"authenticated"}';
 Pick a non-admin subject. `875907a2-baa6-47f8-8695-d7a0e61c8249` is the only
 row in `admins` and reads everything by policy, which looks like a leak.
 
-### Three traps, all hit for real
+### Traps, all hit for real
 
 1. `REVOKE EXECUTE ... FROM anon` does nothing on its own. Postgres grants
    `EXECUTE` to `PUBLIC` by default and anon inherits it. Always
-   `REVOKE ... FROM PUBLIC`.
+   `REVOKE ... FROM PUBLIC`. Same applies to functions created later —
+   `handle_new_user()` picked up the default grant the moment it was
+   created and needed a separate revoke.
 2. A `DELETE`/`PATCH` matching zero rows returns `HTTP 204` whether it was
    permitted or blocked. That is not proof of denial — probe a real row id
    and look for `42501`.
@@ -112,6 +114,34 @@ row in `admins` and reads everything by policy, which looks like a leak.
    causes `42P17 infinite recursion` (`applications` →
    `volunteer_opportunities` → `user_profiles`). Wrap the lookup in a
    `SECURITY DEFINER` function, as `has_application_with()` does.
+4. **Writing "requires an accepted application" into a helper function's
+   comment is not the same as writing `WHERE status = 'accepted'` into its
+   SQL.** `has_application_with()` shipped with no status filter at all —
+   any application, including a bare pending one, unlocked a volunteer's
+   DOB/email/phone to the org. It read correctly in every comment and
+   every plan document; only a live write test (create a pending
+   application, immediately try to read contact fields, expect denial)
+   caught that the code didn't match the description. Reading a policy
+   back is not verification — provoke the specific case that should fail
+   and confirm it does.
+5. Testing a "does X unlock access" policy against a pair of users that
+   already have an unrelated permitting relationship proves nothing —
+   the earlier relationship, not the one under test, explains a pass.
+   Use a fresh pair with no history for the negative case.
+
+## Every table needs the same checklist, not just the ones that were obviously broken
+
+The 2026-09-03 emergency fix hardened the 3 tables that had RLS fully
+disabled. A follow-up pass the same day found the other 10 tables all still
+held full anon write grants (blocked in practice by their policies, but
+sloppy — fixed for defence in depth), one policy (`volunteer_opportunities`
+public read) with no status filter that only hadn't leaked yet because no
+draft existed, and one policy (`notifications` insert) that any signed-in
+user could actually exploit today. **A security pass that stops at the
+table everyone already knows is bad will miss the ones nobody's looked at.**
+Any new table needs: RLS on, no anon write grants, every `SECURITY DEFINER`
+function's `EXECUTE` grant reviewed (not left at its default), and a live
+write test — not just a read probe — before it's considered done.
 
 ## Working agreement
 
