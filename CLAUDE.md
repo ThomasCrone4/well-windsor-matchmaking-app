@@ -163,6 +163,66 @@ SET LOCAL request.jwt.claims = '{"sub":"<uuid>","role":"authenticated"}';
 Pick a non-admin subject. `875907a2-baa6-47f8-8695-d7a0e61c8249` is the only
 row in `admins` and reads everything by policy, which looks like a leak.
 
+### Throwaway accounts you can actually sign in as
+
+Role-switching in SQL proves policies but cannot walk the UI. For that you
+need real auth rows. Insert them directly — the `on_auth_user_created`
+trigger builds the profile (and the `volunteer_availability` rows) from the
+metadata, so this exercises the real signup path rather than side-stepping
+it. Only `id` is NOT NULL on `auth.users`; everything else below is what
+password sign-in actually needs.
+
+```sql
+insert into auth.users (id, email, raw_user_meta_data, aud, role,
+                        created_at, updated_at)
+values ('7e570000-0000-4000-8000-000000000a01',
+        'volunteer-a@wellwindsor-test.invalid',
+        jsonb_build_object('role','volunteer','name','Throwaway Volunteer A',
+          'home_town','Windsor','available_anytime', false,
+          'availability_matrix', jsonb_build_array(jsonb_build_object(
+            'days', jsonb_build_array('Monday','Tuesday','Wednesday'),
+            'start_time','09:00','end_time','16:00',
+            'start_date','2026-09-01','end_date','2026-12-31'))),
+        'authenticated','authenticated', now(), now());
+
+update auth.users
+   set encrypted_password = crypt('<password>', gen_salt('bf')),
+       email_confirmed_at = now(),
+       confirmation_token = '', recovery_token = '',
+       email_change_token_new = '', email_change = '',
+       instance_id = '00000000-0000-0000-0000-000000000000',
+       raw_app_meta_data = '{"provider":"email","providers":["email"]}'::jsonb
+ where id::text like '7e57%';
+```
+
+Ids prefixed `7e57`, emails on `.invalid` (a reserved TLD — nothing can
+ever be delivered, which is the point after trap 6). Clean up with
+`delete from auth.users where id::text like '7e57%'`; the profile,
+availability and any applications cascade.
+
+**A throwaway opportunity posted as `active` is live on the public browse
+while it exists.** Delete it in the same session, and never attribute one
+to a real organisation — use a throwaway org, for the same reason the seed
+rows are a launch blocker.
+
+### Walking the flows
+
+`npm run build` and `npx eslint .` do not exercise anything. Both were
+clean on 2026-09-03 while the logged-out browse returned zero results for
+every town filter, because a `.select()` edit had landed on one of two
+near-identical blocks that differed only in indentation. Drive the real
+pages with Playwright, watching `console` and `pageerror`:
+
+```bash
+pip install playwright && python -m playwright install chromium
+python <skills>/webapp-testing/scripts/with_server.py \
+  --server "npm run dev" --port 5173 -- python .scratch/walk.py
+```
+
+Put scripts in `.scratch/` — it is gitignored. On Windows start them with
+`sys.stdout.reconfigure(encoding="utf-8")` or the emoji in the page text
+will raise `UnicodeEncodeError` before you see any output.
+
 ### Traps, all hit for real
 
 1. `REVOKE EXECUTE ... FROM anon` does nothing on its own. Postgres grants
@@ -255,8 +315,38 @@ Being removed: Log Hours (whole feature), ML/embedding matching (scores were
 `Math.random()`), admin analytics and user impersonation. Archived on the
 `archive/log-hours` and `archive/ml-matching` branches.
 
+**ML matching is now deleted** (2026-09-03, commit `0e3b1a9`) — six files,
+the `window.seedData`/`window.seedMatches` globals and the `openai`
+dependency. `src/services/` is empty. Log Hours is untouched and is the
+next deletion.
+
 Being kept and finished: availability-overlap matching, which is real,
-DB-side, and computed by `match_opportunities_by_availability`.
+DB-side, and computed by `match_opportunities_by_availability`. **Phase 1
+is complete** — the badge renders, "Show Matches Only" works, `town` is a
+real column, and `requires_dbs` shows on the browse.
+
+### Where to pick up
+
+1. **Phase 4.2 — delete Log Hours** (~1,400 lines, deliberately kept out of
+   the Phase 1 commit): `src/pages/VolunteerPages/LogHours/*`,
+   `src/pages/OrganizationPages/LogHours/*`, `components/WorkedMatrix.jsx`,
+   `utils/loggedHoursValidation.js`, the three volunteer + one organisation
+   routes and the two imports in `main.jsx` (which already lints as unused),
+   and the nav links. Leave the `volunteer_hours` table — 0 rows, costs
+   nothing. Clears ~3 more lint errors.
+2. **Phase 4.5 — slim the admin.** `UserManagement.jsx:227` is the one
+   pre-existing esbuild diagnostic and the one eslint *parse* error; it is
+   a malformed ternary, and the page is due a rewrite anyway.
+3. **Phase 3 — design** needs the brand palette from the user before it can
+   start. That is the only real blocker on the list.
+4. Before any deploy: **Phase 5.0**, delete the `5eed…` seed opportunities
+   and the junk accounts. Decided to keep them for now; they are a hard gate
+   on going public, not a task to schedule early.
+
+`v0-launch-prep` is 6 commits ahead of `origin/v0-launch-prep` and 8 ahead
+of `main`. Pushing has failed with an SSL certificate error in this
+environment before; nothing has been pushed, so the local branch is the
+only copy of this work outside OneDrive's own sync.
 
 **The flow, as of Phase 1.2 (2026-09-03).** There is no accept/deny anywhere.
 A volunteer applies; the application is read-only interest, and sends the
