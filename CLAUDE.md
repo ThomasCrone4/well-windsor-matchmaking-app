@@ -128,6 +128,13 @@ row in `admins` and reads everything by policy, which looks like a leak.
    already have an unrelated permitting relationship proves nothing —
    the earlier relationship, not the one under test, explains a pass.
    Use a fresh pair with no history for the negative case.
+6. **Never use a real user's id as a test target — including for a test
+   you expect to be REJECTED.** A negative test is only free if the
+   expectation holds. On 2026-09-03 a "this org has no relationship,
+   expect 403" test against a real volunteer's id passed instead of
+   failing (they had `public_profile = true`, which legitimately permits
+   contact) and sent a real junk email to a real person at the charity.
+   Create throwaway accounts for every test target, always.
 
 ## Every table needs the same checklist, not just the ones that were obviously broken
 
