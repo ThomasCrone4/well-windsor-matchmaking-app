@@ -187,12 +187,6 @@ export default function OrganizationDashboard() {
                       View Applicants
                     </button>
                   )}
-                  {/* <button
-                    onClick={() => navigate(`/opportunity/${op.id}/logged-hours`)}
-                    className="btn-ghost btn-sm"
-                  >
-                    Logged Hours
-                  </button> */}
                   {op.status == 'closed' && (
                     <button
                       onClick={() => handleStatusChange(op.id, 'active')}

@@ -1,5 +1,5 @@
 // src/components/Navbar.jsx
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { UserCircle, Moon, Sun } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -12,7 +12,6 @@ export default function Navbar() {
   const { session } = useSession();
   const userId = session?.user?.id;
   const { theme, toggleTheme, isDark } = useTheme();
-  const location = useLocation();
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -106,22 +105,9 @@ export default function Navbar() {
 
           {/* Show Looking for Volunteers only for organizations */}
           {isLoggedIn && role === 'organization' && (
-            <>
-              <Link to="/volunteers" className="btn-secondary">
-                Looking for Volunteers
-              </Link>
-              <Link 
-                to="/organization/logged-hours" 
-                className="btn-secondary"
-                style={location.pathname === '/organization/logged-hours' ? {
-                  backgroundColor: 'var(--color-brand-teal)',
-                  color: 'white',
-                  fontWeight: '600'
-                } : {}}
-              >
-                Log Hours
-              </Link>
-            </>
+            <Link to="/volunteers" className="btn-secondary">
+              Looking for Volunteers
+            </Link>
           )}
 
         {/* Admin link (only visible to users in the `admins` table) */}
@@ -138,22 +124,9 @@ export default function Navbar() {
         ) : (
           <>
             {role === 'volunteer' && (
-              <>
-                <Link to="/volunteer-dashboard" className="btn-secondary">
-                  Dashboard
-                </Link>
-                <Link 
-                  to="/volunteer/log-hours" 
-                  className="btn-secondary"
-                  style={location.pathname.startsWith('/volunteer/log-hours') ? {
-                    backgroundColor: 'var(--color-brand-teal)',
-                    color: 'white',
-                    fontWeight: '600'
-                  } : {}}
-                >
-                  Log Hours
-                </Link>
-              </>
+              <Link to="/volunteer-dashboard" className="btn-secondary">
+                Dashboard
+              </Link>
             )}
 
             {role === 'organization' && (

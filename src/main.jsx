@@ -26,13 +26,6 @@ import OpportunityApplicantsPage from './pages/OrganizationPages/PostOpportuniti
 import LookingForVolunteersPage from './pages/OrganizationPages/FindVolunteers/LookingForVolunteers';
 import EnquireVolunteerPage from './pages/OrganizationPages/FindVolunteers/EnquireVolunteers';
 import SentEnquiriesOrg from './pages/OrganizationPages/FindVolunteers/SentEnquiriesOrg';
-import PostLoggedHours from './pages/OrganizationPages/LogHours/PostLoggedHours';
-
-import ListLogHours from './pages/VolunteerPages/LogHours/ListLogHours';
-import NewLogHours from './pages/VolunteerPages/LogHours/NewLogHours';
-import EditLogHours from './pages/VolunteerPages/LogHours/EditLogHours';
-// import EditConfirmHours from './pages/OrganizationPages/LogHours/EditConfirmHours';
-import AllLoggedHours from './pages/OrganizationPages/LogHours/AllLoggedHours';
 
 import Navbar from './components/NavBar';
 import Footer from './components/Footer';
@@ -133,14 +126,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/organization/logged-hours"
-                  element={
-                    <ProtectedRoute allowedRoles={['organization']}>
-                      <AllLoggedHours />
-                    </ProtectedRoute>
-                  }
-                />
 
                 {/* Volunteer pages */}
                 <Route
@@ -172,30 +157,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route
                   path="/volunteer/sent-enquiries"
                   element={<Navigate to="/volunteer-dashboard" replace />}
-                />
-                <Route
-                  path="/volunteer/log-hours"
-                  element={
-                    <ProtectedRoute allowedRoles={['volunteer']}>
-                      <ListLogHours />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/volunteer/log-hours/new"
-                  element={
-                    <ProtectedRoute allowedRoles={['volunteer']}>
-                      <NewLogHours />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/volunteer/log-hours/edit/:id"
-                  element={
-                    <ProtectedRoute allowedRoles={['volunteer']}>
-                      <EditLogHours />
-                    </ProtectedRoute>
-                  }
                 />
 
                 {/* Admin pages */}

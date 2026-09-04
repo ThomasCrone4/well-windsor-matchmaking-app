@@ -32,36 +32,14 @@ export default function NotificationsDropdown() {
     }
   }, [isOpen, setIsOpen]);
 
-  const getNotificationLink = (notification) => {
-    switch (notification.type) {
-      case 'hours_logged':
-      case 'hours_confirmed':
-      case 'hours_challenged':
-        // Org users go to org logged hours, volunteers go to their list
-        return notification.message.includes('volunteer') 
-          ? '/organization/logged-hours'
-          : '/volunteer/log-hours';
-      case 'hours_rejected':
-        return '/volunteer/log-hours';
-      default:
-        return null;
-    }
-  };
+  // No notification type routes anywhere yet. The hours_* types this used to
+  // map to went with Log Hours, and nothing has ever written to `notifications`
+  // (0 rows). Returning null renders the row as plain, unclickable text rather
+  // than a link into the catch-all redirect; add cases here when something
+  // starts writing notifications.
+  const getNotificationLink = () => null;
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'hours_logged':
-        return '📝';
-      case 'hours_confirmed':
-        return '✅';
-      case 'hours_challenged':
-        return '⚠️';
-      case 'hours_rejected':
-        return '❌';
-      default:
-        return '🔔';
-    }
-  };
+  const getNotificationIcon = () => '🔔';
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -132,7 +110,7 @@ export default function NotificationsDropdown() {
             ) : (
               <ul>
                 {notifications.map((notification) => {
-                  const link = getNotificationLink(notification);
+                  const link = getNotificationLink();
                   const isUnread = !notification.read_at;
                   
                   const NotificationContent = (
@@ -146,7 +124,7 @@ export default function NotificationsDropdown() {
                     >
                       {/* Icon */}
                       <div className="text-2xl flex-shrink-0">
-                        {getNotificationIcon(notification.type)}
+                        {getNotificationIcon()}
                       </div>
 
                       {/* Content */}
