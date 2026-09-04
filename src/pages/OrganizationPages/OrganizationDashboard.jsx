@@ -174,7 +174,7 @@ export default function OrganizationDashboard() {
                 )}
 
                 {op.status !== 'draft' && (
-                  <p className="highlight text-brand-teal">📨 {applicationsCount[op.id] || 0} applicants</p>
+                  <p className="highlight">📨 {applicationsCount[op.id] || 0} applicants</p>
                 )}
 
                 {/* Actions */}
@@ -208,7 +208,7 @@ export default function OrganizationDashboard() {
                     <button
                       aria-label="Edit"
                       onClick={() => navigate(`/edit-opportunity/${op.id}`)}
-                      className="icon-btn hover:text-brand-teal"
+                      className="icon-btn hover:text-brand-ink"
                       title="Edit"
                     >
                       <Edit2 size={18} />

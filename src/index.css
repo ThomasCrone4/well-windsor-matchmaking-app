@@ -2,66 +2,115 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ========== CSS Variables for Dark/Light Theme ========== */
+/* ==========================================================================
+   Well Windsor design tokens
+   --------------------------------------------------------------------------
+   Palette extracted from wellwindsor.org.uk on 2026-09-04 by reading the
+   RENDERED computed styles of four pages, not the stylesheet: the site is
+   Squarespace, so site.css is mostly framework default. Of the colours in
+   that file, only #15ddef actually reaches the page. The coral #f0523d that
+   appears 11 times in site.css never renders anywhere -- it is a Squarespace
+   default, and building on it would have been a mistake.
+
+   The real brand is small: cyan #15ddef, black, white, set in Poppins.
+
+   THE CONSTRAINT THAT SHAPES EVERYTHING BELOW: #15ddef is 1.66:1 against
+   white. It cannot carry text on a light background, and it cannot take
+   white text on top of it. The charity's own site puts BLACK on its cyan
+   buttons for exactly this reason. So the brand colour splits in two:
+
+     --color-brand      a FILL. Always pair with --color-on-brand.
+     --color-brand-ink  the same hue (185) darkened to 5.29:1 on white.
+                        This is what type, links, icons and focus rings use
+                        on light surfaces.
+
+   Every pair below is checked to WCAG AA (4.5:1 for text, 3:1 for the
+   boundaries of interactive controls). Re-check with .scratch/check_palette.py
+   before changing any value here.
+   ========================================================================== */
 :root {
-  /* Light theme colors */
+  /* ---- Brand ---- */
+  --color-brand: #15ddef;
+  --color-brand-hover: #0fc6d7;
+  --color-brand-ink: #097781;          /* 5.29:1 on white */
+  --color-brand-ink-hover: #075d64;
+  --color-brand-subtle: #e8fbfd;
+  --color-brand-subtle-hover: #d2f6fa;
+  --color-on-brand: #06222a;           /* 9.94:1 on the brand fill */
+
+  /* ---- Surfaces ---- */
   --color-background: #ffffff;
-  --color-background-secondary: #f9fafb;
+  --color-background-secondary: #f4f8f9;
   --color-background-elevated: #ffffff;
   --color-surface: #ffffff;
-  --color-border: #e5e7eb;
-  --color-border-light: #f3f4f6;
-  
-  --color-text-primary: #1f2937;
-  --color-text-secondary: #6b7280;
-  --color-text-muted: #9ca3af;
+  --color-border: #dbe4e6;             /* decorative hairlines */
+  --color-border-strong: #6f8c91;      /* control boundaries, 3.60:1 */
+  --color-border-light: #eef3f4;
+
+  /* ---- Type ---- */
+  --color-text-primary: #0c1719;       /* 18.23:1 */
+  --color-text-secondary: #4a5c60;     /*  7.02:1 */
+  --color-text-muted: #5f7377;         /*  4.99:1 */
   --color-text-inverse: #ffffff;
-  
-  --color-brand-primary: #14b8a6;
-  --color-brand-primary-hover: #0d9488;
-  --color-brand-secondary: #60a5fa;
-  --color-brand-accent: #86efac;
-  
-  --color-success: #22c55e;
-  --color-warning: #f97316;
-  --color-danger: #dc2626;
-  --color-info: #3b82f6;
-  
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --shadow-elevated: 0 10px 24px rgba(0, 0, 0, 0.15);
-  
-  /* Smooth transitions */
+
+  /* ---- Status. Darkened from the Tailwind defaults, which mostly failed
+     AA on white: #22c55e was 2.28:1 and #f97316 was 2.85:1. ---- */
+  --color-success: #0f7a3d;
+  --color-warning: #8a5200;
+  --color-danger: #b3261e;
+  --color-info: #0b5cad;
+
+  /* ---- Back-compat aliases. --color-brand-primary is a FILL; anything
+     that wants brand-coloured TEXT must use --color-brand-ink. ---- */
+  --color-brand-primary: var(--color-brand);
+  --color-brand-primary-hover: var(--color-brand-hover);
+  --color-brand-secondary: var(--color-brand-ink);
+  --color-brand-accent: var(--color-brand-subtle);
+  --color-brand-teal-light: var(--color-brand-subtle);
+
+  --shadow-sm: 0 1px 2px rgba(12, 23, 25, 0.06);
+  --shadow-card: 0 4px 16px rgba(12, 23, 25, 0.08);
+  --shadow-elevated: 0 12px 32px rgba(12, 23, 25, 0.14);
+
+  --font-sans: "Poppins", ui-sans-serif, system-ui, -apple-system,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
   --transition-base: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
+/* The charity site has no dark mode, so this ramp is ours. It keeps hue 185
+   throughout so the cyan still reads as the same brand at low light. On dark
+   the brand cyan is 10.85:1, so here it CAN carry text. */
 [data-theme="dark"] {
-  /* Dark theme colors */
-  --color-background: #111827;
-  --color-background-secondary: #1f2937;
-  --color-background-elevated: #1f2937;
-  --color-surface: #374151;
-  --color-border: #374151;
-  --color-border-light: #4b5563;
-  
-  --color-text-primary: #f9fafb;
-  --color-text-secondary: #d1d5db;
-  --color-text-muted: #9ca3af;
-  --color-text-inverse: #111827;
-  
-  --color-brand-primary: #14b8a6;
-  --color-brand-primary-hover: #5eead4;
-  --color-brand-secondary: #60a5fa;
-  --color-brand-accent: #86efac;
-  
-  --color-success: #22c55e;
-  --color-warning: #f97316;
-  --color-danger: #ef4444;
-  --color-info: #3b82f6;
-  
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-elevated: 0 10px 24px rgba(0, 0, 0, 0.5);
+  --color-brand: #15ddef;
+  --color-brand-hover: #4ee5f3;
+  --color-brand-ink: #4ee5f3;          /* 12.26:1 on the dark ground */
+  --color-brand-ink-hover: #88eef7;
+  --color-brand-subtle: #12313a;
+  --color-brand-subtle-hover: #17414d;
+  --color-on-brand: #06222a;
+
+  --color-background: #0c1416;
+  --color-background-secondary: #121e21;
+  --color-background-elevated: #162428;
+  --color-surface: #1b2c31;
+  --color-border: #26383c;
+  --color-border-strong: #556d72;      /* 3.39:1 */
+  --color-border-light: #1d2c30;
+
+  --color-text-primary: #eef6f7;       /* 17.00:1 */
+  --color-text-secondary: #b3c6ca;     /* 10.51:1 */
+  --color-text-muted: #8ba1a6;         /*  6.87:1 */
+  --color-text-inverse: #0c1416;
+
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #fca5a5;
+  --color-info: #7cc4fa;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.6);
 }
 
 /* ---------- Base resets that help forms everywhere ---------- */
@@ -70,13 +119,25 @@
     height: 100%;
     background-color: var(--color-background);
     color: var(--color-text-primary);
+    font-family: var(--font-sans);
     transition: var(--transition-base);
+  }
+
+  /* Poppins is the charity's typeface. Headings go heavier than the site's
+     500 to stand in for Clarkson, its display face, which is licensed
+     through Squarespace and not available to us. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    letter-spacing: -0.02em;
+    font-weight: 600;
   }
 
   /* Accessible focus ring baseline for all interactive elements */
   :is(button,[role="button"],a,input,select,textarea)[tabindex]:focus-visible,
   :is(button,[role="button"],a,input,select,textarea):focus-visible {
-    @apply outline-none ring-2 ring-offset-2 ring-brand-teal;
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-background),
+                0 0 0 4px var(--color-brand-ink);
   }
 
   /* Optional: smoother scrolling for anchor jumps */
@@ -101,8 +162,8 @@
     @apply inline-flex items-center justify-center rounded-xl font-semibold px-4 py-2 disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-primary { 
-    background-color: var(--color-brand-primary);
-    color: var(--color-text-inverse);
+    background-color: var(--color-brand);
+    color: var(--color-on-brand);
     @apply btn;
   }
   .btn-primary:hover:not(:disabled) { 
@@ -146,15 +207,15 @@
   .input {
     background-color: var(--color-background);
     color: var(--color-text-primary);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     transition: var(--transition-base);
     @apply w-full rounded-xl px-3 py-2
            placeholder:text-gray-400;
   }
   .input:focus {
-    border-color: var(--color-brand-primary);
+    border-color: var(--color-brand-ink);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+    box-shadow: 0 0 0 3px var(--color-brand-subtle);
   }
 
   /* Textarea & Select share the same look */
@@ -163,12 +224,12 @@
 
   /* Checkboxes & radios: small, consistent sizing + label spacing helper */
   .check { 
-    border-color: var(--color-border);
-    color: var(--color-brand-primary);
+    border-color: var(--color-border-strong);
+    color: var(--color-brand-ink);
     @apply h-4 w-4 rounded;
   }
   .check:focus {
-    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+    box-shadow: 0 0 0 3px var(--color-brand-subtle);
   }
   .check-label { 
     color: var(--color-text-primary);
@@ -180,7 +241,7 @@
     @apply w-full px-3 py-3;
   }
   .checkbox:focus {
-    border-color: var(--color-brand-primary);
+    border-color: var(--color-brand-ink);
   }
   /* Row for inline checkboxes/toggles */
   .check-row { @apply flex flex-wrap items-center gap-4 md:gap-6 mb-2; }
@@ -245,13 +306,14 @@
   /* More button variants */
   .btn-outline { 
     background-color: transparent;
-    color: var(--color-brand-primary);
-    border: 1px solid var(--color-brand-primary);
+    color: var(--color-brand-ink);
+    border: 1px solid var(--color-brand-ink);
     @apply btn;
   }
   .btn-outline:hover:not(:disabled) { 
-    background-color: var(--color-brand-primary);
-    color: var(--color-text-inverse);
+    background-color: var(--color-brand);
+    border-color: var(--color-brand);
+    color: var(--color-on-brand);
   }
   .btn-ghost { 
     background-color: transparent;
@@ -441,7 +503,7 @@
     @apply text-xs;
   }
   .highlight { 
-    color: var(--color-brand-secondary);
+    color: var(--color-brand-ink);
     @apply text-sm font-medium;
   }
 
@@ -457,7 +519,7 @@
     background-color: var(--color-background-secondary);
   }
   .icon-btn-brand { 
-    color: var(--color-brand-primary);
+    color: var(--color-brand-ink);
   }
   .icon-btn-danger { 
     color: var(--color-danger);

@@ -4,7 +4,10 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist'] },
+  // .scratch/ holds throwaway walk scripts and JSX fragments (CLAUDE.md
+  // says to put them there, and it is gitignored). Linting them reports
+  // parse errors that look like real regressions in the app.
+  { ignores: ['dist', '.scratch'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {

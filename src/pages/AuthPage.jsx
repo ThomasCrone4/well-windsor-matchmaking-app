@@ -208,7 +208,7 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                className="text-sm underline text-brand-teal"
+                className="text-sm underline text-brand-ink"
               >
                 Forgot password?
               </button>
@@ -391,7 +391,7 @@ export default function AuthPage() {
               setIsSigningUp(!isSigningUp);
               setErrors({});
             }}
-            className="underline text-brand-teal"
+            className="underline text-brand-ink"
           >
             {isSigningUp ? 'Log In' : 'Sign Up'}
           </button>

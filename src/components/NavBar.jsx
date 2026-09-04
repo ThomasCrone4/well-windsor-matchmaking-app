@@ -137,7 +137,7 @@ export default function Navbar() {
               </>
             )}
 
-            <Link to={profileLink} className="text-brand-teal hover:text-blue-600 flex items-center gap-1" aria-label="Profile">
+            <Link to={profileLink} className="text-brand-ink hover:text-ink flex items-center gap-1" aria-label="Profile">
               <UserCircle className="w-10 h-10" aria-hidden="true" />
             </Link>
 

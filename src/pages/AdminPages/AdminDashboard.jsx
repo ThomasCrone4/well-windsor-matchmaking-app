@@ -426,7 +426,7 @@ export default function AdminDashboard() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
-                          <Building size={20} className="text-brand-teal shrink-0" />
+                          <Building size={20} className="text-brand-ink shrink-0" />
                           <h3 className="font-semibold text-lg" style={{ color: 'var(--color-text-primary)' }}>{org.name}</h3>
                         </div>
                         

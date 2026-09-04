@@ -288,26 +288,43 @@ export default function OpportunitiesPage() {
     : filtered;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
-      <div className="mb-8">
-        <h1 className="title">Volunteer Opportunities</h1>
-        <p className="page-description">
-          Browse volunteer opportunities across Well-Windsor and apply to those matching your skills and availability. Use the filters below to find opportunities by town and start date.
-        </p>
-        <p className="help-text mt-2">
-          Some roles need a DBS check. Well Windsor does not vet or DBS-check
-          anyone — each organisation is responsible for its own checks, and
-          will tell you what it needs.
-        </p>
-      </div>
-      
-      <div className="mb-6">
+    <div className="max-w-6xl mx-auto px-4 py-8" id="main-content">
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <h1
+            className="text-3xl md:text-4xl font-bold mb-3"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            Volunteer opportunities
+          </h1>
+          <p style={{ color: 'var(--color-text-secondary)' }}>
+            Roles across Windsor, Maidenhead and Slough. Filter by town and by
+            when you are free, then register your interest in the ones that fit.
+          </p>
+
+          {/* Safeguarding. This was set in the smallest, faintest type on the
+              page; it is the most important sentence on it. */}
+          <p
+            className="mt-4 text-sm rounded-xl px-4 py-3"
+            style={{
+              backgroundColor: 'var(--color-background-secondary)',
+              color: 'var(--color-text-secondary)',
+              borderLeft: '3px solid var(--color-brand)',
+            }}
+          >
+            Some roles need a DBS check.{' '}
+            <strong style={{ color: 'var(--color-text-primary)' }}>
+              Well Windsor does not vet or DBS-check anyone.
+            </strong>{' '}
+            Each organisation is responsible for its own checks, and will tell
+            you what it needs.
+          </p>
+        </div>
+
         {userProfile?.role === 'volunteer' && (
-          <div className="flex justify-center">
-            <Link to="/volunteer-dashboard" className="btn btn-success">
-              Your applications
-            </Link>
-          </div>
+          <Link to="/volunteer-dashboard" className="btn-outline whitespace-nowrap">
+            Your applications
+          </Link>
         )}
       </div>
 
@@ -397,7 +414,7 @@ export default function OpportunitiesPage() {
             : 'No opportunities match these filters. Try clearing them.'}
         </p>
       ) : (
-        <ul className="space-y-6">
+        <ul className="grid gap-5 lg:grid-cols-2">
           {finalList.map((op) => {
             const alreadyEnquired = !!userProfile?.id && appliedSet.has(op.id);
             const orgName = (op.org_name ?? orgNameById.get(op.org_id)) || 'Organisation';
@@ -408,7 +425,7 @@ export default function OpportunitiesPage() {
               userProfile?.role === 'volunteer' ? MATCH_BADGES[op.match_kind] : null;
 
             return (
-              <li key={op.id} className="card p-6 space-y-2">
+              <li key={op.id} className="card p-6 flex flex-col gap-2">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <h2 className="text-xl font-semibold">{op.title}</h2>
                   {badge && (
@@ -418,24 +435,24 @@ export default function OpportunitiesPage() {
                   )}
                 </div>
 
-                <p className="text-sm text-gray-500 -mt-1">
-                  by <span className="font-medium">{orgName}</span>
+                <p className="text-sm -mt-1" style={{ color: 'var(--color-brand-ink)' }}>
+                  <span className="font-medium">{orgName}</span>
                 </p>
 
-                <p className="text-gray-700">{op.description}</p>
-                <div className="text-sm text-gray-600">
+                <p style={{ color: 'var(--color-text-secondary)' }}>{op.description}</p>
+                <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                   📍 {op.location}
                   {op.town && op.town !== op.location ? ` (${op.town})` : ''}
                 </div>
-                <div className="text-sm text-gray-600">
+                <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                   👥 Volunteers Needed: {op.volunteers_needed ?? 'N/A'}
                 </div>
 
                 {/* Schedule summary */}
                 {op.generally_needed ? (
-                  <p className="text-sm text-green-700 font-medium">🕒 Available anytime</p>
+                  <p className="text-sm font-medium" style={{ color: 'var(--color-success)' }}>🕒 Available anytime</p>
                 ) : Array.isArray(op.when_needed) && op.when_needed.length > 0 ? (
-                  <div className="text-sm text-gray-700 mt-2">
+                  <div className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
                     <span className="font-semibold">🕒 Schedule: </span>
                     <span>{formatOpportunitySchedule(op)}</span>
                   </div>
@@ -446,13 +463,13 @@ export default function OpportunitiesPage() {
                 {op.requires_dbs && (
                   <p className="text-sm mt-2">
                     <span className="badge-warning">DBS check required</span>{' '}
-                    <span className="text-gray-600">
+                    <span style={{ color: 'var(--color-text-muted)' }}>
                       — arranged by the organisation, not by Well Windsor.
                     </span>
                   </p>
                 )}
 
-                <div className="flex items-center gap-3 pt-2">
+                <div className="flex items-center gap-3 pt-2 mt-auto">
                   {userProfile?.role === 'volunteer' && (
                     <>
                       {alreadyEnquired ? (
