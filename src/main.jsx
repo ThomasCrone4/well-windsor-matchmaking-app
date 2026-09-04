@@ -12,8 +12,6 @@ import HomePage from './pages/HomePage';
 import AuthPage from './pages/AuthPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import Redirector from './pages/Redirector';
-import UserList from './pages/AdminPages/UserList';
-import UserManagement from './pages/AdminPages/UserManagement';
 import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard';
 import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard';
 import OpportunitiesPage from './pages/OpportunitiesPage';
@@ -38,7 +36,6 @@ import ProtectedRoute from './components/ProtectedRoutes';
 
 import AdminRoute from './pages/AdminPages/AdminRoute'; // create per earlier snippet
 import AdminDashboard from './pages/AdminPages/AdminDashboard'; // place the dashboard here
-import AdminAnalytics from './pages/AdminPages/AdminAnalytics';
 
 const queryClient = new QueryClient();
 
@@ -165,22 +162,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                   element={
                     <AdminRoute>
                       <AdminDashboard />
-                    </AdminRoute>
-                  }
-                />
-                <Route
-                  path="/admin/users"
-                  element={
-                    <AdminRoute>
-                      <UserManagement />
-                    </AdminRoute>
-                  }
-                />
-                <Route
-                  path="/admin/analytics"
-                  element={
-                    <AdminRoute>
-                      <AdminAnalytics />
                     </AdminRoute>
                   }
                 />

@@ -49,10 +49,11 @@ async function getAllOpportunities({ status, orgId, showExpired, q, orgs }) {
   return data;
 }
 
-async function getAllVolunteers({ q, town, dbsStatus }) {
+async function getAllVolunteers({ q, town }) {
   let query = supabase
     .from('user_profiles')
     .select('id,name,email,home_town,created_at,public_profile')
+    .eq('role', 'volunteer')
     .order('created_at', { ascending: false });
 
   if (q) query = query.ilike('name', `%${q}%`);
@@ -79,17 +80,6 @@ async function toggleTownActive(id, is_active) {
   if (error) throw error;
 }
 
-async function getHoursSummary() {
-  const [{ data: totalRows, error: e1 }, { data: perOrg, error: e2 }, { data: perVol, error: e3 }] =
-    await Promise.all([
-      supabase.rpc('hours_total_sum'),
-      supabase.rpc('hours_by_org'),
-      supabase.rpc('hours_by_volunteer'),
-    ]);
-  if (e1 || e2 || e3) throw e1 || e2 || e3;
-  return { total: totalRows?.[0]?.minutes_total ?? 0, perOrg, perVol };
-}
-
 // ===== Page =====
 export default function AdminDashboard() {
   const qc = useQueryClient();
@@ -105,7 +95,6 @@ export default function AdminDashboard() {
   // Volunteer filters
   const [volQ, setVolQ] = useState('');
   const [volTown, setVolTown] = useState('All');
-  const [volDbsStatus, setVolDbsStatus] = useState('All');
 
   // Organization filters
   const [orgQ, setOrgQ] = useState('');
@@ -125,8 +114,8 @@ export default function AdminDashboard() {
   });
 
   const { data: volunteers, isLoading: volLoading } = useQuery({
-    queryKey: ['admin-volunteers', volQ, volTown, volDbsStatus],
-    queryFn: () => getAllVolunteers({ q: volQ, town: volTown, dbsStatus: volDbsStatus }),
+    queryKey: ['admin-volunteers', volQ, volTown],
+    queryFn: () => getAllVolunteers({ q: volQ, town: volTown }),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -134,12 +123,6 @@ export default function AdminDashboard() {
     queryKey: ['towns'], 
     queryFn: getTowns,
     staleTime: 10 * 60 * 1000,
-  });
-
-  const { data: hours, isLoading: hoursLoading } = useQuery({
-    queryKey: ['admin-hours'],
-    queryFn: getHoursSummary,
-    staleTime: 2 * 60 * 1000,
   });
 
   // Town mutations
@@ -209,18 +192,8 @@ export default function AdminDashboard() {
       <div className="mb-8">
         <h1 className="title">Admin Dashboard</h1>
         <p className="text-gray-600 mt-2">
-          Manage opportunities, volunteers, hours tracking, and location settings
+          Manage opportunities, organisations, volunteers and location settings
         </p>
-      </div>
-
-      {/* Navigation Buttons */}
-      <div className="flex gap-3 mb-6">
-        <Link to="/admin/analytics" className="btn btn-secondary">
-          Analytics
-        </Link>
-        <Link to="/admin/users" className="btn btn-secondary">
-          User Management
-        </Link>
       </div>
 
       {/* Tabs */}
@@ -233,9 +206,6 @@ export default function AdminDashboard() {
         </TabBtn>
         <TabBtn id="volunteers" count={volunteers?.length}>
           Volunteers
-        </TabBtn>
-        <TabBtn id="hours">
-          Hours
         </TabBtn>
         <TabBtn id="towns" count={towns?.filter(t => t.is_active)?.length}>
           Towns
@@ -504,7 +474,7 @@ export default function AdminDashboard() {
           <div className="card">
             <h2 className="section-title mb-4">Volunteer Filters</h2>
             
-            <div className="form-grid md:grid-cols-3">
+            <div className="form-grid md:grid-cols-2">
               <div className="form-row">
                 <label htmlFor="vol-search" className="label">Search</label>
                 <input
@@ -530,28 +500,13 @@ export default function AdminDashboard() {
                   ))}
                 </select>
               </div>
-
-              <div className="form-row">
-                <label htmlFor="vol-dbs" className="label">DBS Status</label>
-                <select 
-                  id="vol-dbs"
-                  value={volDbsStatus} 
-                  onChange={(e) => setVolDbsStatus(e.target.value)} 
-                  className="select"
-                >
-                  <option value="All">All</option>
-                  <option value="checked">DBS Checked</option>
-                  <option value="unchecked">No DBS</option>
-                </select>
-              </div>
             </div>
 
-            {(volQ || volTown !== 'All' || volDbsStatus !== 'All') && (
+            {(volQ || volTown !== 'All') && (
               <button
                 onClick={() => {
                   setVolQ('');
                   setVolTown('All');
-                  setVolDbsStatus('All');
                 }}
                 className="btn-secondary btn-sm mt-4"
               >
@@ -627,81 +582,6 @@ export default function AdminDashboard() {
         </section>
       )}
 
-      {/* HOURS */}
-      {activeTab === 'hours' && (
-        <section className="space-y-6">
-          <div className="card">
-            <h2 className="section-title mb-6">Hours Summary - The hours functionality is temporarily disabled</h2>
-
-            {hoursLoading ? (
-              <div className="py-12 text-center text-gray-500">Loading hours data...</div>
-            ) : (
-              <>
-                {/* Stat cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                  <StatCard 
-                    label="Total Minutes Logged" 
-                    value={(hours?.total ?? 0).toLocaleString()} 
-                    icon={<Clock size={24} className="text-brand-teal" />}
-                  />
-                  <StatCard 
-                    label="Total Hours" 
-                    value={((hours?.total ?? 0) / 60).toFixed(1)} 
-                    icon={<Clock size={24} className="text-brand-teal" />}
-                  />
-                  <StatCard 
-                    label="Active Organisations" 
-                    value={hours?.perOrg?.length ?? 0} 
-                    icon={<Building size={24} className="text-brand-teal" />}
-                  />
-                </div>
-
-                {/* Lists */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="border rounded-lg" style={{ borderColor: 'var(--color-border)' }}>
-                    <div className="px-4 py-3 border-b" style={{ backgroundColor: 'var(--color-background-secondary)', borderColor: 'var(--color-border)' }}>
-                      <h3 className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Hours by Organisation</h3>
-                    </div>
-                    <div className="divide-y max-h-96 overflow-y-auto" style={{ borderColor: 'var(--color-border)' }}>
-                      {hours?.perOrg?.length > 0 ? (
-                        hours.perOrg.map((row) => (
-                          <RowItem
-                            key={row.organisation_id}
-                            left={row.organisation_name ?? row.organisation_id}
-                            right={`${row.minutes_total} min (${(row.minutes_total / 60).toFixed(1)} h)`}
-                          />
-                        ))
-                      ) : (
-                        <div className="p-6 text-center" style={{ color: 'var(--color-text-muted)' }}>No data yet</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="border rounded-lg" style={{ borderColor: 'var(--color-border)' }}>
-                    <div className="px-4 py-3 border-b" style={{ backgroundColor: 'var(--color-background-secondary)', borderColor: 'var(--color-border)' }}>
-                      <h3 className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Hours by Volunteer</h3>
-                    </div>
-                    <div className="divide-y max-h-96 overflow-y-auto" style={{ borderColor: 'var(--color-border)' }}>
-                      {hours?.perVol?.length > 0 ? (
-                        hours.perVol.map((row) => (
-                          <RowItem
-                            key={row.volunteer_id}
-                            left={row.volunteer_name ?? row.volunteer_id}
-                            right={`${row.minutes_total} min (${(row.minutes_total / 60).toFixed(1)} h)`}
-                          />
-                        ))
-                      ) : (
-                        <div className="p-6 text-center text-gray-500">No data yet</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </section>
-      )}
-
       {/* TOWNS */}
       {activeTab === 'towns' && (
         <section className="card">
@@ -720,29 +600,6 @@ export default function AdminDashboard() {
 }
 
 // ===== Small UI pieces =====
-function StatCard({ label, value, icon }) {
-  return (
-    <div className="card flex items-center gap-4">
-      <div className="p-3 bg-brand-teal bg-opacity-10 rounded-lg">
-        {icon}
-      </div>
-      <div>
-        <div className="text-sm text-gray-600 mb-1">{label}</div>
-        <div className="text-3xl font-bold text-gray-900">{value}</div>
-      </div>
-    </div>
-  );
-}
-
-function RowItem({ left, right }) {
-  return (
-    <div className="px-4 py-3 flex items-center justify-between hover:opacity-90">
-      <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{left}</span>
-      <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{right}</span>
-    </div>
-  );
-}
-
 function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
   const [name, setName] = useState('');
   const active = towns.filter((t) => t.is_active);
