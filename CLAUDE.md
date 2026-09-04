@@ -317,8 +317,19 @@ Being removed: Log Hours (whole feature), ML/embedding matching (scores were
 
 **ML matching is now deleted** (2026-09-03, commit `0e3b1a9`) — six files,
 the `window.seedData`/`window.seedMatches` globals and the `openai`
-dependency. `src/services/` is empty. Log Hours is untouched and is the
-next deletion.
+dependency. `src/services/` is empty.
+
+**Log Hours is now deleted** (2026-09-04, commit `d72d379`) — nine files,
+~2,000 lines, four routes and both nav links. `volunteer_hours` stays in
+the database at 0 rows. Two non-obvious dependencies came with it: NavBar's
+`useLocation()` was read only by the two Log Hours links, and
+`NotificationsDropdown` mapped four `hours_*` notification types to the
+deleted routes. No notification type routes anywhere now.
+
+**The admin is now one page** (2026-09-04, commit `a44852c`). `AdminDashboard`
+is it. `AdminAnalytics`, `UserList`, both orphaned `AnalyticsPage.jsx` files
+and `UserManagement` are deleted, and `recharts`, `jspdf`, `jspdf-autotable`
+and `react-icons` are uninstalled with them.
 
 Being kept and finished: availability-overlap matching, which is real,
 DB-side, and computed by `match_opportunities_by_availability`. **Phase 1
@@ -327,26 +338,37 @@ real column, and `requires_dbs` shows on the browse.
 
 ### Where to pick up
 
-1. **Phase 4.2 — delete Log Hours** (~1,400 lines, deliberately kept out of
-   the Phase 1 commit): `src/pages/VolunteerPages/LogHours/*`,
-   `src/pages/OrganizationPages/LogHours/*`, `components/WorkedMatrix.jsx`,
-   `utils/loggedHoursValidation.js`, the three volunteer + one organisation
-   routes and the two imports in `main.jsx` (which already lints as unused),
-   and the nav links. Leave the `volunteer_hours` table — 0 rows, costs
-   nothing. Clears ~3 more lint errors.
-2. **Phase 4.5 — slim the admin.** `UserManagement.jsx:227` is the one
-   pre-existing esbuild diagnostic and the one eslint *parse* error; it is
-   a malformed ternary, and the page is due a rewrite anyway.
-3. **Phase 3 — design** needs the brand palette from the user before it can
+**Phases 4.2 and 4.5 are both done** (2026-09-04). The build now emits
+**zero** esbuild diagnostics — the `UserManagement.jsx:227` malformed
+ternary was the last one, and it went with the file. Bundle 1,070.83 →
+635.88 kB; eslint 19 errors/7 warnings → 14/3.
+
+1. **Admin suspend/remove is unbuilt, not merely unwired.** `UserManagement`
+   shipped Ban and Suspend buttons that wrote `user_profiles.is_active` —
+   **a column that has never existed** — and an Impersonate button writing
+   to `impersonation_logs`, a table that has never existed. Deleting the page
+   removed the buttons, not a capability; there was none. Building it for
+   real needs a migration adding `is_active` with an admin-only write policy
+   *plus* a service-role Edge Function to set `auth.users.banned_until`: the
+   browser cannot ban anyone by itself, and an `is_active` flag nothing
+   enforces is the same lie in a new column.
+2. **Phase 3 — design** needs the brand palette from the user before it can
    start. That is the only real blocker on the list.
-4. Before any deploy: **Phase 5.0**, delete the `5eed…` seed opportunities
+3. Before any deploy: **Phase 5.0**, delete the `5eed…` seed opportunities
    and the junk accounts. Decided to keep them for now; they are a hard gate
    on going public, not a task to schedule early.
 
-`v0-launch-prep` is 6 commits ahead of `origin/v0-launch-prep` and 8 ahead
-of `main`. Pushing has failed with an SSL certificate error in this
-environment before; nothing has been pushed, so the local branch is the
-only copy of this work outside OneDrive's own sync.
+`v0-launch-prep` is **pushed** and level with `origin/v0-launch-prep`, 11
+commits ahead of `main`.
+
+**How to push from this machine.** The default `openssl` backend fails with
+`unable to get local issuer certificate (20)` — the configured
+`ca-bundle.crt` exists but lacks the issuer, which is what TLS interception
+by a proxy or AV looks like. `git -c http.sslBackend=schannel push` works,
+because schannel uses the Windows certificate store where that root is
+already trusted. Make it permanent with
+`git config --global http.sslBackend schannel`. **Do not** reach for
+`http.sslVerify=false`; it disables verification rather than fixing trust.
 
 **The flow, as of Phase 1.2 (2026-09-03).** There is no accept/deny anywhere.
 A volunteer applies; the application is read-only interest, and sends the
