@@ -316,7 +316,7 @@ export default function EditOpportunity() {
         <button onClick={handleBack} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title !mb-0"> Edit Opportunity</h1>
+        <h1 className="title !mb-0">Edit opportunity</h1>
         <div className="spacer" />
       </div>
       <div className="card relative">

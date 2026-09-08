@@ -233,9 +233,9 @@ export default function PostOpportunity() {
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm" aria-label="Go back">
           ← Back
         </button>
-        <h1 className="title !mb-0">Post a New Opportunity</h1>
+        <h1 className="title !mb-0">Post an opportunity</h1>
         <p className="page-description">
-          Create a new volunteer opportunity with scheduling details and requirements. Save as a draft to edit later or publish immediately.
+          Describe the role and when you need people. Save it as a draft to finish later, or post it and it goes live on the browse straight away.
         </p>
       </div>
 

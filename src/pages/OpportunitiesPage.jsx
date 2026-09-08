@@ -281,15 +281,20 @@ export default function OpportunitiesPage() {
 
   if (isLoading) return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="title">Volunteer Opportunities</h1>
+      <h1 className="title">Volunteer opportunities</h1>
       <CardSkeleton count={6} />
     </div>
   );
   if (error)
     return (
-      <p className="text-center text-red-500 mt-20">
-        Failed to load opportunities: {error.message || 'Unknown error'}
-      </p>
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="empty" style={{ borderColor: 'var(--color-danger)' }}>
+          <p className="empty-title">Could not load opportunities</p>
+          <p className="empty-desc">
+            Please refresh the page and try again.
+          </p>
+        </div>
+      </div>
     );
 
   const filtered = filterOpportunities(opps || []);

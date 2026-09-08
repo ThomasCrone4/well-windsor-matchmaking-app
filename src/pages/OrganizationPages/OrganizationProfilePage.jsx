@@ -105,7 +105,7 @@ export default function OrganisationProfilePage() {
   if (loading || !hydrated) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="title">Edit Organisation Profile</h1>
+        <h1 className="title">Your organisation</h1>
         <FormSkeleton fields={5} />
       </div>
     );
@@ -114,7 +114,7 @@ export default function OrganisationProfilePage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8" id="main-content">
       <div className="mb-8">
-        <h1 className="title">Edit Organisation Profile</h1>
+        <h1 className="title">Your organisation</h1>
         <p className="page-description">
           Manage your organisation's contact information and profile. This information helps volunteers connect with you.
         </p>

@@ -250,7 +250,7 @@ export default function VolunteerProfilePage() {
   if (loading || !hydrated) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="title">Edit Your Volunteer Profile</h1>
+        <h1 className="title">Your profile</h1>
         <FormSkeleton fields={8} />
       </div>
     );
@@ -259,7 +259,7 @@ export default function VolunteerProfilePage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8" id="main-content">
       <div className="mb-8">
-        <h1 className="title">Edit Your Volunteer Profile</h1>
+        <h1 className="title">Your profile</h1>
         <p className="page-description">
           Update your profile, skills, and availability for organisations to discover you. Make your profile public to appear in volunteer searches.
         </p>

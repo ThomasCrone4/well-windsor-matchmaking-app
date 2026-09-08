@@ -108,11 +108,15 @@ export default function OpportunityApplicantsPage() {
           {applicant.home_town ? ` · ${applicant.home_town}` : ''}
         </p>
 
-        {applicant.skills?.trim() && <p className="muted">🛠️ Skills: {applicant.skills}</p>}
+        {applicant.skills?.trim() && (
+          <p className="text-sm muted">
+            <span className="font-semibold">Skills:</span> {applicant.skills}
+          </p>
+        )}
         {applicant.bio?.trim() && <p className="text">{applicant.bio}</p>}
 
         {applicant.subject?.trim() && (
-          <p className="highlight">📝 {applicant.subject}</p>
+          <p className="highlight">{applicant.subject}</p>
         )}
 
         {applicant.message?.trim() && (

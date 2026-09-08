@@ -101,7 +101,7 @@ export default function VolunteerDashboard() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8" id="main-content">
-      <div className="mb-8">
+      <div className="page-head">
         <h1 className="title">Your volunteering</h1>
         <p className="page-description">
           Roles you have registered interest in, and organisations that have been in touch.
@@ -109,30 +109,38 @@ export default function VolunteerDashboard() {
           from, so check your inbox — and don&rsquo;t worry if you don&rsquo;t hear back
           about every one. That is normal, and it isn&rsquo;t a reflection on you.
         </p>
+
+        <div className="page-actions">
+          <Link to="/opportunities" className="btn-primary">
+            Find opportunities
+          </Link>
+        </div>
       </div>
 
-      <div className="flex gap-2 mb-6">
-        <Link to="/opportunities" className="btn btn-primary">
-          Find opportunities
-        </Link>
-      </div>
-
-      <h2 className="section-title mt-6 mb-2 text-left">
+      <h2 className="list-head">
         Roles you&rsquo;ve registered for{applications.length ? ` (${applications.length})` : ''}
       </h2>
 
       {loadingApplications ? (
         <ListSkeleton items={3} />
       ) : applicationsError ? (
-        <p className="error-text">Failed to load what you&rsquo;ve registered for.</p>
+        <div className="empty" style={{ borderColor: 'var(--color-danger)' }}>
+          <p className="empty-title">Could not load your roles</p>
+          <p className="empty-desc">Please refresh the page and try again.</p>
+        </div>
       ) : applications.length === 0 ? (
-        <p className="muted italic">
-          You haven&rsquo;t registered interest in anything yet.{' '}
-          <Link to="/opportunities" className="underline">
-            Browse opportunities
-          </Link>
-          .
-        </p>
+        <div className="empty">
+          <p className="empty-title">Nothing registered yet</p>
+          <p className="empty-desc">
+            When you find a role that fits, register your interest and it will
+            appear here.
+          </p>
+          <div className="empty-cta">
+            <Link to="/opportunities" className="btn-primary">
+              Browse roles in Windsor
+            </Link>
+          </div>
+        </div>
       ) : (
         <ul className="stack-lg">
           {applications.map((application) => (
@@ -149,7 +157,7 @@ export default function VolunteerDashboard() {
               </p>
 
               {application.subject?.trim() && (
-                <p className="highlight">📝 {application.subject}</p>
+                <p className="highlight">{application.subject}</p>
               )}
               {application.message?.trim() && (
                 <p className="text whitespace-pre-line">{application.message}</p>
@@ -167,17 +175,20 @@ export default function VolunteerDashboard() {
         </ul>
       )}
 
-      <h2 className="section-title mt-10 mb-2 text-left">
+      <h2 className="list-head mt-12">
         Organisations that have contacted you{approaches.length ? ` (${approaches.length})` : ''}
       </h2>
 
       {loadingApproaches ? (
         <ListSkeleton items={2} />
       ) : approaches.length === 0 ? (
-        <p className="muted italic">
-          No one has written to you yet. When an organisation does, the message goes to your
-          email address and a copy appears here.
-        </p>
+        <div className="empty">
+          <p className="empty-title">No messages yet</p>
+          <p className="empty-desc">
+            When an organisation writes to you, the message goes to your email
+            address and a copy appears here.
+          </p>
+        </div>
       ) : (
         <ul className="stack-lg">
           {approaches.map((approach) => (
@@ -187,7 +198,7 @@ export default function VolunteerDashboard() {
                 {format(new Date(approach.created_at), 'PPP p')}
                 {approach.org?.home_town ? ` · ${approach.org.home_town}` : ''}
               </p>
-              <p className="highlight">📝 {approach.subject}</p>
+              <p className="highlight">{approach.subject}</p>
               <p className="text whitespace-pre-line">{approach.message}</p>
               {approach.org?.email && (
                 <p className="caption">

@@ -78,7 +78,7 @@ export default function SentEnquiriesOrgPage() {
                 {message.opportunity_title ? ` · about ${message.opportunity_title}` : ''}
               </p>
 
-              <p className="highlight">📝 {message.subject}</p>
+              <p className="highlight">{message.subject}</p>
               <p className="text whitespace-pre-line">{message.message}</p>
 
               {message.status !== 'sent' && (

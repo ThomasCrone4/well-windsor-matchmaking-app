@@ -68,7 +68,11 @@ export default function EnquireVolunteersPage() {
           <div className="card stack mb-4">
             <h2 className="card-title">{volunteer.name || 'Unnamed volunteer'}</h2>
             <p className="caption">{volunteer.home_town || 'Town not given'}</p>
-            {volunteer.skills?.trim() && <p className="muted">🛠️ Skills: {volunteer.skills}</p>}
+            {volunteer.skills?.trim() && (
+            <p className="text-sm muted">
+              <span className="font-semibold">Skills:</span> {volunteer.skills}
+            </p>
+          )}
             {volunteer.bio?.trim() && <p className="text">{volunteer.bio}</p>}
           </div>
 

@@ -147,49 +147,68 @@
 /* ---------- Reusable components (existing + new form kit) ---------- */
 @layer components {
   /* You already had these — updated with CSS variables */
-  .card { 
+  /* A flatter card than before: the old one carried a 16px blurred shadow
+     on every surface, which on a page of eight cards reads as clutter
+     rather than depth. Hairline border, shadow only on hover for the ones
+     that are links. */
+  .card {
     background-color: var(--color-background-elevated);
     color: var(--color-text-primary);
     border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-card);
-    transition: var(--transition-base);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition-base), box-shadow 0.2s ease, transform 0.2s ease;
     @apply rounded-2xl p-6;
   }
   .card-post { @apply card space-y-4; }
+  /* Opt-in lift, for cards that are actually clickable. */
+  .card-link:hover { box-shadow: var(--shadow-card); transform: translateY(-2px); }
 
-  .btn { 
+  /* Pill buttons, to match the navbar and the mockup. The old rounded-xl
+     next to a pill nav was the most visible inconsistency in the app. */
+  .btn {
     transition: var(--transition-base);
-    @apply inline-flex items-center justify-center rounded-xl font-semibold px-4 py-2 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold
+           px-5 py-2.5 text-sm leading-none
+           disabled:opacity-50 disabled:pointer-events-none;
   }
-  .btn-primary { 
+  .btn-primary {
     background-color: var(--color-brand);
     color: var(--color-on-brand);
     @apply btn;
   }
-  .btn-primary:hover:not(:disabled) { 
+  .btn-primary:hover:not(:disabled) {
     background-color: var(--color-brand-primary-hover);
   }
-  .btn-secondary { 
-    background-color: var(--color-background-secondary);
+  .btn-secondary {
+    background-color: var(--color-background-elevated);
     color: var(--color-text-primary);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     @apply btn;
   }
-  .btn-secondary:hover:not(:disabled) { 
-    background-color: var(--color-surface);
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-background-secondary);
   }
-  
-  .title { 
+
+  /* LEFT ALIGNED. This was `text-center`, so every dashboard, profile and
+     form put a centred H1 over left-aligned body copy -- the single biggest
+     reason the un-redesigned pages looked unfinished. The two genuinely
+     centred cards (sign in, reset password) now ask for text-center
+     themselves. */
+  .title {
     color: var(--color-text-primary);
-    @apply text-3xl font-bold mb-6 text-center;
+    @apply text-3xl md:text-4xl font-bold mb-4 tracking-[-0.025em];
   }
 
   /* Page descriptions */
   .page-description {
     color: var(--color-text-secondary);
     transition: var(--transition-base);
-    @apply mt-2;
+    @apply mt-2 max-w-[62ch] leading-relaxed;
   }
+
+  /* The standard page opening: title, lede, then actions. */
+  .page-head { @apply mb-8; }
+  .page-actions { @apply mt-5 flex flex-wrap gap-2; }
 
   /* --------- FORM KIT (updated with CSS variables) --------- */
 
@@ -209,8 +228,10 @@
     color: var(--color-text-primary);
     border: 1px solid var(--color-border-strong);
     transition: var(--transition-base);
-    @apply w-full rounded-xl px-3 py-2
-           placeholder:text-gray-400;
+    /* placeholder was text-gray-400, which responds to neither theme and
+       sat at 2.8:1 on the dark ground. */
+    @apply w-full rounded-xl px-3.5 py-2.5
+           placeholder:text-[var(--color-text-muted)] placeholder:opacity-70;
   }
   .input:focus {
     border-color: var(--color-brand-ink);
@@ -374,7 +395,7 @@
   .input--with-right  { @apply pr-10; }  /* add to .input when using .input-addon-right */
 
   /* Badges / pills */
-  .badge         { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold; }
+  .badge         { @apply inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none; }
   .badge-neutral { 
     background-color: var(--color-background-secondary);
     color: var(--color-text-primary);
@@ -424,18 +445,22 @@
     background-color: var(--color-background-secondary);
   }
 
-  /* Empty state */
-  .empty { 
+  /* Empty state. Every one of these in the app was a bare line of grey
+     italic text floating on white, which reads as a page that failed to
+     load rather than one with nothing in it yet. Give it a surface. */
+  .empty {
     color: var(--color-text-secondary);
-    @apply text-center py-12;
+    background-color: var(--color-background-secondary);
+    border: 1px dashed var(--color-border);
+    @apply rounded-2xl px-6 py-10 text-center;
   }
-  .empty-title { 
+  .empty-title {
     color: var(--color-text-primary);
-    @apply text-lg font-semibold;
+    @apply text-base font-semibold;
   }
-  .empty-desc { 
+  .empty-desc {
     color: var(--color-text-secondary);
-    @apply text-sm mt-1;
+    @apply text-sm mt-1 mx-auto max-w-[46ch];
   }
   .empty-cta  { @apply mt-4; }
 
@@ -484,12 +509,26 @@
 }
 /* ==== Additions for shared header, text, icon buttons, and form niceties ==== */
 @layer components {
-  /* Page header with back button / title / spacer */
-  .page-header { @apply mb-6 flex items-center justify-between; }
-  .spacer { @apply w-20; } /* matches your old <div class="w-20" /> gap */
+  /* Page header: back button, then title beneath it.
+     This was `flex items-center justify-between` with a w-20 spacer on the
+     right, which existed only to optically centre the title between the
+     Back button and nothing. Six pages use it, and all six put a centred
+     H1 above left-aligned body copy. Stacking it fixes all of them without
+     touching their JSX; .spacer is now inert rather than removed, because
+     those six still render one. */
+  .page-header { @apply mb-6 flex flex-col items-start gap-3; }
+  .spacer { @apply hidden; }
 
   /* Titles inside cards/lists */
-  .card-title { @apply text-lg font-semibold; }
+  .card-title { @apply text-base font-semibold tracking-[-0.015em]; }
+
+  /* The heading above a list on a dashboard. Paired with a hairline so the
+     sections on a long page read as sections rather than as loose text. */
+  .list-head {
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border);
+    @apply mb-4 pb-2 text-sm font-semibold uppercase tracking-[0.08em];
+  }
 
   /* Text utilities used in components */
   .muted { 
@@ -532,9 +571,9 @@
   }
 
   /* Simple page-level section header (optional) */
-  .section-title { 
+  .section-title {
     color: var(--color-text-primary);
-    @apply text-2xl font-bold;
+    @apply text-xl font-semibold tracking-[-0.02em];
   }
 
   /* ---------- Card tags ----------

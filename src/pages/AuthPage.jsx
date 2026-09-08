@@ -169,9 +169,58 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'var(--color-background)' }}>
-      <form onSubmit={handleSubmit} className="card w-full max-w-lg form">
-        <h2 className="title">{isSigningUp ? 'Sign Up' : 'Log In'}</h2>
+    /* Two columns from lg: the charity's photograph carrying the same
+       slogan as the home page on the left, the form on the right. A single
+       card centred in an otherwise empty white page was the least finished
+       screen in the app, and it is the one every volunteer passes through.
+       The panel is hidden below lg so a phone gets straight to the form. */
+    <div
+      className="grid min-h-[calc(100vh-5rem)] lg:grid-cols-2"
+      style={{ backgroundColor: 'var(--color-background)' }}
+    >
+      <aside className="relative hidden overflow-hidden lg:block" style={{ backgroundColor: '#06222a' }}>
+        <picture>
+          <source
+            type="image/webp"
+            sizes="50vw"
+            srcSet="/images/wellwindsorshootstill037-800.webp 800w,
+                    /images/wellwindsorshootstill037-1280.webp 1280w"
+          />
+          <img
+            src="/images/wellwindsorshootstill037-1280.jpg"
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: 'center 30%' }}
+          />
+        </picture>
+        {/* Bottom-weighted here, not left: the copy sits along the bottom
+            edge of a tall narrow panel rather than in a left-hand column. */}
+        <div
+          className="absolute inset-0"
+          aria-hidden="true"
+          style={{
+            background:
+              'linear-gradient(to top, rgba(6,34,42,.94) 14%, rgba(6,34,42,.6) 58%, rgba(6,34,42,.2) 100%)',
+          }}
+        />
+        <div className="absolute inset-x-0 bottom-0 p-10">
+          <p className="max-w-[18ch] text-3xl font-semibold leading-[1.12] tracking-[-0.03em] text-white">
+            Adults show up. Children take part.{' '}
+            {/* Cyan on the scrim only. On any light surface this is 1.66:1. */}
+            <span className="font-bold" style={{ color: 'var(--color-brand)' }}>
+              Everyone plays a role.
+            </span>
+          </p>
+          <p className="mt-4 max-w-[38ch] text-sm" style={{ color: 'rgba(255,255,255,0.9)' }}>
+            Volunteering with schools and organisations across Windsor.
+          </p>
+        </div>
+      </aside>
+
+      <div className="flex items-center justify-center px-4 py-12">
+        <form onSubmit={handleSubmit} className="card w-full max-w-lg form">
+        <h2 className="title text-center !text-2xl">{isSigningUp ? 'Create your account' : 'Sign in'}</h2>
 
         {/* Email */}
         <div className="form-row">
@@ -377,7 +426,7 @@ export default function AuthPage() {
 
         {/* Submit */}
         <button type="submit" className="btn btn-primary btn-block">
-          {isSigningUp ? 'Create Account' : 'Log In'}
+          {isSigningUp ? 'Create account' : 'Sign in'}
         </button>
 
         {/* Switch mode */}
@@ -393,10 +442,11 @@ export default function AuthPage() {
             }}
             className="underline text-brand-ink"
           >
-            {isSigningUp ? 'Log In' : 'Sign Up'}
+            {isSigningUp ? 'Sign in' : 'Sign up'}
           </button>
         </p>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }
