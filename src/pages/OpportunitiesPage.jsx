@@ -8,7 +8,6 @@ import { isThisWeek, isThisMonth } from 'date-fns';
 import { formatOpportunitySchedule } from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
 import OpportunityPhoto from '../components/OpportunityPhoto';
-import { TOWN_FILTER_OPTIONS } from '../utils/towns';
 
 /**
  * The availability badge shown to a signed-in volunteer.
@@ -54,6 +53,16 @@ const MATCH_BADGES = {
 const MATCHING_KINDS = new Set(['FULL', 'PARTIAL', 'FLEXIBLE']);
 
 export default function OpportunitiesPage() {
+  // `town` is still here with no control bound to it, on purpose.
+  //
+  // Every live opportunity is in Windsor and the copy says so, so a Town
+  // select offering Maidenhead and Slough named two places the service does
+  // not serve. The select is gone; the column, the CHECK constraint,
+  // src/utils/towns.js and the filtering below are all untouched. Adding a
+  // town back is then a one-line change to towns.js plus restoring the
+  // select -- not a migration, and not a re-plumb of the filter.
+  //
+  // It stays 'All', which matches everything.
   const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
   const [matchedOnly, setMatchedOnly] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
@@ -334,7 +343,10 @@ export default function OpportunitiesPage() {
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="form-grid md:grid-cols-4">
+        {/* Three columns, not four. The Town select used to sit between
+            Search and When; see the note on `filters.town` above for why
+            the filtering behind it is still here. */}
+        <div className="form-grid md:grid-cols-3">
           {/* Search */}
           <div className="form-row">
             <label htmlFor="search" className="label">Search</label>
@@ -346,21 +358,6 @@ export default function OpportunitiesPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="input"
             />
-          </div>
-
-          {/* Town */}
-          <div className="form-row">
-            <label htmlFor="town" className="label">Town</label>
-            <select
-              id="town"
-              value={filters.town}
-              onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
-              className="select"
-            >
-              {TOWN_FILTER_OPTIONS.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
           </div>
 
           {/* When */}
@@ -491,7 +488,15 @@ export default function OpportunitiesPage() {
                     ) : Array.isArray(op.when_needed) && op.when_needed.length > 0 ? (
                       <span className="tag-plain">{formatOpportunitySchedule(op)}</span>
                     ) : null}
-                    {op.location && <span className="tag-plain">{op.location}</span>}
+                    {/* location is meant to be the venue -- "St Edward's,
+                        Parsonage Lane". On every row today it just repeats
+                        the town, so this would print "Windsor" on all
+                        fourteen cards: a tag that says the same thing
+                        everywhere carries no information. Show it only once
+                        it says something the town does not. */}
+                    {op.location && op.location !== op.town && (
+                      <span className="tag-plain">{op.location}</span>
+                    )}
                     {op.volunteers_needed > 1 && (
                       <span className="tag-plain">{op.volunteers_needed} needed</span>
                     )}

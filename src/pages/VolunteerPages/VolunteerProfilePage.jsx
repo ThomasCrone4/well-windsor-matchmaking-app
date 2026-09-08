@@ -12,6 +12,7 @@ import FormSkeleton from '../../components/skeletons/FormSkeleton';
 
 // ✅ import the schedule helpers you already have
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../utils/schedule';
+import { townOptionsFor } from '../../utils/towns';
 
 const profileSchema = z
   .object({
@@ -302,9 +303,9 @@ export default function VolunteerProfilePage() {
             aria-invalid={!!errors.home_town}
           >
             <option value="">Select your home town</option>
-            <option value="Windsor">Windsor</option>
-            <option value="Maidenhead">Maidenhead</option>
-            <option value="Slough">Slough</option>
+            {townOptionsFor(watch('home_town')).map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
           </select>
           {errors.home_town && <p className="error-text">{errors.home_town.message}</p>}
         </div>

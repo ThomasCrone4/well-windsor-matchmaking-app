@@ -56,6 +56,19 @@ export default function LookingForVolunteersPage() {
 
   const outreachByVolunteer = useMemo(() => summariseOutreach(outreachRows), [outreachRows]);
 
+  // Derived from the volunteers actually listed, not from a hardcoded
+  // ['Windsor','Maidenhead','Slough'] as it was before. This filter is
+  // about where the PEOPLE are, which is not the same question as which
+  // towns the service posts roles in -- home_town has no CHECK constraint
+  // and there is a real volunteer in London. A fixed list both named towns
+  // nobody lives in and hid the one town somebody does.
+  const townOptions = useMemo(() => {
+    const towns = new Set(
+      (data ?? []).map((v) => (v.home_town ?? '').trim()).filter(Boolean)
+    );
+    return ['All', ...Array.from(towns).sort()];
+  }, [data]);
+
   const filterVolunteers = (vols) =>
     vols.filter((v) => {
       const matchesTown = filters.town === 'All' || v.home_town === filters.town;
@@ -170,10 +183,9 @@ export default function LookingForVolunteersPage() {
               onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
               className="select"
             >
-              <option value="All">All</option>
-              <option value="Windsor">Windsor</option>
-              <option value="Maidenhead">Maidenhead</option>
-              <option value="Slough">Slough</option>
+              {townOptions.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
             </select>
           </div>
    
