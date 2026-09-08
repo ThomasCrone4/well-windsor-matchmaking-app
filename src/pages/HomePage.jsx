@@ -204,21 +204,15 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* The logo PNG has an opaque white background baked in, so it
-                is framed deliberately as a plaque rather than left to float
-                as a white rectangle on the dark theme. */}
             <div className="hidden md:flex justify-center">
-              <div
-                className="rounded-3xl p-5 shadow-card"
-                style={{ backgroundColor: '#ffffff' }}
-              >
-                <img
-                  src="/WellWindsorLogo.png"
-                  alt=""
-                  aria-hidden="true"
-                  className="w-full max-w-[300px] h-auto"
-                />
-              </div>
+              <img
+                src="/WellWindsorLogo.png"
+                alt=""
+                aria-hidden="true"
+                width="890"
+                height="788"
+                className="w-full max-w-[340px] h-auto"
+              />
             </div>
           </div>
         </div>
