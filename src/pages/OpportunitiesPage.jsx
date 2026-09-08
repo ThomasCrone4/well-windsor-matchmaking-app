@@ -7,24 +7,69 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { isThisWeek, isThisMonth } from 'date-fns';
 import { formatOpportunitySchedule } from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
-import { useSmartMatching } from '../hooks/useSmartMatching';
-import MatchScore from '../components/MatchScore';
-import MatchExplanation from '../components/MatchExplanation';
+import OpportunityPhoto from '../components/OpportunityPhoto';
+
+/**
+ * The availability badge shown to a signed-in volunteer.
+ *
+ * match_kind comes from the match_opportunities_by_availability RPC and is
+ * deliberately NOT derived from match_rank -- rank is an ordering key, and
+ * collapsing these five cases into three buckets is what previously put
+ * "Full availability match" on every flexible role.
+ */
+const MATCH_BADGES = {
+  FULL: {
+    label: 'Full availability match',
+    classes: 'badge-success',
+    title: 'Your availability covers all of the times this role needs',
+  },
+  PARTIAL: {
+    label: 'Partial availability overlap',
+    classes: 'badge-warning',
+    title: 'Some of your availability overlaps the times this role needs',
+  },
+  FLEXIBLE: {
+    label: 'Flexible timing',
+    classes: 'badge-info',
+    title: 'This role can be done at flexible times, so any availability works',
+  },
+  UNSPECIFIED: {
+    label: 'Schedule not specified',
+    classes: 'badge-neutral',
+    title: 'This organisation has not given specific times, so we cannot compare',
+  },
+  NONE: {
+    label: 'No availability overlap',
+    classes: 'badge-neutral',
+    title: 'None of your availability overlaps the times this role needs',
+  },
+};
+
+/**
+ * What "Show Matches Only" keeps. UNSPECIFIED is excluded on purpose: with
+ * no schedule on the opportunity there is nothing to match against, and
+ * calling that a match would be the same overclaim the badge just fixed.
+ */
+const MATCHING_KINDS = new Set(['FULL', 'PARTIAL', 'FLEXIBLE']);
 
 export default function OpportunitiesPage() {
+  // `town` is still here with no control bound to it, on purpose.
+  //
+  // Every live opportunity is in Windsor and the copy says so, so a Town
+  // select offering Maidenhead and Slough named two places the service does
+  // not serve. The select is gone; the column, the CHECK constraint,
+  // src/utils/towns.js and the filtering below are all untouched. Adding a
+  // town back is then a one-line change to towns.js plus restoring the
+  // select -- not a migration, and not a re-plumb of the filter.
+  //
+  // It stays 'All', which matches everything.
   const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
   const [matchedOnly, setMatchedOnly] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedMatch, setExpandedMatch] = useState(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const onlyId = searchParams.get('opId');
-
-  // ML Matching hook - only for volunteers with embeddings
-  const { matches, loading: matchLoading } = useSmartMatching(
-    userProfile?.role === 'volunteer' ? userProfile?.id : null
-  );
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -43,14 +88,14 @@ export default function OpportunitiesPage() {
     fetchProfile();
   }, []);
 
-  // preload opportunity_ids and status this volunteer has already enquired about
+  // preload the opportunities this volunteer has already applied to
   const { data: myApps } = useQuery({
     queryKey: ['my_applied_opportunity_ids', userProfile?.id],
     enabled: !!userProfile?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
-        .select('opportunity_id, status')
+        .select('opportunity_id')
         .eq('volunteer_id', userProfile.id);
       if (error) throw error;
       return data ?? [];
@@ -62,20 +107,6 @@ export default function OpportunitiesPage() {
     () => new Set((myApps ?? []).map((r) => r.opportunity_id)),
     [myApps]
   );
-
-  const appStatusMap = useMemo(
-    () => new Map((myApps ?? []).map((r) => [r.opportunity_id, r.status])),
-    [myApps]
-  );
-
-  // ML Matching score lookup
-  const matchScoreMap = useMemo(() => {
-    const map = new Map();
-    (matches ?? []).forEach((match) => {
-      map.set(match.opportunity_id, match);
-    });
-    return map;
-  }, [matches]);
 
   // Fetch opportunities (volunteers use RPC to get match_kind etc.)
   const {
@@ -99,12 +130,15 @@ export default function OpportunitiesPage() {
               title,
               description,
               location,
+              town,
               contact,
+              requires_dbs,
               when_needed,
               generally_needed,
               volunteers_needed,
               status,
               org_id,
+              category,
               created_at
             `)
             .eq('status', 'active')
@@ -115,7 +149,7 @@ export default function OpportunitiesPage() {
         return rpcData ?? [];
       }
 
-      // non-volunteer path
+      // non-volunteer path (logged-out visitors and organisations)
       const { data, error } = await supabase
         .from('volunteer_opportunities')
         .select(`
@@ -123,12 +157,15 @@ export default function OpportunitiesPage() {
           title,
           description,
           location,
+          town,
           contact,
+          requires_dbs,
           when_needed,
           generally_needed,
           volunteers_needed,
           status,
           org_id,
+          category,
           created_at
         `)
         .eq('status', 'active')
@@ -149,8 +186,10 @@ export default function OpportunitiesPage() {
     queryKey: ['org_names_by_id', orgIds],
     enabled: nonVolunteer && orgIds.length > 0,
     queryFn: async () => {
+      // public_organisations, not user_profiles: a fixed, contact-free
+      // column list rather than a read of the profile row itself.
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('public_organisations')
         .select('id,name')
         .in('id', orgIds);
       if (error) throw error;
@@ -170,7 +209,7 @@ export default function OpportunitiesPage() {
     const user = sessionData?.session?.user;
 
     if (!user) {
-      toast.error('Please log in to enquire.');
+      toast.error('Please sign in to register your interest.');
       navigate('/auth');
       return;
     }
@@ -182,7 +221,7 @@ export default function OpportunitiesPage() {
       .single();
 
     if (error || profile?.role !== 'volunteer') {
-      toast.error('Only volunteers can make enquiries.');
+      toast.error('Only volunteers can register interest in a role.');
       return;
     }
 
@@ -194,8 +233,8 @@ export default function OpportunitiesPage() {
       .maybeSingle();
 
     if (existing) {
-      toast.error('You have already enquired about this opportunity.');
-      navigate('/volunteer/sent-enquiries');
+      toast.error('You have already registered interest in this role.');
+      navigate('/volunteer-dashboard');
       return;
     }
 
@@ -218,7 +257,9 @@ export default function OpportunitiesPage() {
 
   const filterOpportunities = (items) => {
     return items.filter((op) => {
-      const matchesTown = filters.town === 'All' || op.location === filters.town;
+      // town, not location. location is free text ("St Edward's, Windsor")
+      // and comparing it to a town name dropped real listings silently.
+      const matchesTown = filters.town === 'All' || op.town === filters.town;
 
       const start = getEarliestStart(op);
       const matchesStart =
@@ -226,10 +267,11 @@ export default function OpportunitiesPage() {
         (filters.start === 'This Week' && start && isThisWeek(start)) ||
         (filters.start === 'This Month' && start && isThisMonth(start));
 
-      const matched =
-        !matchedOnly ||
-        (userProfile &&
-          (!userProfile.home_town_only || op.location === userProfile.home_town));
+      // Previously read userProfile.home_town_only -- a column that has
+      // never existed, so !undefined was always true and this toggle did
+      // nothing at all. It filters on the availability match now, which is
+      // what its label has always promised.
+      const matched = !matchedOnly || MATCHING_KINDS.has(op.match_kind);
 
       const matchesSearch = (op.title || '').toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -239,82 +281,77 @@ export default function OpportunitiesPage() {
 
   if (isLoading) return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="title">Volunteer Opportunities</h1>
+      <h1 className="title">Volunteer opportunities</h1>
       <CardSkeleton count={6} />
     </div>
   );
   if (error)
     return (
-      <p className="text-center text-red-500 mt-20">
-        Failed to load opportunities: {error.message || 'Unknown error'}
-      </p>
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="empty" style={{ borderColor: 'var(--color-danger)' }}>
+          <p className="empty-title">Could not load opportunities</p>
+          <p className="empty-desc">
+            Please refresh the page and try again.
+          </p>
+        </div>
+      </div>
     );
 
   const filtered = filterOpportunities(opps || []);
-  let finalList = onlyId
-    ? (filtered || []).filter((op) => String(op.id) === String(onlyId))
-    : filtered || [];
-
-  // Sort opportunities by match score (highest first) for volunteers
-  if (userProfile?.role === 'volunteer' && matchScoreMap.size > 0) {
-    finalList = [...finalList].sort((a, b) => {
-      const matchA = matchScoreMap.get(a.id);
-      const matchB = matchScoreMap.get(b.id);
-      const scoreA = matchA?.composite_score || 0;
-      const scoreB = matchB?.composite_score || 0;
-      return scoreB - scoreA; // Descending order (highest first)
-    });
-  }
-
-  // ---- UI helpers for the top-right badge ----
-  const getMatchBadge = (matchKind) => {
-    switch (matchKind) {
-      case 'FULL':
-        return {
-          label: 'Full availability match',
-          classes:
-            'bg-green-100 text-green-800 border border-green-200',
-          title: 'Your availability fully covers the required times',
-        };
-      case 'PARTIAL':
-        return {
-          label: 'Partial availability overlap',
-          classes:
-            'bg-amber-100 text-amber-800 border border-amber-200',
-          title: 'Some overlap between your availability and the required times',
-        };
-      default:
-        return {
-          label: 'No availability overlap',
-          classes:
-            'bg-gray-100 text-gray-700 border border-gray-200',
-          title: 'None of your availability overlaps the required times',
-        };
-    }
-  };
+  // The RPC already returns the volunteer's list ordered by match_rank,
+  // then newest first. Nothing to re-sort client-side.
+  const finalList = onlyId
+    ? filtered.filter((op) => String(op.id) === String(onlyId))
+    : filtered;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
-      <div className="mb-8">
-        <h1 className="title">Volunteer Opportunities</h1>
-        <p className="page-description">
-          Browse volunteer opportunities across Well-Windsor and apply to those matching your skills and availability. Use the filters below to find opportunities by location and start date.
-        </p>
-      </div>
-      
-      <div className="mb-6">
+    <div className="max-w-6xl mx-auto px-4 py-8" id="main-content">
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <h1
+            className="text-3xl md:text-4xl font-bold mb-3"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            Volunteer opportunities
+          </h1>
+          <p style={{ color: 'var(--color-text-secondary)' }}>
+            Volunteering with schools and organisations across Windsor. Filter
+            by when you are free, then register your interest in the ones that
+            fit.
+          </p>
+
+          {/* Safeguarding. This was set in the smallest, faintest type on the
+              page; it is the most important sentence on it. */}
+          <p
+            className="mt-4 text-sm rounded-xl px-4 py-3"
+            style={{
+              backgroundColor: 'var(--color-background-secondary)',
+              color: 'var(--color-text-secondary)',
+              borderLeft: '3px solid var(--color-brand)',
+            }}
+          >
+            Some roles need a DBS check.{' '}
+            <strong style={{ color: 'var(--color-text-primary)' }}>
+              Well Windsor does not vet or DBS-check anyone.
+            </strong>{' '}
+            Each organisation is responsible for its own checks, and will tell
+            you what it needs.
+          </p>
+        </div>
+
         {userProfile?.role === 'volunteer' && (
-          <div className="flex justify-center">
-            <Link to="/volunteer/sent-enquiries" className="btn btn-success">
-              Sent Enquiries
-            </Link>
-          </div>
+          <Link to="/volunteer-dashboard" className="btn-outline whitespace-nowrap">
+            Your volunteering
+          </Link>
         )}
       </div>
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="form-grid md:grid-cols-4">
+        {/* Three columns, not four. The Town select used to sit between
+            Search and When; see the note on `filters.town` above for why
+            the filtering behind it is still here. */}
+        <div className="form-grid md:grid-cols-3">
           {/* Search */}
           <div className="form-row">
             <label htmlFor="search" className="label">Search</label>
@@ -326,22 +363,6 @@ export default function OpportunitiesPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="input"
             />
-          </div>
-
-          {/* Town */}
-          <div className="form-row">
-            <label htmlFor="town" className="label">Town</label>
-            <select
-              id="town"
-              value={filters.town}
-              onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
-              className="select"
-            >
-              <option value="All">All</option>
-              <option value="Windsor">Windsor</option>
-              <option value="Maidenhead">Maidenhead</option>
-              <option value="Slough">Slough</option>
-            </select>
           </div>
 
           {/* When */}
@@ -393,107 +414,135 @@ export default function OpportunitiesPage() {
 
       {/* Results */}
       {finalList.length === 0 ? (
-        <p className="text-center text-gray-600">No opportunities available right now.</p>
+        /* text-gray-600 was hardcoded here and responded to neither theme. */
+        <p className="text-center" style={{ color: 'var(--color-text-secondary)' }}>
+          {(opps ?? []).length === 0
+            ? 'No opportunities available right now.'
+            : 'No opportunities match these filters. Try clearing them.'}
+        </p>
       ) : (
-        <ul className="space-y-6">
+        <ul className="grid gap-5 lg:grid-cols-2">
           {finalList.map((op) => {
             const alreadyEnquired = !!userProfile?.id && appliedSet.has(op.id);
             const orgName = (op.org_name ?? orgNameById.get(op.org_id)) || 'Organisation';
 
-            // Badge (volunteer only)
-            const showBadge = userProfile?.role === 'volunteer' && op.match_kind;
-            const badge = showBadge ? getMatchBadge(op.match_kind) : null;
-
-            // ML Matching score (for volunteers)
-            const mlMatch = userProfile?.role === 'volunteer' ? matchScoreMap.get(op.id) : null;
-            const isExpanded = expandedMatch === op.id;
+            // Availability badge, volunteers only -- it is a statement about
+            // *your* schedule, so it means nothing to a logged-out visitor.
+            const badge =
+              userProfile?.role === 'volunteer' ? MATCH_BADGES[op.match_kind] : null;
 
             return (
-              <li key={op.id} className="card p-6 space-y-2 relative">
-                {/* ML MatchScore badge - positioned top-right */}
-                {mlMatch && userProfile?.role === 'volunteer' && (
-                  <div className="absolute right-4 top-4 z-10">
-                    <MatchScore score={mlMatch.composite_score} />
-                  </div>
-                )}
+              <li key={op.id} className="card !p-0 flex flex-col overflow-hidden">
+                {/* Photograph chosen from the category. There is no image
+                    column and no upload, so this is a fallback, not a
+                    picture of this role -- see utils/opportunityImages.js. */}
+                <Link
+                  to={`/opportunities/${op.id}`}
+                  className="block h-40 sm:h-44 overflow-hidden"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                >
+                  <OpportunityPhoto
+                    category={op.category}
+                    id={op.id}
+                    sizes="(min-width: 1024px) 45vw, 100vw"
+                  />
+                </Link>
 
-                <h2 className="text-xl font-semibold">{op.title}</h2>
-                <p className="text-sm text-gray-500 -mt-1">
-                  by <span className="font-medium">{orgName}</span>
-                </p>
+                <div className="flex flex-1 flex-col gap-2 p-5">
+                  <p
+                    className="text-xs font-semibold"
+                    style={{ color: 'var(--color-brand-ink)' }}
+                  >
+                    {orgName}
+                  </p>
 
-                <p className="text-gray-700">{op.description}</p>
-                <div className="text-sm text-gray-600">📍 Location: {op.location}</div>
-                <div className="text-sm text-gray-600">
-                  👥 Volunteers Needed: {op.volunteers_needed ?? 'N/A'}
-                </div>
-
-                {/* Schedule summary */}
-                {op.generally_needed ? (
-                  <p className="text-sm text-green-700 font-medium">🕒 Available anytime</p>
-                ) : Array.isArray(op.when_needed) && op.when_needed.length > 0 ? (
-                  <div className="text-sm text-gray-700 mt-2">
-                    <span className="font-semibold">🕒 Schedule: </span>
-                    <span>{formatOpportunitySchedule(op)}</span>
-                  </div>
-                ) : null}
-
-                {/* ML Match Explanation */}
-                {mlMatch && userProfile?.role === 'volunteer' && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <button
-                      onClick={() => setExpandedMatch(isExpanded ? null : op.id)}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-800 transition flex items-center gap-2"
-                    >
-                      {isExpanded ? '▼' : '▶'} View match details
-                    </button>
-                    {isExpanded && (
-                      <div className="mt-3">
-                        <MatchExplanation 
-                          matchData={{
-                            matchScore: mlMatch.composite_score || 0,
-                            semanticSimilarity: Math.round(mlMatch.semantic_similarity || 0),
-                            skillsSimilarity: Math.round(mlMatch.skills_match_percentage || 0),
-                            availabilityMatch: Math.round(mlMatch.availability_match || 0),
-                            explanation: `Based on your profile, skills, and availability for this opportunity.`
-                          }}
-                          showDetails={true}
-                        />
-                      </div>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h2 className="text-lg font-semibold leading-snug">
+                      <Link to={`/opportunities/${op.id}`} className="hover:underline">
+                        {op.title}
+                      </Link>
+                    </h2>
+                    {badge && (
+                      <span className={badge.classes} title={badge.title}>
+                        {badge.label}
+                      </span>
                     )}
                   </div>
-                )}
 
-                <div className="flex items-center gap-3 pt-2">
-                  {userProfile?.role === 'volunteer' && (
-                    <>
-                      {appStatusMap.get(op.id) === 'denied' ? (
-                        <button
-                          className="btn-secondary opacity-60 cursor-not-allowed"
-                          disabled
-                          title="Your application was rejected"
-                        >
-                          Rejected
-                        </button>
-                      ) : alreadyEnquired ? (
-                        <button
-                          className="btn-secondary opacity-60 cursor-not-allowed"
-                          disabled
-                          title="You already enquired"
-                        >
-                          Already enquired
-                        </button>
-                      ) : (
-                        <button
-                          className="btn-primary"
-                          onClick={() => handleApply(op.id)}
-                          title="Enquire about this opportunity"
-                        >
-                          Enquire
-                        </button>
-                      )}
-                    </>
+                  <p
+                    className="text-sm line-3"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
+                    {op.description}
+                  </p>
+
+                  {/* Tags. The schedule, the place and the volunteer count
+                      were three labelled lines of emoji; they are the same
+                      facts, read faster. */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {op.requires_dbs && <span className="tag">DBS check</span>}
+                    {/* No schedule tag when when_needed is empty. The row
+                        may still HAVE times -- they live in
+                        opportunity_timeblocks, which this list does not
+                        read -- so printing "Schedule TBC" here would be a
+                        claim the detail page then contradicts. Saying
+                        nothing is the honest option at this size. */}
+                    {op.generally_needed ? (
+                      <span className="tag-plain">Flexible timing</span>
+                    ) : Array.isArray(op.when_needed) && op.when_needed.length > 0 ? (
+                      <span className="tag-plain">{formatOpportunitySchedule(op)}</span>
+                    ) : null}
+                    {/* location is meant to be the venue -- "St Edward's,
+                        Parsonage Lane". On every row today it just repeats
+                        the town, so this would print "Windsor" on all
+                        fourteen cards: a tag that says the same thing
+                        everywhere carries no information. Show it only once
+                        it says something the town does not. */}
+                    {op.location && op.location !== op.town && (
+                      <span className="tag-plain">{op.location}</span>
+                    )}
+                    {op.volunteers_needed > 1 && (
+                      <span className="tag-plain">{op.volunteers_needed} needed</span>
+                    )}
+                  </div>
+
+                  {/* Safeguarding. The platform vets nobody; say so where the
+                      requirement is, not only in the page preamble. */}
+                  {op.requires_dbs && (
+                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                      The DBS check is arranged by the organisation, not by Well
+                      Windsor.
+                    </p>
                   )}
+
+                  <div className="flex flex-wrap items-center gap-3 pt-3 mt-auto">
+                    <Link to={`/opportunities/${op.id}`} className="btn-secondary btn-sm">
+                      Read more
+                    </Link>
+
+                    {userProfile?.role === 'volunteer' && (
+                      <>
+                        {alreadyEnquired ? (
+                          <button
+                            className="btn-secondary btn-sm opacity-60 cursor-not-allowed"
+                            disabled
+                            title="You have already registered interest in this role"
+                          >
+                            Interest registered
+                          </button>
+                        ) : (
+                          <button
+                            className="btn-primary btn-sm"
+                            onClick={() => handleApply(op.id)}
+                            title="Register interest in this role"
+                          >
+                            Register interest
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </li>
             );

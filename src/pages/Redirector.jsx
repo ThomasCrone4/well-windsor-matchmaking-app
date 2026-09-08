@@ -31,7 +31,7 @@ export default function Redirector() {
   }, [user, userId, profile, loading, error, navigate]);
 
   return (
-    <div className="flex items-center justify-center h-screen text-xl text-gray-600">
+    <div className="flex items-center justify-center h-screen text-xl" style={{ color: 'var(--color-text-secondary)' }}>
       {loading ? 'Loading your dashboard...' : 'Redirecting...'}
     </div>
   );

@@ -12,6 +12,7 @@ import FormSkeleton from '../../components/skeletons/FormSkeleton';
 
 // ✅ import the schedule helpers you already have
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../utils/schedule';
+import { townOptionsFor } from '../../utils/towns';
 
 const profileSchema = z
   .object({
@@ -249,7 +250,7 @@ export default function VolunteerProfilePage() {
   if (loading || !hydrated) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="title">Edit Your Volunteer Profile</h1>
+        <h1 className="title">Your profile</h1>
         <FormSkeleton fields={8} />
       </div>
     );
@@ -258,7 +259,7 @@ export default function VolunteerProfilePage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8" id="main-content">
       <div className="mb-8">
-        <h1 className="title">Edit Your Volunteer Profile</h1>
+        <h1 className="title">Your profile</h1>
         <p className="page-description">
           Update your profile, skills, and availability for organisations to discover you. Make your profile public to appear in volunteer searches.
         </p>
@@ -302,9 +303,9 @@ export default function VolunteerProfilePage() {
             aria-invalid={!!errors.home_town}
           >
             <option value="">Select your home town</option>
-            <option value="Windsor">Windsor</option>
-            <option value="Maidenhead">Maidenhead</option>
-            <option value="Slough">Slough</option>
+            {townOptionsFor(watch('home_town')).map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
           </select>
           {errors.home_town && <p className="error-text">{errors.home_town.message}</p>}
         </div>

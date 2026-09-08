@@ -12,11 +12,10 @@ import HomePage from './pages/HomePage';
 import AuthPage from './pages/AuthPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import Redirector from './pages/Redirector';
-import UserList from './pages/AdminPages/UserList';
-import UserManagement from './pages/AdminPages/UserManagement';
 import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard';
 import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard';
 import OpportunitiesPage from './pages/OpportunitiesPage';
+import OpportunityDetailPage from './pages/OpportunityDetailPage';
 import VolunteerProfilePage from './pages/VolunteerPages/VolunteerProfilePage';
 import OrganizationProfilePage from './pages/OrganizationPages/OrganizationProfilePage';
 import EnquireOpportunities from './pages/VolunteerPages/FindOpportunities/EnquireOpportunities';
@@ -26,14 +25,6 @@ import OpportunityApplicantsPage from './pages/OrganizationPages/PostOpportuniti
 import LookingForVolunteersPage from './pages/OrganizationPages/FindVolunteers/LookingForVolunteers';
 import EnquireVolunteerPage from './pages/OrganizationPages/FindVolunteers/EnquireVolunteers';
 import SentEnquiriesOrg from './pages/OrganizationPages/FindVolunteers/SentEnquiriesOrg';
-import PostLoggedHours from './pages/OrganizationPages/LogHours/PostLoggedHours';
-
-import SentEnquiriesVol from './pages/VolunteerPages/FindOpportunities/SentEnquiriesVol';
-import ListLogHours from './pages/VolunteerPages/LogHours/ListLogHours';
-import NewLogHours from './pages/VolunteerPages/LogHours/NewLogHours';
-import EditLogHours from './pages/VolunteerPages/LogHours/EditLogHours';
-// import EditConfirmHours from './pages/OrganizationPages/LogHours/EditConfirmHours';
-import AllLoggedHours from './pages/OrganizationPages/LogHours/AllLoggedHours';
 
 import Navbar from './components/NavBar';
 import Footer from './components/Footer';
@@ -46,32 +37,6 @@ import ProtectedRoute from './components/ProtectedRoutes';
 
 import AdminRoute from './pages/AdminPages/AdminRoute'; // create per earlier snippet
 import AdminDashboard from './pages/AdminPages/AdminDashboard'; // place the dashboard here
-import AdminAnalytics from './pages/AdminPages/AdminAnalytics';
-import { generateSampleData, generateMatchesOnly } from './utils/sampleDataGenerator.js';
-
-// Expose to window for console access
-window.seedData = async () => {
-  console.log('🔄 Generating sample data...');
-  try {
-    await generateSampleData();
-    console.log('✅ Sample data generated! Reloading page...');
-    setTimeout(() => window.location.reload(), 1000);
-  } catch (err) {
-    console.error('❌ Error:', err);
-  }
-};
-
-// Generate ONLY matches (no volunteers/opportunities)
-window.seedMatches = async () => {
-  console.log('🔄 Generating matches only...');
-  try {
-    await generateMatchesOnly();
-    console.log('✅ Matches generated! Reloading page...');
-    setTimeout(() => window.location.reload(), 1000);
-  } catch (err) {
-    console.error('❌ Error:', err);
-  }
-};
 
 const queryClient = new QueryClient();
 
@@ -90,6 +55,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     {/* Public pages */}
                     <Route path="/" element={<HomePage />} />
                     <Route path="/opportunities" element={<OpportunitiesPage />} />
+                    {/* Public. Ranked below /opportunities/:id/enquire by
+                        the router's own specificity scoring -- more path
+                        segments wins, regardless of the order here. */}
+                    <Route path="/opportunities/:id" element={<OpportunityDetailPage />} />
                     <Route path="/auth" element={<AuthPage />} />
                 <Route path="/redirect" element={<Redirector />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -159,14 +128,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/organization/logged-hours"
-                  element={
-                    <ProtectedRoute allowedRoles={['organization']}>
-                      <AllLoggedHours />
-                    </ProtectedRoute>
-                  }
-                />
 
                 {/* Volunteer pages */}
                 <Route
@@ -193,37 +154,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     </ProtectedRoute>
                   }
                 />
+                {/* Sent applications and approaches received are one list
+                    on the dashboard now; keep the old path working. */}
                 <Route
                   path="/volunteer/sent-enquiries"
-                  element={
-                    <ProtectedRoute allowedRoles={['volunteer']}>
-                      <SentEnquiriesVol />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/volunteer/log-hours"
-                  element={
-                    <ProtectedRoute allowedRoles={['volunteer']}>
-                      <ListLogHours />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/volunteer/log-hours/new"
-                  element={
-                    <ProtectedRoute allowedRoles={['volunteer']}>
-                      <NewLogHours />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/volunteer/log-hours/edit/:id"
-                  element={
-                    <ProtectedRoute allowedRoles={['volunteer']}>
-                      <EditLogHours />
-                    </ProtectedRoute>
-                  }
+                  element={<Navigate to="/volunteer-dashboard" replace />}
                 />
 
                 {/* Admin pages */}
@@ -232,22 +167,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                   element={
                     <AdminRoute>
                       <AdminDashboard />
-                    </AdminRoute>
-                  }
-                />
-                <Route
-                  path="/admin/users"
-                  element={
-                    <AdminRoute>
-                      <UserManagement />
-                    </AdminRoute>
-                  }
-                />
-                <Route
-                  path="/admin/analytics"
-                  element={
-                    <AdminRoute>
-                      <AdminAnalytics />
                     </AdminRoute>
                   }
                 />

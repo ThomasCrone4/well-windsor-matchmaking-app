@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
 import AvailabilityMatrix from '../components/AvailabilityMatrix';
 import { useNavigate } from 'react-router-dom';
+import { TOWNS } from '../utils/towns';
 
 export default function AuthPage() {
   const [email, setEmail] = useState('');
@@ -16,7 +17,6 @@ export default function AuthPage() {
   // Volunteer fields
   const [bio, setBio] = useState('');
   const [skills, setSkills] = useState('');
-  const [postcode, setPostcode] = useState('');
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [homeTown, setHomeTown] = useState('');
@@ -37,9 +37,27 @@ export default function AuthPage() {
     if (!name) newErrors.name = 'Name is required';
 
     if (isSigningUp) {
+      if (password.length < 8) {
+        newErrors.password = 'Password must be at least 8 characters';
+      }
+
+      // Both roles need a town: volunteers to be matched locally,
+      // organisations so their listings can be filtered by area.
+      if (!homeTown) newErrors.homeTown = 'Town is required';
+
       if (role === 'volunteer') {
-        if (!dob) newErrors.dob = 'Date of birth is required';
-        if (!homeTown) newErrors.homeTown = 'Home town is required';
+        if (!dob) {
+          newErrors.dob = 'Date of birth is required';
+        } else {
+          // Mirrors the user_profiles_min_age constraint, so the user gets
+          // a readable message instead of a Postgres error.
+          const thirteenthBirthday = new Date(dob);
+          thirteenthBirthday.setFullYear(thirteenthBirthday.getFullYear() + 13);
+          if (thirteenthBirthday > new Date()) {
+            newErrors.dob = 'You must be at least 13 years old to sign up';
+          }
+        }
+
         // Bio & Skills only required if public
         if (publicProfile) {
           if (!bio?.trim()) newErrors.bio = 'Bio is required when profile is visible to organisations';
@@ -48,10 +66,6 @@ export default function AuthPage() {
         if (!availableAnytime && (!availabilityMatrix || availabilityMatrix.length === 0)) {
           newErrors.availabilityMatrix = 'Please add at least one availability slot or mark "Flexible Availability".';
         }
-      }
-
-      if (role === 'organization') {
-        if (!postcode) newErrors.postcode = 'Postcode is required';
       }
     }
 
@@ -64,49 +78,56 @@ export default function AuthPage() {
 
     if (isSigningUp && !validateFields()) return;
 
-    let authResponse;
-    if (isSigningUp) {
-      authResponse = await supabase.auth.signUp({ email, password });
-    } else {
-      authResponse = await supabase.auth.signInWithPassword({ email, password });
-    }
-
-    const { error: authError } = authResponse;
-    if (authError) {
-      toast.error(authError.message);
-      return;
-    }
-
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user?.id) {
-      toast.error('Could not verify user login.');
-      return;
-    }
-    const sessionUserId = userData.user.id;
-
-    if (isSigningUp) {
-      const profileData = {
-        id: sessionUserId,
-        role,
-        name,
-        ...(role === 'organization' && { postcode }),
-        ...(role === 'volunteer' && {
-          dob,
-          bio: bio?.trim() || null,
-          skills: skills?.trim() || null,
-          contact_number: contactNumber || null,
-          home_town: homeTown,
-          available_anytime: availableAnytime,
-          availability_matrix: availableAnytime ? null : availabilityMatrix,
-          public_profile: publicProfile,
-        }),
-      };
-
-      const { error: insertError } = await supabase.from('user_profiles').insert([profileData]);
-      if (insertError) {
-        toast.error(insertError.message);
+    if (!isSigningUp) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        toast.error(error.message);
         return;
       }
+      toast.success('Welcome back!');
+      navigate('/');
+      return;
+    }
+
+    // Profile fields travel as auth metadata; the on_auth_user_created
+    // trigger writes the user_profiles row. Previously this was signUp()
+    // followed by a separate insert, which had two failure modes: it sent
+    // a `postcode` column that does not exist (so no organisation could
+    // ever complete signup), and it assumed signUp returns a session,
+    // which is false when email confirmation is on -- leaving an auth
+    // account with no profile and no way to recover.
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          role,
+          name: name.trim(),
+          home_town: homeTown,
+          ...(role === 'volunteer' && {
+            dob,
+            contact_number: contactNumber?.trim() || null,
+            bio: bio?.trim() || null,
+            skills: skills?.trim() || null,
+            available_anytime: availableAnytime,
+            availability_matrix: availableAnytime ? null : availabilityMatrix,
+            public_profile: publicProfile,
+          }),
+        },
+      },
+    });
+
+    if (signUpError) {
+      toast.error(signUpError.message);
+      return;
+    }
+
+    // No session means Supabase is waiting on email confirmation. The
+    // profile already exists either way, so the account is not stranded.
+    if (!data?.session) {
+      toast.success('Account created. Check your email to confirm, then log in.');
+      setIsSigningUp(false);
+      return;
     }
 
     toast.success('Success! You are now logged in.');
@@ -118,7 +139,9 @@ export default function AuthPage() {
     // Clear conditional errors if turning visibility off
     if (!checked) {
       setErrors((prev) => {
-        const { bio, skills, ...rest } = prev;
+        // Deliberately dropping the bio/skills errors; underscore prefix
+        // marks them as intentionally unused for eslint.
+        const { bio: _bio, skills: _skills, ...rest } = prev;
         return rest;
       });
     }
@@ -146,9 +169,58 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'var(--color-background)' }}>
-      <form onSubmit={handleSubmit} className="card w-full max-w-lg form">
-        <h2 className="title">{isSigningUp ? 'Sign Up' : 'Log In'}</h2>
+    /* Two columns from lg: the charity's photograph carrying the same
+       slogan as the home page on the left, the form on the right. A single
+       card centred in an otherwise empty white page was the least finished
+       screen in the app, and it is the one every volunteer passes through.
+       The panel is hidden below lg so a phone gets straight to the form. */
+    <div
+      className="grid min-h-[calc(100vh-93px)] lg:grid-cols-2"
+      style={{ backgroundColor: 'var(--color-background)' }}
+    >
+      <aside className="relative hidden overflow-hidden lg:block" style={{ backgroundColor: '#06222a' }}>
+        <picture>
+          <source
+            type="image/webp"
+            sizes="50vw"
+            srcSet="/images/wellwindsorshootstill037-800.webp 800w,
+                    /images/wellwindsorshootstill037-1280.webp 1280w"
+          />
+          <img
+            src="/images/wellwindsorshootstill037-1280.jpg"
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: 'center 30%' }}
+          />
+        </picture>
+        {/* Bottom-weighted here, not left: the copy sits along the bottom
+            edge of a tall narrow panel rather than in a left-hand column. */}
+        <div
+          className="absolute inset-0"
+          aria-hidden="true"
+          style={{
+            background:
+              'linear-gradient(to top, rgba(6,34,42,.94) 14%, rgba(6,34,42,.6) 58%, rgba(6,34,42,.2) 100%)',
+          }}
+        />
+        <div className="absolute inset-x-0 bottom-0 p-10">
+          <p className="max-w-[18ch] text-3xl font-semibold leading-[1.12] tracking-[-0.03em] text-white">
+            Adults show up. Children take part.{' '}
+            {/* Cyan on the scrim only. On any light surface this is 1.66:1. */}
+            <span className="font-bold" style={{ color: 'var(--color-brand)' }}>
+              Everyone plays a role.
+            </span>
+          </p>
+          <p className="mt-4 max-w-[38ch] text-sm" style={{ color: 'rgba(255,255,255,0.9)' }}>
+            Volunteering with schools and organisations across Windsor.
+          </p>
+        </div>
+      </aside>
+
+      <div className="flex items-center justify-center px-4 py-12">
+        <form onSubmit={handleSubmit} className="card w-full max-w-lg form">
+        <h2 className="title text-center !text-2xl">{isSigningUp ? 'Create your account' : 'Sign in'}</h2>
 
         {/* Email */}
         <div className="form-row">
@@ -185,7 +257,7 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                className="text-sm underline text-brand-teal"
+                className="text-sm underline text-brand-ink"
               >
                 Forgot password?
               </button>
@@ -226,45 +298,33 @@ export default function AuthPage() {
               {errors.name && <p className="error-text">{errors.name}</p>}
             </div>
 
-            {/* Org-only: Postcode */}
-            {role === 'organization' && (
-              <div className="form-row">
-                <label className="label">
-                  Postcode <span className="required" />
-                </label>
-                <input
-                  type="text"
-                  className="input"
-                  value={postcode}
-                  onChange={(e) => setPostcode(e.target.value)}
-                  aria-invalid={!!errors.postcode}
-                />
-                {errors.postcode && <p className="error-text">{errors.postcode}</p>}
-              </div>
-            )}
+            {/* Town — both roles. Organisations previously had a free-text
+                postcode field that was written to a column which does not
+                exist, so organisation signup always failed. */}
+            <div className="form-row">
+              <label className="label">
+                {role === 'organization' ? 'Town' : 'Home Town'}{' '}
+                <span className="required" />
+              </label>
+              <select
+                className={`select ${errors.homeTown ? 'select-invalid' : ''}`}
+                value={homeTown}
+                onChange={(e) => setHomeTown(e.target.value)}
+                aria-invalid={!!errors.homeTown}
+              >
+                <option value="">
+                  {role === 'organization' ? 'Select your town' : 'Select your home town'}
+                </option>
+                {TOWNS.map((town) => (
+                  <option key={town} value={town}>{town}</option>
+                ))}
+              </select>
+              {errors.homeTown && <p className="error-text">{errors.homeTown}</p>}
+            </div>
 
             {/* Volunteer-only fields */}
             {role === 'volunteer' && (
               <>
-                {/* Home Town */}
-                <div className="form-row">
-                  <label className="label">
-                    Home Town <span className="required" />
-                  </label>
-                  <select
-                    className={`select ${errors.homeTown ? 'select-invalid' : ''}`}
-                    value={homeTown}
-                    onChange={(e) => setHomeTown(e.target.value)}
-                    aria-invalid={!!errors.homeTown}
-                  >
-                    <option value="">Select your home town</option>
-                    <option value="Windsor">Windsor</option>
-                    <option value="Maidenhead">Maidenhead</option>
-                    <option value="Slough">Slough</option>
-                  </select>
-                  {errors.homeTown && <p className="error-text">{errors.homeTown}</p>}
-                </div>
-
                 {/* Date of Birth */}
                 <div className="form-row">
                   <label className="label">
@@ -366,7 +426,7 @@ export default function AuthPage() {
 
         {/* Submit */}
         <button type="submit" className="btn btn-primary btn-block">
-          {isSigningUp ? 'Create Account' : 'Log In'}
+          {isSigningUp ? 'Create account' : 'Sign in'}
         </button>
 
         {/* Switch mode */}
@@ -380,12 +440,13 @@ export default function AuthPage() {
               setIsSigningUp(!isSigningUp);
               setErrors({});
             }}
-            className="underline text-brand-teal"
+            className="underline text-brand-ink"
           >
-            {isSigningUp ? 'Log In' : 'Sign Up'}
+            {isSigningUp ? 'Sign in' : 'Sign up'}
           </button>
         </p>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

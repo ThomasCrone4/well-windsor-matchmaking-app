@@ -72,7 +72,7 @@ export default function OrganizationDashboard() {
 
     const confirmMsg = hasPassed
       ? '⚠️ This opportunity is in the past. If you plan to offer it again, consider editing the date instead. Are you sure you want to delete it permanently?'
-      : 'Are you sure you want to delete this opportunity? This will also remove all associated applications.';
+      : 'Are you sure you want to delete this opportunity? This will also remove everyone who registered interest in it.';
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -112,8 +112,8 @@ export default function OrganizationDashboard() {
     if (!Array.isArray(blocks) || blocks.length === 0) return null;
 
     return (
-      <div className="muted mt-1">
-        <p>📆 <strong>Specific Times Needed:</strong></p>
+      <div className="muted mt-1 text-sm">
+        <p className="font-semibold">Times needed</p>
         <ul className="list-disc list-inside ml-2 space-y-1">
           {blocks.map((block, idx) => {
             const { days, start_time, end_time, start_date, end_date } = block;
@@ -137,44 +137,65 @@ export default function OrganizationDashboard() {
     );
   };
 
-  const renderSection = (title, filterStatus) => {
+  const renderSection = (title, filterStatus, { hideWhenEmpty = false } = {}) => {
     const filtered = opportunities.filter(
       (op) => op.status?.toLowerCase() === filterStatus.toLowerCase()
     );
 
+    // Drafts and Closed disappear when empty rather than printing an empty
+    // box each. Three stacked "no ... opportunities" panels made a page
+    // with one real role look like a page with none.
+    if (hideWhenEmpty && filtered.length === 0) return null;
+
     return (
       <div className="mb-10">
-        <h2 className="section-title mb-2 text-left">{title}</h2>
+        <h2 className="list-head">{title}</h2>
         {filtered.length === 0 ? (
-          <p className="muted italic">No {filterStatus.toLowerCase()} opportunities</p>
+          <div className="empty">
+            <p className="empty-desc">No {filterStatus.toLowerCase()} opportunities.</p>
+          </div>
         ) : (
           <ul className="space-y-4">
             {filtered.map((op) => (
-              <li key={op.id} className="card relative space-y-1">
-                <h3 className="card-title">{op.title}</h3>
+              <li key={op.id} className="card relative space-y-2">
+                <h3 className="card-title pr-16">{op.title}</h3>
 
-                {op.description && <p className="text">{op.description}</p>}
-
-                <p className="muted">📍 {op.location}</p>
-
-                {isValid(new Date(op.date_needed)) &&
-                  new Date(op.date_needed).getFullYear() > 1971 && (
-                    <p className="muted">📅 {format(new Date(op.date_needed), 'PPP')}</p>
-                  )}
-
-                <p className="muted">📧 {op.contact}</p>
-                <p className="muted">👥 Volunteers Needed: {op.volunteers_needed ?? 'Not specified'}</p>
-
-                {op.requires_dbs && <p className="text-sm text-red-600">🔒 DBS Required</p>}
-
-                {op.generally_needed ? (
-                  <p className="muted">📌 Available anytime</p>
-                ) : (
-                  renderWhenNeeded(op.when_needed)
+                {op.description && (
+                  <p className="text-sm line-3" style={{ color: 'var(--color-text-secondary)' }}>
+                    {op.description}
+                  </p>
                 )}
 
+                {/* Tags, matching the public browse card. This was six
+                    lines each led by a different emoji -- 📍📅📧👥🔒📌 --
+                    which rendered differently on every platform and made a
+                    list of roles read as a list of receipts. */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {op.requires_dbs && <span className="tag">DBS check</span>}
+                  {op.generally_needed && <span className="tag-plain">Flexible timing</span>}
+                  {op.location && op.location !== op.town && (
+                    <span className="tag-plain">{op.location}</span>
+                  )}
+                  {isValid(new Date(op.date_needed)) &&
+                    new Date(op.date_needed).getFullYear() > 1971 && (
+                      <span className="tag-plain">
+                        {format(new Date(op.date_needed), 'd MMM yyyy')}
+                      </span>
+                    )}
+                  <span className="tag-plain">
+                    {op.volunteers_needed ?? 1} needed
+                  </span>
+                </div>
+
+                {!op.generally_needed && renderWhenNeeded(op.when_needed)}
+
+                <p className="caption">{op.contact}</p>
+
                 {op.status !== 'draft' && (
-                  <p className="highlight text-brand-teal">📨 {applicationsCount[op.id] || 0} applicants</p>
+                  <p className="highlight">
+                    {applicationsCount[op.id] || 0}{' '}
+                    {applicationsCount[op.id] === 1 ? 'person interested' : 'people interested'}
+                  </p>
                 )}
 
                 {/* Actions */}
@@ -182,17 +203,11 @@ export default function OrganizationDashboard() {
                   {op.status !== 'draft' && (applicationsCount[op.id] ?? 0) > 0 && (
                     <button
                       onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
-                      className="btn-success btn-sm"
+                      className="btn-primary btn-sm"
                     >
-                      View Applicants
+                      View interested volunteers
                     </button>
                   )}
-                  {/* <button
-                    onClick={() => navigate(`/opportunity/${op.id}/logged-hours`)}
-                    className="btn-ghost btn-sm"
-                  >
-                    Logged Hours
-                  </button> */}
                   {op.status == 'closed' && (
                     <button
                       onClick={() => handleStatusChange(op.id, 'active')}
@@ -214,7 +229,7 @@ export default function OrganizationDashboard() {
                     <button
                       aria-label="Edit"
                       onClick={() => navigate(`/edit-opportunity/${op.id}`)}
-                      className="icon-btn hover:text-brand-teal"
+                      className="icon-btn hover:text-brand-ink"
                       title="Edit"
                     >
                       <Edit2 size={18} />
@@ -296,31 +311,44 @@ export default function OrganizationDashboard() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
-      <div className="mb-8">
-        <h1 className="title">Organisation Dashboard</h1>
+      <div className="page-head">
+        <h1 className="title">Your opportunities</h1>
         <p className="page-description">
-          Manage your posted opportunities and track volunteer applications. Create new posts, edit existing ones, and close opportunities when filled.
+          Post what you need and see who has registered interest. People who
+          register appear on each post — you email the ones you want, and
+          dismissing someone is never shown to them.
         </p>
-      </div>
-      
-      <div className="flex gap-2 mb-6">
-        <Link to="/organization/sent-enquiries" className="btn btn-success">
-          Sent Enquiries
-        </Link>
-        <Link to="/post-opportunity" className="btn btn-primary">
-          + New Post
-        </Link>
+
+        <div className="page-actions">
+          <Link to="/post-opportunity" className="btn-primary">
+            Post an opportunity
+          </Link>
+          <Link to="/organization/sent-enquiries" className="btn-secondary">
+            Messages sent
+          </Link>
+        </div>
       </div>
 
       {loading ? (
         <ListSkeleton items={5} />
       ) : opportunities.length === 0 ? (
-        <p className="muted">You haven’t posted any opportunities yet.</p>
+        <div className="empty">
+          <p className="empty-title">No opportunities yet</p>
+          <p className="empty-desc">
+            Post your first role and volunteers in Windsor will be able to
+            find it and register their interest.
+          </p>
+          <div className="empty-cta">
+            <Link to="/post-opportunity" className="btn-primary">
+              Post an opportunity
+            </Link>
+          </div>
+        </div>
       ) : (
         <>
-          {renderSection('Active Opportunities', 'Active')}
-          {renderSection('Closed Opportunities', 'Closed')}
-          {renderSection('Drafts', 'Draft')}
+          {renderSection('Live', 'Active')}
+          {renderSection('Drafts', 'Draft', { hideWhenEmpty: true })}
+          {renderSection('Closed', 'Closed', { hideWhenEmpty: true })}
         </>
       )}
     </div>

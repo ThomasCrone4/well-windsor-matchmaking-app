@@ -1,12 +1,63 @@
-# React + Vite
+# Well Windsor — Volunteer Matchmaking
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A volunteer marketplace for the Royal Borough of Windsor and Maidenhead,
+built for [Well Windsor](https://www.wellwindsor.org.uk) (registered charity
+1207021).
 
-Currently, two official plugins are available:
+Volunteers browse local opportunities and apply; organisations post what they
+need and respond. When an organisation accepts, both sides get each other's
+contact details and arrange the rest directly.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+**The platform does not vet or DBS-check volunteers.** Organisations are
+responsible for their own safeguarding checks.
 
-## Expanding the ESLint configuration
+## Running locally
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Requires Node 18+.
+
+```bash
+npm install
+cp .env.local.example .env.local   # then fill in your Supabase keys
+npm run dev                        # http://localhost:5173
+```
+
+Supabase credentials are in the project dashboard under Settings → API. The
+anon key is safe to expose — it is public by design, and row-level security
+is what protects the data behind it.
+
+```bash
+npm run build   # production build
+npm run lint    # eslint
+```
+
+## Layout
+
+```
+src/
+  components/     shared UI (AvailabilityMatrix, ConfirmDialog, NavBar, ...)
+  context/        session, theme, notifications
+  hooks/          useUserProfile, ...
+  pages/
+    VolunteerPages/       browse, apply, profile, dashboard
+    OrganizationPages/    post opportunities, review applicants, find volunteers
+    AdminPages/           moderation
+  utils/          supabase client, schedule/availability helpers
+supabase/
+  migrations/     database schema, applied in filename order
+```
+
+## Database
+
+Postgres on Supabase (`eu-west-2`). Schema changes are migrations in
+`supabase/migrations/`, never ad-hoc edits in the dashboard — the filenames
+correspond to entries in Supabase's migration ledger.
+
+Row-level security is the only thing between the public anon key and user
+data, so any new table needs RLS enabled and policies written before it holds
+anything real.
+
+## Contributing
+
+`CLAUDE.md` documents the conventions, the non-obvious traps, and how to
+verify database access properly. Worth reading before the first change —
+several of the entries in it are there because something shipped broken.

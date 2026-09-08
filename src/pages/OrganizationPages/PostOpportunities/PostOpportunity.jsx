@@ -10,13 +10,34 @@ import { useNavigate } from 'react-router-dom';
 
 // 🔁 use your schedule.js
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
+import { TOWNS } from '../../../utils/towns';
+import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
+
+const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
 const getOpportunitySchema = (isDraft) =>
   z.object({
     title: isDraft ? z.string().optional() : z.string().min(1, 'Title is required'),
     description: z.string().optional(),
     location: isDraft ? z.string().optional() : z.string().min(1, 'Location is required'),
+    // The filter key volunteers browse by. A draft may leave it blank; a
+    // published opportunity may not (there is a CHECK constraint saying so),
+    // because an active listing with no town is unreachable from a filtered
+    // browse.
+    town: isDraft
+      ? z.string().optional()
+      : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
     contact: isDraft ? z.string().optional() : z.string().min(1, 'Contact method is required'),
+    // Optional in both states -- the browse falls back to a neutral image.
+    // It MUST be declared here even so: zod strips keys the schema does not
+    // mention, so a field that is registered but unlisted silently never
+    // reaches the submit handler. That is what happens to `skills` on this
+    // form today.
+    category: z
+      .string()
+      .nullable()
+      .optional()
+      .refine((v) => !v || CATEGORY_VALUES.includes(v), 'Please choose a category'),
     generally_needed: z.boolean(),
     when_needed: z.any(),
     requires_dbs: z.boolean(),
@@ -44,7 +65,9 @@ export default function PostOpportunity() {
       title: '',
       description: '',
       location: '',
+      town: '',
       contact: '',
+      category: '',
       generally_needed: true,
       when_needed: [],
       requires_dbs: false,
@@ -158,7 +181,13 @@ export default function PostOpportunity() {
       title: data.title || '',
       description: data.description || '',
       location: data.location || '',
+      // null rather than '' -- the CHECK only accepts a real town or NULL,
+      // and a draft is allowed to have neither yet.
+      town: data.town || null,
       contact: data.contact || '',
+      // null rather than '': the CHECK accepts the three values or NULL,
+      // and '' would be rejected outright.
+      category: data.category || null,
       generally_needed: !!data.generally_needed,
       when_needed: data.generally_needed ? null : (data.when_needed ?? []), // keep JSON for editing UX
       requires_dbs: !!data.requires_dbs,
@@ -204,9 +233,9 @@ export default function PostOpportunity() {
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm" aria-label="Go back">
           ← Back
         </button>
-        <h1 className="title !mb-0">Post a New Opportunity</h1>
+        <h1 className="title !mb-0">Post an opportunity</h1>
         <p className="page-description">
-          Create a new volunteer opportunity with scheduling details and requirements. Save as a draft to edit later or publish immediately.
+          Describe the role and when you need people. Save it as a draft to finish later, or post it and it goes live on the browse straight away.
         </p>
       </div>
 
@@ -238,7 +267,52 @@ export default function PostOpportunity() {
             />
           </div>
 
-          {/* Location */}
+          {/* Town — the filter key volunteers browse by */}
+          <div className="form-row">
+            <label htmlFor="town" className="label required">Town</label>
+            <select
+              id="town"
+              {...register('town')}
+              className={`select ${errors.town ? 'input-invalid' : ''}`}
+              aria-invalid={!!errors.town}
+            >
+              <option value="">Select a town…</option>
+              {TOWNS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            {errors.town
+              ? <p className="error-text">{errors.town.message}</p>
+              : <p className="help-text">Volunteers filter the browse by town.</p>}
+          </div>
+
+          {/* Category — picks the photograph on the listing. Optional:
+              without one the card gets a neutral Windsor image rather than
+              an empty slot. */}
+          <div className="form-row">
+            <label htmlFor="category" className="label">
+              Kind of role <span className="help-text">(optional)</span>
+            </label>
+            <select
+              id="category"
+              {...register('category')}
+              className={`select ${errors.category ? 'input-invalid' : ''}`}
+              aria-invalid={!!errors.category}
+            >
+              <option value="">No preference — use a general photo</option>
+              {OPPORTUNITY_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+            {errors.category
+              ? <p className="error-text">{errors.category.message}</p>
+              : <p className="help-text">
+                  Chooses the photograph shown on your listing. You cannot
+                  upload your own picture yet.
+                </p>}
+          </div>
+
+          {/* Location — free text, the human-readable place */}
           <div className="form-row">
             <label htmlFor="location" className="label required">Location</label>
             <input
@@ -246,9 +320,11 @@ export default function PostOpportunity() {
               {...register('location')}
               className={`input ${errors.location ? 'input-invalid' : ''}`}
               aria-invalid={!!errors.location}
-              placeholder="e.g. Windsor"
+              placeholder="e.g. St Edward's First School, Parsonage Lane"
             />
-            {errors.location && <p className="error-text">{errors.location.message}</p>}
+            {errors.location
+              ? <p className="error-text">{errors.location.message}</p>
+              : <p className="help-text">The venue or address. Free text — the town above does the filtering.</p>}
           </div>
 
           {/* Contact */}
@@ -300,6 +376,20 @@ export default function PostOpportunity() {
               Generally Needed (any time)
             </label>
             <p className="help-text">Tick if this role can be done at flexible times.</p>
+          </div>
+
+          {/* DBS. The field existed in the schema and the insert but had no
+              input on this form, so it could only ever be set by editing the
+              opportunity afterwards. */}
+          <div className="form-row">
+            <label className="check-label">
+              <input type="checkbox" {...register('requires_dbs')} className="check" />
+              Requires DBS Check
+            </label>
+            <p className="help-text">
+              Shown on the listing. Well Windsor does not vet or DBS-check
+              volunteers — arranging and verifying the check is yours to do.
+            </p>
           </div>
 
           {/* Specific Times Needed */}

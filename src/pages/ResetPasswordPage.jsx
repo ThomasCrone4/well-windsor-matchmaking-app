@@ -62,9 +62,9 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'var(--color-background-secondary)' }}>
       <form onSubmit={handleSubmit(onSubmit)} className="card w-full max-w-md form">
-        <h2 className="title">Set a New Password</h2>
+        <h2 className="title text-center !text-2xl">Set a new password</h2>
 
         <div className="form-row">
           <label className="label">New Password <span className="required" /></label>

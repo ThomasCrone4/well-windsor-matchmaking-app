@@ -1,295 +1,253 @@
-// src/pages/organization/OpportunityApplicantsPage.jsx
+// The people who registered interest in one opportunity.
+//
+// There is no accept/deny here any more. Registering interest is exactly
+// that; the organisation reads it and either writes
+// to the volunteer or sets them aside. Nothing the organisation does on
+// this page is shown to the volunteer, by design — silence means no.
+//
+// Applicants come from the opportunity_applicants view rather than from
+// applications joined to user_profiles: RLS filters rows and not
+// columns, so reading the profile table directly would mean reading
+// dob, email and contact_number too.
+
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../../../utils/supabase';
-import { format, differenceInYears } from 'date-fns';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import { supabase } from '../../../utils/supabase';
+import ContactVolunteerForm from '../../../components/ContactVolunteerForm';
+import ListSkeleton from '../../../components/skeletons/ListSkeleton';
+import { summariseOutreach, cooldownHoursRemaining } from '../../../utils/outreach';
 
 export default function OpportunityApplicantsPage() {
   const { id: opportunityId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [draftStatus, setDraftStatus] = useState({});
-  const [messages, setMessages] = useState({});
-  const [loadingId, setLoadingId] = useState(null);
-  const [expandedMessages, setExpandedMessages] = useState({});  const [statusChanges, setStatusChanges] = useState(new Map());
-  const DEFAULT_REPLIES = {
-    accepted: "Congratulations! We’d love to have you join us.",
-    denied:   "Hi, unfortunately we have decided not to work with you.",
-  };
+  const [composingFor, setComposingFor] = useState(null);
+  const [expanded, setExpanded] = useState({});
+  const [showDismissed, setShowDismissed] = useState(false);
 
   const { data: applicants, isLoading, error } = useQuery({
-    queryKey: ['applicants', opportunityId],
+    queryKey: ['opportunity_applicants', opportunityId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('applications')
-        .select(`
-          id,
-          subject,
-          message,
-          status,
-          rejection_message,
-          created_at,
-          opportunity_title,
-          volunteer:user_profiles!volunteer_id (
-            id,
-            name,
-            email,
-            dob,
-            role
-          )
-        `)
-        .eq('opportunity_id', opportunityId);
-
+        .from('opportunity_applicants')
+        .select('*')
+        .eq('opportunity_id', opportunityId)
+        .order('applied_at', { ascending: false });
       if (error) throw error;
-
-      return (data ?? []).map((app) => {
-        const isVolunteer = app.volunteer?.role === 'volunteer';
-        return {
-          id: app.id,
-          name: isVolunteer ? app.volunteer.name : 'Unknown',
-          email: isVolunteer ? app.volunteer.email : null,
-          dob: isVolunteer ? app.volunteer.dob : null,
-          created_at: app.created_at,
-          status: app.status,
-          rejection_message: app.rejection_message,
-          opportunity_title: app.opportunity_title,
-          subject: app.subject || '',
-          message: app.message || '',
-        };
-      });
+      return data ?? [];
     },
   });
 
-  const updateStatus = useMutation({
-    mutationFn: async ({ appId, status, rejection_message }) => {
+  // Who this organisation has already written to, so the list can say so
+  // before it offers a button that the server would refuse.
+  const { data: outreachRows } = useQuery({
+    queryKey: ['org_outreach_sent'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_outreach_sent')
+        .select('volunteer_id, created_at, status')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const outreachByVolunteer = useMemo(() => summariseOutreach(outreachRows), [outreachRows]);
+
+  const setDismissed = useMutation({
+    mutationFn: async ({ applicationId, dismissed }) => {
       const { error } = await supabase
         .from('applications')
-        .update({ status, rejection_message })
-        .eq('id', appId);
+        .update({ dismissed_at: dismissed ? new Date().toISOString() : null })
+        .eq('id', applicationId);
       if (error) throw error;
     },
-    onSuccess: () => {
-      toast.success('Status updated');
-      queryClient.invalidateQueries(['applicants', opportunityId]);
+    onSuccess: (_result, { dismissed }) => {
+      toast.success(dismissed ? 'Moved to dismissed' : 'Moved back to the list');
+      queryClient.invalidateQueries({ queryKey: ['opportunity_applicants', opportunityId] });
     },
-    onError: () => toast.error('Update failed'),
+    onError: () => toast.error('Could not update this volunteer'),
   });
 
-  const handleAction = (appId, status) => {
-    // what message was there before?
-    const prevDraft = draftStatus[appId];        // e.g. 'accepted' or 'denied'
-    const prevMsg = (messages[appId] ?? '').trim();
-
-    // decide whether to swap in the new default:
-    const shouldSwapToNewDefault =
-      // no message yet
-      prevMsg === '' ||
-      // or the current message exactly matches the *previous* default
-      (prevDraft && prevMsg === DEFAULT_REPLIES[prevDraft]);
-
-    setDraftStatus(prev => ({ ...prev, [appId]: status }));
-
-    setMessages(prev => ({
-      ...prev,
-      [appId]: shouldSwapToNewDefault ? DEFAULT_REPLIES[status] : prevMsg,
-    }));
-  };
-
-
-  const cancelDraft = (appId) => {
-    setDraftStatus((prev) => {
-      const copy = { ...prev };
-      delete copy[appId];
-      return copy;
-    });
-  };
-
-  const handleSend = async (appId) => {
-    const status = draftStatus[appId];
-    const message = messages[appId]?.trim();
-    if (!status || !message) return;
-
-    // Check rate limit (max 5 changes per hour)
-    const now = Date.now();
-    const history = statusChanges.get(appId) || [];
-    const lastHour = history.filter(timestamp => now - timestamp < 60 * 60 * 1000);
-    
-    if (lastHour.length >= 5) {
-      toast.error('Too many status changes for this application. Please wait before changing it again.');
-      return;
+  const { active, dismissed } = useMemo(() => {
+    const groups = { active: [], dismissed: [] };
+    for (const applicant of applicants ?? []) {
+      groups[applicant.dismissed_at ? 'dismissed' : 'active'].push(applicant);
     }
-
-    setLoadingId(appId);
-    await updateStatus.mutateAsync({ appId, status, rejection_message: message });
-    setLoadingId(null);
-    cancelDraft(appId);
-
-    // Track this status change
-    setStatusChanges(prev => {
-      const updatedHistory = [...(prev.get(appId) || []), now];
-      const updated = new Map(prev);
-      updated.set(appId, updatedHistory);
-      return updated;
-    });
-  };
-
-  const toggleMessage = (id) => {
-    setExpandedMessages((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const grouped = { pending: [], accepted: [], denied: [] };
-  if (applicants) {
-    for (const app of applicants) {
-      grouped[app.status || 'pending'].push(app);
-    }
-  }
-
-  const renderList = (title, list, statusKey) => (
-    <div>
-      <h2 className="section-title mt-6 mb-2 text-left">{title}</h2>
-      {list.length === 0 ? (
-        <p className="muted italic">No {title.toLowerCase()} applicants.</p>
-      ) : (
-        <ul className="space-y-4">
-          {list.map((app) => {
-            const age = app.dob ? differenceInYears(new Date(), new Date(app.dob)) : 'N/A';
-            const isExpanded = expandedMessages[app.id];
-            const isLong = app.message.length > 200;
-            const displayedMessage = isExpanded || !isLong ? app.message : app.message.slice(0, 200) + '...';
-            const draft = draftStatus[app.id];
-            const msg = messages[app.id] || '';
-
-            return (
-              <li key={app.id} className="card space-y-2">
-                {/* Name */}
-                <h3 className="card-title flex items-center gap-2">
-                  {app.name}
-                </h3>
-
-                {/* Meta */}
-                <p className="muted">🎂 Age: {age}</p>
-                <p className="caption">
-                  Applied on: {format(new Date(app.created_at), 'd MMM yyyy')}
-                </p>
-
-                {/* Subject + message */}
-                <div className="text whitespace-pre-line bold"> Subject: {app.subject || 'No subject'}</div>
-                <p className="text whitespace-pre-line">
-                  <strong>Message:</strong> {displayedMessage}
-                </p>
-                {isLong && (
-                  <button onClick={() => toggleMessage(app.id)} className="underline text-blue-600 text-sm">
-                    {isExpanded ? 'Show less' : 'Show more'}
-                  </button>
-                )}
-
-              
-
-                {/* Pending action buttons */}
-                {statusKey === 'pending' && !draft && (
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => handleAction(app.id, 'accepted')} className="btn btn-success btn-sm">
-                      Accept
-                    </button>
-                    <button onClick={() => handleAction(app.id, 'denied')} className="btn btn-danger btn-sm">
-                      Reject
-                    </button>
-                  </div>
-                )}
-
-                {/* Draft confirmation UI */}
-                {statusKey === 'pending' && draft && (
-                  <div className="stack">
-                    <p className="text-sm font-medium">
-                      You’ve chosen to{' '}
-                      <span className={draft === 'accepted' ? 'text-green-700' : 'text-red-600'}>
-                        {draft === 'accepted' ? 'accept' : 'deny'}
-                      </span> this applicant.
-                    </p>
-
-                    <textarea
-                      className="input textarea textarea-sm text-sm"
-                      value={msg}
-                      onChange={(e) => setMessages({ ...messages, [app.id]: e.target.value })}
-                    />
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSend(app.id)}
-                        disabled={loadingId === app.id}
-                        className="btn btn-primary btn-sm"
-                      >
-                        {loadingId === app.id ? 'Sending…' : 'Send'}
-                      </button>
-                      <button onClick={() => cancelDraft(app.id)} className="btn btn-ghost btn-sm">
-                        Cancel
-                      </button>
-                    </div>
-
-                    <div className="caption italic">
-                      Changed your mind? You can switch to{' '}
-                      <button
-                        onClick={() => handleAction(app.id, draft === 'accepted' ? 'denied' : 'accepted')}
-                        className="underline text-brand-teal"
-                      >
-                        {draft === 'accepted' ? 'Reject' : 'Accept'}
-                      </button>{' '}
-                      instead.
-                    </div>
-                  </div>
-                )}
-
-                {/* Final states */}
-                {statusKey === 'accepted' && (
-                  <>
-                    {app.email && (
-                      <p className="text-sm text-green-700">
-                        📧 Email: <a href={`mailto:${app.email}`} className="underline">{app.email}</a>
-                      </p>
-                    )}
-                    <p className="text-sm text-green-700">
-                      ✅ Message sent: {app.rejection_message}
-                    </p>
-                  </>
-                )}
-
-                {statusKey === 'denied' && (
-                  <p className="text-sm text-red-600">❌ Rejection message: {app.rejection_message}</p>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
+    return groups;
+  }, [applicants]);
 
   const opportunityTitle = applicants?.[0]?.opportunity_title ?? 'this opportunity';
 
+  const renderApplicant = (applicant, isDismissed) => {
+    const outreach = outreachByVolunteer.get(applicant.volunteer_id);
+    const hoursLeft = cooldownHoursRemaining(outreach?.lastSentAt);
+    const isComposing = composingFor === applicant.application_id;
+    const isLong = (applicant.message || '').length > 240;
+    const isExpanded = expanded[applicant.application_id];
+    const shownMessage =
+      isLong && !isExpanded ? `${applicant.message.slice(0, 240)}…` : applicant.message;
+
+    return (
+      <li key={applicant.application_id} className="card stack">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h3 className="card-title">{applicant.volunteer_name || 'Unnamed volunteer'}</h3>
+          {outreach?.contacted && (
+            <span className="badge badge-success">
+              Contacted {format(new Date(outreach.lastSentAt), 'd MMM')}
+            </span>
+          )}
+        </div>
+
+        <p className="caption">
+          Registered {format(new Date(applicant.applied_at), 'd MMM yyyy')}
+          {applicant.home_town ? ` · ${applicant.home_town}` : ''}
+        </p>
+
+        {applicant.skills?.trim() && (
+          <p className="text-sm muted">
+            <span className="font-semibold">Skills:</span> {applicant.skills}
+          </p>
+        )}
+        {applicant.bio?.trim() && <p className="text">{applicant.bio}</p>}
+
+        {applicant.subject?.trim() && (
+          <p className="highlight">{applicant.subject}</p>
+        )}
+
+        {applicant.message?.trim() && (
+          <div className="text whitespace-pre-line">{shownMessage}</div>
+        )}
+        {isLong && (
+          <button
+            type="button"
+            onClick={() =>
+              setExpanded((prev) => ({
+                ...prev,
+                [applicant.application_id]: !prev[applicant.application_id],
+              }))
+            }
+            className="btn btn-ghost btn-sm self-start"
+          >
+            {isExpanded ? 'Show less' : 'Show more'}
+          </button>
+        )}
+
+        {isComposing ? (
+          <ContactVolunteerForm
+            volunteerId={applicant.volunteer_id}
+            volunteerName={applicant.volunteer_name}
+            opportunityId={applicant.opportunity_id}
+            opportunityTitle={applicant.opportunity_title}
+            lastSentAt={outreach?.lastSentAt}
+            onCancel={() => setComposingFor(null)}
+            onSent={() => {
+              setComposingFor(null);
+              queryClient.invalidateQueries({ queryKey: ['org_outreach_sent'] });
+            }}
+          />
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setComposingFor(applicant.application_id)}
+              disabled={hoursLeft > 0}
+              title={
+                hoursLeft > 0
+                  ? `You contacted this volunteer recently — you can write again in ${hoursLeft} hour${
+                      hoursLeft === 1 ? '' : 's'
+                    }`
+                  : 'Write to this volunteer'
+              }
+            >
+              {hoursLeft > 0
+                ? `Contact again in ${hoursLeft}h`
+                : outreach?.contacted
+                ? 'Contact again'
+                : 'Contact this volunteer'}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() =>
+                setDismissed.mutate({
+                  applicationId: applicant.application_id,
+                  dismissed: !isDismissed,
+                })
+              }
+              disabled={setDismissed.isPending}
+            >
+              {isDismissed ? 'Move back to the list' : 'Dismiss'}
+            </button>
+          </div>
+        )}
+      </li>
+    );
+  };
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="page-header items-centre">
+    <div className="max-w-3xl mx-auto px-4 py-8" id="main-content">
+      <div className="page-header">
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title !mb-0">Applicants for {opportunityTitle}</h1>
+        <h1 className="title !mb-0">Interested volunteers</h1>
         <div className="spacer" />
       </div>
 
+      <p className="page-description">
+        People who registered interest in <strong>{opportunityTitle}</strong>. Write to anyone
+        you would like to hear more from — we send the email for you, and their reply comes
+        straight to your inbox. Dismissing someone only tidies this list; they are
+        never told either way.
+      </p>
+
       {isLoading ? (
-        <p className="text-center">Loading applicants...</p>
+        <ListSkeleton items={4} />
       ) : error ? (
-        <div className="text-center text-red-600">
-          <p>⚠️ Error loading applicants</p>
+        <div className="text-center mt-10">
+          <p className="error-text">Failed to load applicants.</p>
+          <p className="caption">{error.message}</p>
         </div>
+      ) : (applicants ?? []).length === 0 ? (
+        <p className="muted italic mt-6">
+          No one has registered interest yet. People appear here as they arrive — we do not
+          email you about them.
+        </p>
       ) : (
         <>
-          {renderList('Pending', grouped.pending, 'pending')}
-          {renderList('Accepted', grouped.accepted, 'accepted')}
-          {renderList('Denied', grouped.denied, 'denied')}
+          <h2 className="section-title mt-6 mb-2 text-left">
+            Interested ({active.length})
+          </h2>
+          {active.length === 0 ? (
+            <p className="muted italic">Everyone here has been dismissed.</p>
+          ) : (
+            <ul className="stack-lg">{active.map((a) => renderApplicant(a, false))}</ul>
+          )}
+
+          {dismissed.length > 0 && (
+            <div className="mt-8">
+              <button
+                type="button"
+                onClick={() => setShowDismissed((open) => !open)}
+                className="btn btn-ghost btn-sm"
+                aria-expanded={showDismissed}
+              >
+                {showDismissed ? '▾' : '▸'} Dismissed ({dismissed.length})
+              </button>
+              {showDismissed && (
+                <ul className="stack-lg mt-3">
+                  {dismissed.map((a) => renderApplicant(a, true))}
+                </ul>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

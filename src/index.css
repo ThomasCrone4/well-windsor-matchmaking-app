@@ -2,66 +2,115 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ========== CSS Variables for Dark/Light Theme ========== */
+/* ==========================================================================
+   Well Windsor design tokens
+   --------------------------------------------------------------------------
+   Palette extracted from wellwindsor.org.uk on 2026-09-04 by reading the
+   RENDERED computed styles of four pages, not the stylesheet: the site is
+   Squarespace, so site.css is mostly framework default. Of the colours in
+   that file, only #15ddef actually reaches the page. The coral #f0523d that
+   appears 11 times in site.css never renders anywhere -- it is a Squarespace
+   default, and building on it would have been a mistake.
+
+   The real brand is small: cyan #15ddef, black, white, set in Poppins.
+
+   THE CONSTRAINT THAT SHAPES EVERYTHING BELOW: #15ddef is 1.66:1 against
+   white. It cannot carry text on a light background, and it cannot take
+   white text on top of it. The charity's own site puts BLACK on its cyan
+   buttons for exactly this reason. So the brand colour splits in two:
+
+     --color-brand      a FILL. Always pair with --color-on-brand.
+     --color-brand-ink  the same hue (185) darkened to 5.29:1 on white.
+                        This is what type, links, icons and focus rings use
+                        on light surfaces.
+
+   Every pair below is checked to WCAG AA (4.5:1 for text, 3:1 for the
+   boundaries of interactive controls). Re-check with .scratch/check_palette.py
+   before changing any value here.
+   ========================================================================== */
 :root {
-  /* Light theme colors */
+  /* ---- Brand ---- */
+  --color-brand: #15ddef;
+  --color-brand-hover: #0fc6d7;
+  --color-brand-ink: #097781;          /* 5.29:1 on white */
+  --color-brand-ink-hover: #075d64;
+  --color-brand-subtle: #e8fbfd;
+  --color-brand-subtle-hover: #d2f6fa;
+  --color-on-brand: #06222a;           /* 9.94:1 on the brand fill */
+
+  /* ---- Surfaces ---- */
   --color-background: #ffffff;
-  --color-background-secondary: #f9fafb;
+  --color-background-secondary: #f4f8f9;
   --color-background-elevated: #ffffff;
   --color-surface: #ffffff;
-  --color-border: #e5e7eb;
-  --color-border-light: #f3f4f6;
-  
-  --color-text-primary: #1f2937;
-  --color-text-secondary: #6b7280;
-  --color-text-muted: #9ca3af;
+  --color-border: #dbe4e6;             /* decorative hairlines */
+  --color-border-strong: #6f8c91;      /* control boundaries, 3.60:1 */
+  --color-border-light: #eef3f4;
+
+  /* ---- Type ---- */
+  --color-text-primary: #0c1719;       /* 18.23:1 */
+  --color-text-secondary: #4a5c60;     /*  7.02:1 */
+  --color-text-muted: #5f7377;         /*  4.99:1 */
   --color-text-inverse: #ffffff;
-  
-  --color-brand-primary: #14b8a6;
-  --color-brand-primary-hover: #0d9488;
-  --color-brand-secondary: #60a5fa;
-  --color-brand-accent: #86efac;
-  
-  --color-success: #22c55e;
-  --color-warning: #f97316;
-  --color-danger: #dc2626;
-  --color-info: #3b82f6;
-  
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --shadow-elevated: 0 10px 24px rgba(0, 0, 0, 0.15);
-  
-  /* Smooth transitions */
+
+  /* ---- Status. Darkened from the Tailwind defaults, which mostly failed
+     AA on white: #22c55e was 2.28:1 and #f97316 was 2.85:1. ---- */
+  --color-success: #0f7a3d;
+  --color-warning: #8a5200;
+  --color-danger: #b3261e;
+  --color-info: #0b5cad;
+
+  /* ---- Back-compat aliases. --color-brand-primary is a FILL; anything
+     that wants brand-coloured TEXT must use --color-brand-ink. ---- */
+  --color-brand-primary: var(--color-brand);
+  --color-brand-primary-hover: var(--color-brand-hover);
+  --color-brand-secondary: var(--color-brand-ink);
+  --color-brand-accent: var(--color-brand-subtle);
+  --color-brand-teal-light: var(--color-brand-subtle);
+
+  --shadow-sm: 0 1px 2px rgba(12, 23, 25, 0.06);
+  --shadow-card: 0 4px 16px rgba(12, 23, 25, 0.08);
+  --shadow-elevated: 0 12px 32px rgba(12, 23, 25, 0.14);
+
+  --font-sans: "Poppins", ui-sans-serif, system-ui, -apple-system,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
   --transition-base: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
+/* The charity site has no dark mode, so this ramp is ours. It keeps hue 185
+   throughout so the cyan still reads as the same brand at low light. On dark
+   the brand cyan is 10.85:1, so here it CAN carry text. */
 [data-theme="dark"] {
-  /* Dark theme colors */
-  --color-background: #111827;
-  --color-background-secondary: #1f2937;
-  --color-background-elevated: #1f2937;
-  --color-surface: #374151;
-  --color-border: #374151;
-  --color-border-light: #4b5563;
-  
-  --color-text-primary: #f9fafb;
-  --color-text-secondary: #d1d5db;
-  --color-text-muted: #9ca3af;
-  --color-text-inverse: #111827;
-  
-  --color-brand-primary: #14b8a6;
-  --color-brand-primary-hover: #5eead4;
-  --color-brand-secondary: #60a5fa;
-  --color-brand-accent: #86efac;
-  
-  --color-success: #22c55e;
-  --color-warning: #f97316;
-  --color-danger: #ef4444;
-  --color-info: #3b82f6;
-  
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-elevated: 0 10px 24px rgba(0, 0, 0, 0.5);
+  --color-brand: #15ddef;
+  --color-brand-hover: #4ee5f3;
+  --color-brand-ink: #4ee5f3;          /* 12.26:1 on the dark ground */
+  --color-brand-ink-hover: #88eef7;
+  --color-brand-subtle: #12313a;
+  --color-brand-subtle-hover: #17414d;
+  --color-on-brand: #06222a;
+
+  --color-background: #0c1416;
+  --color-background-secondary: #121e21;
+  --color-background-elevated: #162428;
+  --color-surface: #1b2c31;
+  --color-border: #26383c;
+  --color-border-strong: #556d72;      /* 3.39:1 */
+  --color-border-light: #1d2c30;
+
+  --color-text-primary: #eef6f7;       /* 17.00:1 */
+  --color-text-secondary: #b3c6ca;     /* 10.51:1 */
+  --color-text-muted: #8ba1a6;         /*  6.87:1 */
+  --color-text-inverse: #0c1416;
+
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #fca5a5;
+  --color-info: #7cc4fa;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.6);
 }
 
 /* ---------- Base resets that help forms everywhere ---------- */
@@ -70,13 +119,25 @@
     height: 100%;
     background-color: var(--color-background);
     color: var(--color-text-primary);
+    font-family: var(--font-sans);
     transition: var(--transition-base);
+  }
+
+  /* Poppins is the charity's typeface. Headings go heavier than the site's
+     500 to stand in for Clarkson, its display face, which is licensed
+     through Squarespace and not available to us. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    letter-spacing: -0.02em;
+    font-weight: 600;
   }
 
   /* Accessible focus ring baseline for all interactive elements */
   :is(button,[role="button"],a,input,select,textarea)[tabindex]:focus-visible,
   :is(button,[role="button"],a,input,select,textarea):focus-visible {
-    @apply outline-none ring-2 ring-offset-2 ring-brand-teal;
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-background),
+                0 0 0 4px var(--color-brand-ink);
   }
 
   /* Optional: smoother scrolling for anchor jumps */
@@ -86,49 +147,68 @@
 /* ---------- Reusable components (existing + new form kit) ---------- */
 @layer components {
   /* You already had these — updated with CSS variables */
-  .card { 
+  /* A flatter card than before: the old one carried a 16px blurred shadow
+     on every surface, which on a page of eight cards reads as clutter
+     rather than depth. Hairline border, shadow only on hover for the ones
+     that are links. */
+  .card {
     background-color: var(--color-background-elevated);
     color: var(--color-text-primary);
     border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-card);
-    transition: var(--transition-base);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition-base), box-shadow 0.2s ease, transform 0.2s ease;
     @apply rounded-2xl p-6;
   }
   .card-post { @apply card space-y-4; }
+  /* Opt-in lift, for cards that are actually clickable. */
+  .card-link:hover { box-shadow: var(--shadow-card); transform: translateY(-2px); }
 
-  .btn { 
+  /* Pill buttons, to match the navbar and the mockup. The old rounded-xl
+     next to a pill nav was the most visible inconsistency in the app. */
+  .btn {
     transition: var(--transition-base);
-    @apply inline-flex items-center justify-center rounded-xl font-semibold px-4 py-2 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold
+           px-5 py-2.5 text-sm leading-none
+           disabled:opacity-50 disabled:pointer-events-none;
   }
-  .btn-primary { 
-    background-color: var(--color-brand-primary);
-    color: var(--color-text-inverse);
+  .btn-primary {
+    background-color: var(--color-brand);
+    color: var(--color-on-brand);
     @apply btn;
   }
-  .btn-primary:hover:not(:disabled) { 
+  .btn-primary:hover:not(:disabled) {
     background-color: var(--color-brand-primary-hover);
   }
-  .btn-secondary { 
-    background-color: var(--color-background-secondary);
+  .btn-secondary {
+    background-color: var(--color-background-elevated);
     color: var(--color-text-primary);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     @apply btn;
   }
-  .btn-secondary:hover:not(:disabled) { 
-    background-color: var(--color-surface);
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-background-secondary);
   }
-  
-  .title { 
+
+  /* LEFT ALIGNED. This was `text-center`, so every dashboard, profile and
+     form put a centred H1 over left-aligned body copy -- the single biggest
+     reason the un-redesigned pages looked unfinished. The two genuinely
+     centred cards (sign in, reset password) now ask for text-center
+     themselves. */
+  .title {
     color: var(--color-text-primary);
-    @apply text-3xl font-bold mb-6 text-center;
+    @apply text-3xl md:text-4xl font-bold mb-4 tracking-[-0.025em];
   }
 
   /* Page descriptions */
   .page-description {
     color: var(--color-text-secondary);
     transition: var(--transition-base);
-    @apply mt-2;
+    @apply mt-2 max-w-[62ch] leading-relaxed;
   }
+
+  /* The standard page opening: title, lede, then actions. */
+  .page-head { @apply mb-8; }
+  .page-actions { @apply mt-5 flex flex-wrap gap-2; }
 
   /* --------- FORM KIT (updated with CSS variables) --------- */
 
@@ -146,15 +226,17 @@
   .input {
     background-color: var(--color-background);
     color: var(--color-text-primary);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     transition: var(--transition-base);
-    @apply w-full rounded-xl px-3 py-2
-           placeholder:text-gray-400;
+    /* placeholder was text-gray-400, which responds to neither theme and
+       sat at 2.8:1 on the dark ground. */
+    @apply w-full rounded-xl px-3.5 py-2.5
+           placeholder:text-[var(--color-text-muted)] placeholder:opacity-70;
   }
   .input:focus {
-    border-color: var(--color-brand-primary);
+    border-color: var(--color-brand-ink);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+    box-shadow: 0 0 0 3px var(--color-brand-subtle);
   }
 
   /* Textarea & Select share the same look */
@@ -163,12 +245,12 @@
 
   /* Checkboxes & radios: small, consistent sizing + label spacing helper */
   .check { 
-    border-color: var(--color-border);
-    color: var(--color-brand-primary);
+    border-color: var(--color-border-strong);
+    color: var(--color-brand-ink);
     @apply h-4 w-4 rounded;
   }
   .check:focus {
-    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+    box-shadow: 0 0 0 3px var(--color-brand-subtle);
   }
   .check-label { 
     color: var(--color-text-primary);
@@ -180,7 +262,7 @@
     @apply w-full px-3 py-3;
   }
   .checkbox:focus {
-    border-color: var(--color-brand-primary);
+    border-color: var(--color-brand-ink);
   }
   /* Row for inline checkboxes/toggles */
   .check-row { @apply flex flex-wrap items-center gap-4 md:gap-6 mb-2; }
@@ -245,13 +327,14 @@
   /* More button variants */
   .btn-outline { 
     background-color: transparent;
-    color: var(--color-brand-primary);
-    border: 1px solid var(--color-brand-primary);
+    color: var(--color-brand-ink);
+    border: 1px solid var(--color-brand-ink);
     @apply btn;
   }
   .btn-outline:hover:not(:disabled) { 
-    background-color: var(--color-brand-primary);
-    color: var(--color-text-inverse);
+    background-color: var(--color-brand);
+    border-color: var(--color-brand);
+    color: var(--color-on-brand);
   }
   .btn-ghost { 
     background-color: transparent;
@@ -312,7 +395,7 @@
   .input--with-right  { @apply pr-10; }  /* add to .input when using .input-addon-right */
 
   /* Badges / pills */
-  .badge         { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold; }
+  .badge         { @apply inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none; }
   .badge-neutral { 
     background-color: var(--color-background-secondary);
     color: var(--color-text-primary);
@@ -362,18 +445,22 @@
     background-color: var(--color-background-secondary);
   }
 
-  /* Empty state */
-  .empty { 
+  /* Empty state. Every one of these in the app was a bare line of grey
+     italic text floating on white, which reads as a page that failed to
+     load rather than one with nothing in it yet. Give it a surface. */
+  .empty {
     color: var(--color-text-secondary);
-    @apply text-center py-12;
+    background-color: var(--color-background-secondary);
+    border: 1px dashed var(--color-border);
+    @apply rounded-2xl px-6 py-10 text-center;
   }
-  .empty-title { 
+  .empty-title {
     color: var(--color-text-primary);
-    @apply text-lg font-semibold;
+    @apply text-base font-semibold;
   }
-  .empty-desc { 
+  .empty-desc {
     color: var(--color-text-secondary);
-    @apply text-sm mt-1;
+    @apply text-sm mt-1 mx-auto max-w-[46ch];
   }
   .empty-cta  { @apply mt-4; }
 
@@ -422,12 +509,26 @@
 }
 /* ==== Additions for shared header, text, icon buttons, and form niceties ==== */
 @layer components {
-  /* Page header with back button / title / spacer */
-  .page-header { @apply mb-6 flex items-center justify-between; }
-  .spacer { @apply w-20; } /* matches your old <div class="w-20" /> gap */
+  /* Page header: back button, then title beneath it.
+     This was `flex items-center justify-between` with a w-20 spacer on the
+     right, which existed only to optically centre the title between the
+     Back button and nothing. Six pages use it, and all six put a centred
+     H1 above left-aligned body copy. Stacking it fixes all of them without
+     touching their JSX; .spacer is now inert rather than removed, because
+     those six still render one. */
+  .page-header { @apply mb-6 flex flex-col items-start gap-3; }
+  .spacer { @apply hidden; }
 
   /* Titles inside cards/lists */
-  .card-title { @apply text-lg font-semibold; }
+  .card-title { @apply text-base font-semibold tracking-[-0.015em]; }
+
+  /* The heading above a list on a dashboard. Paired with a hairline so the
+     sections on a long page read as sections rather than as loose text. */
+  .list-head {
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border);
+    @apply mb-4 pb-2 text-sm font-semibold uppercase tracking-[0.08em];
+  }
 
   /* Text utilities used in components */
   .muted { 
@@ -441,7 +542,7 @@
     @apply text-xs;
   }
   .highlight { 
-    color: var(--color-brand-secondary);
+    color: var(--color-brand-ink);
     @apply text-sm font-medium;
   }
 
@@ -457,7 +558,7 @@
     background-color: var(--color-background-secondary);
   }
   .icon-btn-brand { 
-    color: var(--color-brand-primary);
+    color: var(--color-brand-ink);
   }
   .icon-btn-danger { 
     color: var(--color-danger);
@@ -470,9 +571,79 @@
   }
 
   /* Simple page-level section header (optional) */
-  .section-title { 
+  .section-title {
     color: var(--color-text-primary);
-    @apply text-2xl font-bold;
+    @apply text-xl font-semibold tracking-[-0.02em];
+  }
+
+  /* ---------- Card tags ----------
+     The small uppercase labels along the bottom of an opportunity card.
+     The mockup sets these in IBM Plex Mono; this uses the system mono
+     stack instead rather than pulling a second webfont across the network
+     for a handful of 10px labels. The typographic idea -- mono, uppercase,
+     letterspaced, tight -- is what carries it, not the specific face.
+
+     .tag is brand-subtle behind brand-INK. Never the brand fill: #15ddef
+     behind #097781 is 1.6:1 and unreadable. */
+  .tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background-color: var(--color-brand-subtle);
+    color: var(--color-brand-ink);
+    @apply inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] whitespace-nowrap;
+  }
+  .tag-plain {
+    background-color: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    @apply tag;
+  }
+
+  /* ---------- Home hero scrim ----------
+     White type over a photograph always needs a scrim; unaltered, it fails
+     contrast in most crops. Two of them, because the copy is a different
+     shape at each size. On a phone the slogan spans the full width, so the
+     scrim runs bottom to top. From md the copy sits in the left third and
+     the scrim is WEIGHTED LEFT, so the students on the right stay visible
+     -- a flat overlay across the whole frame keeps the type legible but
+     dims the photograph, which defeats leading with it.
+
+     These values are fixed dark, not tokens: they sit over a photograph in
+     both themes, and the type on them is always white. */
+  .hero-scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top,
+      rgba(6, 34, 42, 0.93) 12%,
+      rgba(6, 34, 42, 0.6) 58%,
+      rgba(6, 34, 42, 0.22) 100%
+    );
+  }
+  @media (min-width: 768px) {
+    .hero-scrim {
+      background:
+        linear-gradient(
+          95deg,
+          rgba(6, 34, 42, 0.93) 0%,
+          rgba(6, 34, 42, 0.82) 34%,
+          rgba(6, 34, 42, 0.34) 66%,
+          rgba(6, 34, 42, 0.12) 100%
+        ),
+        linear-gradient(to top, rgba(6, 34, 42, 0.55) 0%, rgba(6, 34, 42, 0) 55%);
+    }
+  }
+
+  /* A ghost button that sits on the hero photograph. btn-outline is
+     brand-ink on transparent, which disappears against the scrim. */
+  .btn-on-photo {
+    background-color: transparent;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    @apply btn;
+  }
+  .btn-on-photo:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: #ffffff;
   }
 
   /* Form wrappers used in refactors */

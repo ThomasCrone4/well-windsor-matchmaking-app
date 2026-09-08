@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../utils/supabase';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { Link, useNavigate } from 'react-router-dom';
 import CardSkeleton from '../../../components/skeletons/CardSkeleton';
+import { summariseOutreach, cooldownHoursRemaining } from '../../../utils/outreach';
 
 export default function LookingForVolunteersPage() {
   const [filters, setFilters] = useState({ town: 'All'});
@@ -25,32 +26,48 @@ export default function LookingForVolunteersPage() {
   const { data, error, isLoading } = useQuery({
     queryKey: ['volunteer_profiles'],
     queryFn: async () => {
+      // The role and public_profile filters used to live here, in the
+      // client, where anyone could bypass them by calling the API directly.
+      // They are now enforced by the public_volunteers view, which also
+      // omits dob, email and contact_number entirely.
       const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, name, home_town, skills, available_anytime, availability_matrix, bio')
-        .eq('role', 'volunteer')
-        .eq('public_profile', true);
+        .from('public_volunteers')
+        .select('id, name, home_town, skills, available_anytime, availability_matrix, bio');
       if (error) throw error;
       return data;
     },
   });
 
-  // 3) Load which volunteers this org has already contacted
-  const { data: contactedRows, isLoading: isLoadingContacts } = useQuery({
-    queryKey: ['contacted_volunteers', orgId],
+  // 3) Load which volunteers this org has already written to. The log is
+  //    the org's own outreach; org_outreach_sent is filtered to the
+  //    caller, so there is no org_id predicate to get wrong here.
+  const { data: outreachRows, isLoading: isLoadingContacts } = useQuery({
+    queryKey: ['org_outreach_sent'],
     enabled: !!orgId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('applications')
-        .select('volunteer_id, created_at')
-        .eq('org_id', orgId)
-        .eq('direction', 'to_volunteer');
+        .from('org_outreach_sent')
+        .select('volunteer_id, created_at, status')
+        .order('created_at', { ascending: false });
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
-  const contactedSet = new Set((contactedRows ?? []).map(r => r.volunteer_id));
+  const outreachByVolunteer = useMemo(() => summariseOutreach(outreachRows), [outreachRows]);
+
+  // Derived from the volunteers actually listed, not from a hardcoded
+  // ['Windsor','Maidenhead','Slough'] as it was before. This filter is
+  // about where the PEOPLE are, which is not the same question as which
+  // towns the service posts roles in -- home_town has no CHECK constraint
+  // and there is a real volunteer in London. A fixed list both named towns
+  // nobody lives in and hid the one town somebody does.
+  const townOptions = useMemo(() => {
+    const towns = new Set(
+      (data ?? []).map((v) => (v.home_town ?? '').trim()).filter(Boolean)
+    );
+    return ['All', ...Array.from(towns).sort()];
+  }, [data]);
 
   const filterVolunteers = (vols) =>
     vols.filter((v) => {
@@ -69,26 +86,30 @@ export default function LookingForVolunteersPage() {
       navigate('/auth');
       return;
     }
-    
-    // Check if contacted within 24 hours
-    const contact = contactedRows?.find(r => r.volunteer_id === volunteerId);
-    if (contact) {
-      const hoursSince = Math.floor((Date.now() - new Date(contact.created_at)) / (1000 * 60 * 60));
-      if (hoursSince < 24) {
-        toast.error(`You contacted this volunteer ${hoursSince} hour${hoursSince !== 1 ? 's' : ''} ago. Please wait 24 hours between enquiries.`);
-        return;
-      }
+
+    // Told here as well as on the compose page, so nobody writes a
+    // message they cannot send. The server enforces it either way.
+    const hoursLeft = cooldownHoursRemaining(outreachByVolunteer.get(volunteerId)?.lastSentAt);
+    if (hoursLeft > 0) {
+      toast.error(
+        `You contacted this volunteer in the last 24 hours. You can write again in ${hoursLeft} hour${
+          hoursLeft === 1 ? '' : 's'
+        }.`
+      );
+      return;
     }
-    
+
     navigate(`/volunteers/${volunteerId}/enquire`);
   };
 
   const renderAvailability = (vol) => {
-    if (vol.available_anytime) return <span className="text-green-700 font-medium">Anytime</span>;
-    if (!vol.availability_matrix?.length) return <span className="text-gray-500 italic">Unavailable</span>;
+    if (vol.available_anytime)
+      return <span className="font-medium" style={{ color: 'var(--color-success)' }}>Anytime</span>;
+    if (!vol.availability_matrix?.length)
+      return <span className="italic" style={{ color: 'var(--color-text-muted)' }}>Not given</span>;
 
     return (
-      <ul className="space-y-1 text-sm text-gray-700 list-disc list-inside mt-1">
+      <ul className="space-y-1 text-sm list-disc list-inside mt-1">
         {vol.availability_matrix.map((block, i) => {
           const dayList = block.days?.length ? `Every ${block.days.join(', ')}` : 'Unspecified days';
           const timeRange = block.start_time && block.end_time ? `${block.start_time} to ${block.end_time}` : 'unspecified times';
@@ -114,26 +135,38 @@ export default function LookingForVolunteersPage() {
 
   if (isLoading) return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="title">Find Volunteers</h1>
+      <h1 className="title">Find volunteers</h1>
       <CardSkeleton count={6} />
     </div>
   );
-  if (error) return <p className="text-center text-red-600 mt-20">Failed to load volunteers.</p>;
+  if (error)
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="empty" style={{ borderColor: 'var(--color-danger)' }}>
+          <p className="empty-title">Could not load volunteers</p>
+          <p className="empty-desc">Please refresh the page and try again.</p>
+        </div>
+      </div>
+    );
 
   const filtered = filterVolunteers(data || []);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
-      <div className="mb-8">
-        <h1 className="title">Find Volunteers</h1>
+      <div className="page-head">
+        <h1 className="title">Find volunteers</h1>
         <p className="page-description">
-          Search public volunteer profiles to find skilled individuals for your opportunities. Contact volunteers directly to discuss potential matches.
+          Volunteers who have chosen to be listed here. Write to anyone who looks like a fit
+          and we will email them on your behalf — their reply comes straight to your inbox.
+          You can write to the same volunteer once every 24 hours.
         </p>
-      </div>
-      
-      <div className="mb-6">
-        <div className="flex justify-center">
-          <Link to="/organization/sent-enquiries" className="btn-success">Sent Enquiries</Link>
+
+        {/* Was a lone centred green button in the middle of a left-aligned
+            page. btn-success is a status colour, not an action colour. */}
+        <div className="page-actions">
+          <Link to="/organization/sent-enquiries" className="btn-secondary">
+            Messages sent
+          </Link>
         </div>
       </div>
 
@@ -162,10 +195,9 @@ export default function LookingForVolunteersPage() {
               onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
               className="select"
             >
-              <option value="All">All</option>
-              <option value="Windsor">Windsor</option>
-              <option value="Maidenhead">Maidenhead</option>
-              <option value="Slough">Slough</option>
+              {townOptions.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
             </select>
           </div>
    
@@ -189,34 +221,70 @@ export default function LookingForVolunteersPage() {
 
       {/* Results */}
       {filtered.length === 0 ? (
-        <p className="text-center text-gray-600">No volunteers found.</p>
+        <div className="empty">
+          <p className="empty-title">No volunteers match those filters</p>
+          <p className="empty-desc">
+            Only volunteers who have chosen to be listed appear here. Try
+            clearing the search.
+          </p>
+        </div>
       ) : (
         <ul className="space-y-6">
           {filtered.map((vol) => {
-            const alreadyContacted = contactedSet.has(vol.id);
+            const outreach = outreachByVolunteer.get(vol.id);
+            const hoursLeft = cooldownHoursRemaining(outreach?.lastSentAt);
             return (
               <li key={vol.id} className="card p-6 space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="text-xl font-semibold">{vol.name}</h2>
-                    <p className="text-gray-700">{vol.bio}</p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{vol.bio}</p>
                   </div>
+                  {outreach?.contacted && (
+                    <span className="badge badge-success shrink-0">Contacted</span>
+                  )}
                 </div>
 
-                <div className="text-sm text-gray-600">🏠 Home Town: {vol.home_town || '—'}</div>
-                {vol.skills?.trim() ? (
-                  <div className="text-sm text-gray-600">🛠️ Skills: {vol.skills}</div>
-                ) : null}
-                <div className="text-sm text-gray-600">📋 Availability: {renderAvailability(vol)}</div>
+                {/* Was three text-gray-600 lines led by 🏠 🛠️ 📋 -- a
+                    hardcoded grey that responded to neither theme, and
+                    emoji standing in for labels. */}
+                <dl className="grid gap-3 pt-1 sm:grid-cols-3">
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.1em] block" style={{ color: 'var(--color-text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>Home town</span>
+                    <dd className="mt-0.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                      {vol.home_town || '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.1em] block" style={{ color: 'var(--color-text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>Skills</span>
+                    <dd className="mt-0.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                      {vol.skills?.trim() || '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.1em] block" style={{ color: 'var(--color-text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>Availability</span>
+                    <dd className="mt-0.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                      {renderAvailability(vol)}
+                    </dd>
+                  </div>
+                </dl>
 
                 <div className="pt-2">
                   <button
-                    className={`btn-primary ${alreadyContacted ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    disabled={alreadyContacted || isLoadingContacts}
+                    className={`btn-primary ${hoursLeft > 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    disabled={hoursLeft > 0 || isLoadingContacts}
                     onClick={() => handleEnquire(vol.id)}
-                    title={alreadyContacted ? 'You have already contacted this volunteer' : 'Contact Volunteer'}
+                    title={
+                      hoursLeft > 0
+                        ? `You contacted this volunteer recently — you can write again in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`
+                        : 'Contact volunteer'
+                    }
                   >
-                    {alreadyContacted ? 'Already contacted' : 'Contact Volunteer'}
+                    {hoursLeft > 0
+                      ? `Contact again in ${hoursLeft}h`
+                      : outreach?.contacted
+                      ? 'Contact again'
+                      : 'Contact volunteer'}
                   </button>
                 </div>
               </li>

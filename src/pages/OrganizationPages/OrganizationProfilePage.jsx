@@ -7,6 +7,7 @@ import { supabase } from '../../utils/supabase';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
 import FormSkeleton from '../../components/skeletons/FormSkeleton';
+import { townOptionsFor } from '../../utils/towns';
 
 const orgSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -24,6 +25,7 @@ export default function OrganisationProfilePage() {
     register,
     handleSubmit,
     reset,
+    watch,                // ← keeps a saved town in the select's options
     getValues,            // ← needed to sync values post-save
     formState: { errors, isDirty },
   } = useForm({
@@ -103,7 +105,7 @@ export default function OrganisationProfilePage() {
   if (loading || !hydrated) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="title">Edit Organisation Profile</h1>
+        <h1 className="title">Your organisation</h1>
         <FormSkeleton fields={5} />
       </div>
     );
@@ -112,7 +114,7 @@ export default function OrganisationProfilePage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8" id="main-content">
       <div className="mb-8">
-        <h1 className="title">Edit Organisation Profile</h1>
+        <h1 className="title">Your organisation</h1>
         <p className="page-description">
           Manage your organisation's contact information and profile. This information helps volunteers connect with you.
         </p>
@@ -144,9 +146,9 @@ export default function OrganisationProfilePage() {
             aria-invalid={!!errors.home_town}
           >
             <option value="">Select your town</option>
-            <option value="Windsor">Windsor</option>
-            <option value="Maidenhead">Maidenhead</option>
-            <option value="Slough">Slough</option>
+            {townOptionsFor(watch('home_town')).map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
           </select>
           {errors.home_town && <p className="error-text">{errors.home_town.message}</p>}
         </div>
