@@ -157,12 +157,16 @@ export default function Navbar() {
           <Link to="/" className="flex-none" aria-label="Well Windsor — home">
             <picture>
               <source srcSet="/WellWindsorLogo.webp" type="image/webp" />
+              {/* 50px was the mockup's size and it read as small once the
+                  mark was in a real bar. The lockup is near-square (890x788)
+                  so height is what makes it legible; it steps down on a
+                  phone, where the bar has less room to give. */}
               <img
                 src="/WellWindsorLogo.png"
                 alt="Well Windsor"
                 width="890"
                 height="788"
-                className="h-[50px] w-auto"
+                className="h-[58px] w-auto md:h-[72px]"
               />
             </picture>
           </Link>

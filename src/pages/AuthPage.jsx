@@ -175,7 +175,7 @@ export default function AuthPage() {
        screen in the app, and it is the one every volunteer passes through.
        The panel is hidden below lg so a phone gets straight to the form. */
     <div
-      className="grid min-h-[calc(100vh-5rem)] lg:grid-cols-2"
+      className="grid min-h-[calc(100vh-93px)] lg:grid-cols-2"
       style={{ backgroundColor: 'var(--color-background)' }}
     >
       <aside className="relative hidden overflow-hidden lg:block" style={{ backgroundColor: '#06222a' }}>
