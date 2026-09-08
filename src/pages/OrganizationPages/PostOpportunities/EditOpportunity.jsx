@@ -14,6 +14,9 @@ import useUnsavedChangesWarning from '../../../hooks/useUnsavedWarning';
 // 🔁 schedule.js helpers
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
 import { TOWNS } from '../../../utils/towns';
+import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
+
+const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
 // This form is reset() straight from the database row, so every field that
 // is nullable in the database arrives here as null -- and z.string().optional()
@@ -35,6 +38,13 @@ const getSchema = (isDraft) =>
       : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
     contact: isDraft ? nullableText : z.string().min(3, 'Contact mail is required'),
     skills: nullableText,
+    // Nullable on the table and null on every row that predates it, so
+    // reset() feeds this null -- .optional() alone would reject that and
+    // make Save Changes fail silently, exactly as `skills` once did.
+    category: nullableText.refine(
+      (v) => !v || CATEGORY_VALUES.includes(v),
+      'Please choose a kind of role'
+    ),
     volunteers_needed: isDraft
       ? z.coerce.number().optional()
       : z.coerce.number().min(1, 'Must be at least 1'),
@@ -80,6 +90,7 @@ export default function EditOpportunity() {
       town: '',
       contact: '',
       skills: '',
+      category: '',
       volunteers_needed: 1,
       generally_needed: true,
       when_needed: [],
@@ -112,6 +123,9 @@ export default function EditOpportunity() {
         ...opportunity,
         when_needed: opportunity.when_needed ?? [],
         town: opportunity.town ?? '',
+        // Same reason as town: a null on a controlled <select> makes React
+        // fall back to uncontrolled and warn.
+        category: opportunity.category ?? '',
       };
       reset(defaults, { keepDirty: false, keepTouched: false });
       originalData.current = defaults;
@@ -244,6 +258,7 @@ export default function EditOpportunity() {
       town: formData.town || null,
       contact: formData.contact ?? '',
       skills: formData.skills || null,
+      category: formData.category || null,
       volunteers_needed: Number(formData.volunteers_needed ?? 1),
       generally_needed: !!formData.generally_needed,
       when_needed: formData.generally_needed ? null : (formData.when_needed ?? []), // keep JSON for UI/editing
@@ -353,6 +368,29 @@ export default function EditOpportunity() {
               {errors.town
                 ? <p className="error-text">{errors.town.message}</p>
                 : <p className="help-text">Volunteers filter the browse by town.</p>}
+            </div>
+
+            {/* Category — picks the photograph on the listing */}
+            <div className="form-row">
+              <label className="label">
+                Kind of role <span className="help-text">(optional)</span>
+              </label>
+              <select
+                {...register('category')}
+                className={`select ${errors.category ? 'input-invalid' : ''}`}
+                aria-invalid={!!errors.category}
+              >
+                <option value="">No preference — use a general photo</option>
+                {OPPORTUNITY_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+              {errors.category
+                ? <p className="error-text">{errors.category.message}</p>
+                : <p className="help-text">
+                    Chooses the photograph shown on your listing. You cannot
+                    upload your own picture yet.
+                  </p>}
             </div>
 
             {/* Location — free text, the human-readable place */}

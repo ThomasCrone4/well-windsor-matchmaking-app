@@ -15,6 +15,7 @@ import Redirector from './pages/Redirector';
 import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard';
 import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard';
 import OpportunitiesPage from './pages/OpportunitiesPage';
+import OpportunityDetailPage from './pages/OpportunityDetailPage';
 import VolunteerProfilePage from './pages/VolunteerPages/VolunteerProfilePage';
 import OrganizationProfilePage from './pages/OrganizationPages/OrganizationProfilePage';
 import EnquireOpportunities from './pages/VolunteerPages/FindOpportunities/EnquireOpportunities';
@@ -54,6 +55,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     {/* Public pages */}
                     <Route path="/" element={<HomePage />} />
                     <Route path="/opportunities" element={<OpportunitiesPage />} />
+                    {/* Public. Ranked below /opportunities/:id/enquire by
+                        the router's own specificity scoring -- more path
+                        segments wins, regardless of the order here. */}
+                    <Route path="/opportunities/:id" element={<OpportunityDetailPage />} />
                     <Route path="/auth" element={<AuthPage />} />
                 <Route path="/redirect" element={<Redirector />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />

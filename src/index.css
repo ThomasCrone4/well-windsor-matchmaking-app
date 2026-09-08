@@ -537,6 +537,76 @@
     @apply text-2xl font-bold;
   }
 
+  /* ---------- Card tags ----------
+     The small uppercase labels along the bottom of an opportunity card.
+     The mockup sets these in IBM Plex Mono; this uses the system mono
+     stack instead rather than pulling a second webfont across the network
+     for a handful of 10px labels. The typographic idea -- mono, uppercase,
+     letterspaced, tight -- is what carries it, not the specific face.
+
+     .tag is brand-subtle behind brand-INK. Never the brand fill: #15ddef
+     behind #097781 is 1.6:1 and unreadable. */
+  .tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background-color: var(--color-brand-subtle);
+    color: var(--color-brand-ink);
+    @apply inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] whitespace-nowrap;
+  }
+  .tag-plain {
+    background-color: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    @apply tag;
+  }
+
+  /* ---------- Home hero scrim ----------
+     White type over a photograph always needs a scrim; unaltered, it fails
+     contrast in most crops. Two of them, because the copy is a different
+     shape at each size. On a phone the slogan spans the full width, so the
+     scrim runs bottom to top. From md the copy sits in the left third and
+     the scrim is WEIGHTED LEFT, so the students on the right stay visible
+     -- a flat overlay across the whole frame keeps the type legible but
+     dims the photograph, which defeats leading with it.
+
+     These values are fixed dark, not tokens: they sit over a photograph in
+     both themes, and the type on them is always white. */
+  .hero-scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top,
+      rgba(6, 34, 42, 0.93) 12%,
+      rgba(6, 34, 42, 0.6) 58%,
+      rgba(6, 34, 42, 0.22) 100%
+    );
+  }
+  @media (min-width: 768px) {
+    .hero-scrim {
+      background:
+        linear-gradient(
+          95deg,
+          rgba(6, 34, 42, 0.93) 0%,
+          rgba(6, 34, 42, 0.82) 34%,
+          rgba(6, 34, 42, 0.34) 66%,
+          rgba(6, 34, 42, 0.12) 100%
+        ),
+        linear-gradient(to top, rgba(6, 34, 42, 0.55) 0%, rgba(6, 34, 42, 0) 55%);
+    }
+  }
+
+  /* A ghost button that sits on the hero photograph. btn-outline is
+     brand-ink on transparent, which disappears against the scrim. */
+  .btn-on-photo {
+    background-color: transparent;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    @apply btn;
+  }
+  .btn-on-photo:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: #ffffff;
+  }
+
   /* Form wrappers used in refactors */
   .form { @apply space-y-4; }
   .field { @apply grid gap-1; }

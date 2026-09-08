@@ -72,7 +72,7 @@ export default function OrganizationDashboard() {
 
     const confirmMsg = hasPassed
       ? '⚠️ This opportunity is in the past. If you plan to offer it again, consider editing the date instead. Are you sure you want to delete it permanently?'
-      : 'Are you sure you want to delete this opportunity? This will also remove all associated applications.';
+      : 'Are you sure you want to delete this opportunity? This will also remove everyone who registered interest in it.';
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -174,7 +174,10 @@ export default function OrganizationDashboard() {
                 )}
 
                 {op.status !== 'draft' && (
-                  <p className="highlight">📨 {applicationsCount[op.id] || 0} applicants</p>
+                  <p className="highlight">
+                    📨 {applicationsCount[op.id] || 0}{' '}
+                    {applicationsCount[op.id] === 1 ? 'person interested' : 'people interested'}
+                  </p>
                 )}
 
                 {/* Actions */}
@@ -184,7 +187,7 @@ export default function OrganizationDashboard() {
                       onClick={() => navigate(`/opportunity/${op.id}/applicants`)}
                       className="btn-success btn-sm"
                     >
-                      View Applicants
+                      View interested volunteers
                     </button>
                   )}
                   {op.status == 'closed' && (
@@ -293,7 +296,7 @@ export default function OrganizationDashboard() {
       <div className="mb-8">
         <h1 className="title">Organisation Dashboard</h1>
         <p className="page-description">
-          Manage your posted opportunities and track volunteer applications. Create new posts, edit existing ones, and close opportunities when filled.
+          Manage your posted opportunities and see who has registered interest. People who register appear on each post — you email the ones you want.
         </p>
       </div>
       

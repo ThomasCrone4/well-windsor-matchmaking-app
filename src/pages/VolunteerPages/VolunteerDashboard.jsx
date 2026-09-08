@@ -6,8 +6,8 @@
 // is nothing to accept or deny any more, and an approach from an
 // organisation arrives as an email rather than as a row to action here.
 //
-// So this page is a record, not an inbox: what you applied for, and who
-// has written to you.
+// So this page is a record, not an inbox: what you registered interest
+// in, and who has written to you.
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -92,11 +92,11 @@ export default function VolunteerDashboard() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Application withdrawn');
+      toast.success('Interest withdrawn');
       queryClient.invalidateQueries({ queryKey: ['my_applications', userId] });
       queryClient.invalidateQueries({ queryKey: ['my_applied_opportunity_ids'] });
     },
-    onError: () => toast.error('Could not withdraw this application'),
+    onError: () => toast.error('Could not withdraw this'),
   });
 
   return (
@@ -104,10 +104,10 @@ export default function VolunteerDashboard() {
       <div className="mb-8">
         <h1 className="title">Your volunteering</h1>
         <p className="page-description">
-          Roles you have applied for, and organisations that have been in touch.
+          Roles you have registered interest in, and organisations that have been in touch.
           Organisations get in touch by email with the people they would like to hear more
           from, so check your inbox — and don&rsquo;t worry if you don&rsquo;t hear back
-          from every application. That is normal, and it isn&rsquo;t a reflection on you.
+          about every one. That is normal, and it isn&rsquo;t a reflection on you.
         </p>
       </div>
 
@@ -118,16 +118,16 @@ export default function VolunteerDashboard() {
       </div>
 
       <h2 className="section-title mt-6 mb-2 text-left">
-        Applications you&rsquo;ve sent{applications.length ? ` (${applications.length})` : ''}
+        Roles you&rsquo;ve registered for{applications.length ? ` (${applications.length})` : ''}
       </h2>
 
       {loadingApplications ? (
         <ListSkeleton items={3} />
       ) : applicationsError ? (
-        <p className="error-text">Failed to load your applications.</p>
+        <p className="error-text">Failed to load what you&rsquo;ve registered for.</p>
       ) : applications.length === 0 ? (
         <p className="muted italic">
-          You haven&rsquo;t applied for anything yet.{' '}
+          You haven&rsquo;t registered interest in anything yet.{' '}
           <Link to="/opportunities" className="underline">
             Browse opportunities
           </Link>
@@ -145,7 +145,7 @@ export default function VolunteerDashboard() {
                 {application.volunteer_opportunities?.location || 'Location not given'}
               </p>
               <p className="caption">
-                Applied {format(new Date(application.created_at), 'PPP')}
+                Registered {format(new Date(application.created_at), 'PPP')}
               </p>
 
               {application.subject?.trim() && (
@@ -207,20 +207,21 @@ export default function VolunteerDashboard() {
         isOpen={!!withdrawing}
         onClose={() => setWithdrawing(null)}
         onConfirm={() => withdraw.mutate(withdrawing.id)}
-        title="Withdraw this application?"
+        title="Withdraw your interest?"
         confirmText="Withdraw"
         confirmStyle="danger"
         message={
           <>
             <p>
-              This removes your application to{' '}
+              This takes you off the organisation&rsquo;s list of people
+              interested in{' '}
               <strong>
                 {withdrawing?.volunteer_opportunities?.title || 'this opportunity'}
-              </strong>{' '}
-              from the organisation&rsquo;s list.
+              </strong>
+              .
             </p>
             <p className="mt-2">
-              You can apply again later if you change your mind.
+              You can register again later if you change your mind.
             </p>
           </>
         }

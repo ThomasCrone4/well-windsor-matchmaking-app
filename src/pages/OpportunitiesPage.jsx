@@ -7,6 +7,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { isThisWeek, isThisMonth } from 'date-fns';
 import { formatOpportunitySchedule } from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
+import OpportunityPhoto from '../components/OpportunityPhoto';
 import { TOWN_FILTER_OPTIONS } from '../utils/towns';
 
 /**
@@ -128,6 +129,7 @@ export default function OpportunitiesPage() {
               volunteers_needed,
               status,
               org_id,
+              category,
               created_at
             `)
             .eq('status', 'active')
@@ -154,6 +156,7 @@ export default function OpportunitiesPage() {
           volunteers_needed,
           status,
           org_id,
+          category,
           created_at
         `)
         .eq('status', 'active')
@@ -197,7 +200,7 @@ export default function OpportunitiesPage() {
     const user = sessionData?.session?.user;
 
     if (!user) {
-      toast.error('Please log in to apply.');
+      toast.error('Please sign in to register your interest.');
       navigate('/auth');
       return;
     }
@@ -209,7 +212,7 @@ export default function OpportunitiesPage() {
       .single();
 
     if (error || profile?.role !== 'volunteer') {
-      toast.error('Only volunteers can apply for opportunities.');
+      toast.error('Only volunteers can register interest in a role.');
       return;
     }
 
@@ -221,7 +224,7 @@ export default function OpportunitiesPage() {
       .maybeSingle();
 
     if (existing) {
-      toast.error('You have already applied to this opportunity.');
+      toast.error('You have already registered interest in this role.');
       navigate('/volunteer-dashboard');
       return;
     }
@@ -298,8 +301,9 @@ export default function OpportunitiesPage() {
             Volunteer opportunities
           </h1>
           <p style={{ color: 'var(--color-text-secondary)' }}>
-            Roles across Windsor, Maidenhead and Slough. Filter by town and by
-            when you are free, then register your interest in the ones that fit.
+            Volunteering with schools and organisations across Windsor. Filter
+            by when you are free, then register your interest in the ones that
+            fit.
           </p>
 
           {/* Safeguarding. This was set in the smallest, faintest type on the
@@ -323,7 +327,7 @@ export default function OpportunitiesPage() {
 
         {userProfile?.role === 'volunteer' && (
           <Link to="/volunteer-dashboard" className="btn-outline whitespace-nowrap">
-            Your applications
+            Your volunteering
           </Link>
         )}
       </div>
@@ -408,7 +412,8 @@ export default function OpportunitiesPage() {
 
       {/* Results */}
       {finalList.length === 0 ? (
-        <p className="text-center text-gray-600">
+        /* text-gray-600 was hardcoded here and responded to neither theme. */
+        <p className="text-center" style={{ color: 'var(--color-text-secondary)' }}>
           {(opps ?? []).length === 0
             ? 'No opportunities available right now.'
             : 'No opportunities match these filters. Try clearing them.'}
@@ -425,72 +430,109 @@ export default function OpportunitiesPage() {
               userProfile?.role === 'volunteer' ? MATCH_BADGES[op.match_kind] : null;
 
             return (
-              <li key={op.id} className="card p-6 flex flex-col gap-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h2 className="text-xl font-semibold">{op.title}</h2>
-                  {badge && (
-                    <span className={badge.classes} title={badge.title}>
-                      {badge.label}
-                    </span>
-                  )}
-                </div>
+              <li key={op.id} className="card !p-0 flex flex-col overflow-hidden">
+                {/* Photograph chosen from the category. There is no image
+                    column and no upload, so this is a fallback, not a
+                    picture of this role -- see utils/opportunityImages.js. */}
+                <Link
+                  to={`/opportunities/${op.id}`}
+                  className="block h-40 sm:h-44 overflow-hidden"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                >
+                  <OpportunityPhoto
+                    category={op.category}
+                    id={op.id}
+                    sizes="(min-width: 1024px) 45vw, 100vw"
+                  />
+                </Link>
 
-                <p className="text-sm -mt-1" style={{ color: 'var(--color-brand-ink)' }}>
-                  <span className="font-medium">{orgName}</span>
-                </p>
-
-                <p style={{ color: 'var(--color-text-secondary)' }}>{op.description}</p>
-                <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                  📍 {op.location}
-                  {op.town && op.town !== op.location ? ` (${op.town})` : ''}
-                </div>
-                <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                  👥 Volunteers Needed: {op.volunteers_needed ?? 'N/A'}
-                </div>
-
-                {/* Schedule summary */}
-                {op.generally_needed ? (
-                  <p className="text-sm font-medium" style={{ color: 'var(--color-success)' }}>🕒 Available anytime</p>
-                ) : Array.isArray(op.when_needed) && op.when_needed.length > 0 ? (
-                  <div className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-                    <span className="font-semibold">🕒 Schedule: </span>
-                    <span>{formatOpportunitySchedule(op)}</span>
-                  </div>
-                ) : null}
-
-                {/* Safeguarding. The platform vets nobody; say so where the
-                    requirement is, not only in the page preamble. */}
-                {op.requires_dbs && (
-                  <p className="text-sm mt-2">
-                    <span className="badge-warning">DBS check required</span>{' '}
-                    <span style={{ color: 'var(--color-text-muted)' }}>
-                      — arranged by the organisation, not by Well Windsor.
-                    </span>
+                <div className="flex flex-1 flex-col gap-2 p-5">
+                  <p
+                    className="text-xs font-semibold"
+                    style={{ color: 'var(--color-brand-ink)' }}
+                  >
+                    {orgName}
                   </p>
-                )}
 
-                <div className="flex items-center gap-3 pt-2 mt-auto">
-                  {userProfile?.role === 'volunteer' && (
-                    <>
-                      {alreadyEnquired ? (
-                        <button
-                          className="btn-secondary opacity-60 cursor-not-allowed"
-                          disabled
-                          title="You have applied to this opportunity"
-                        >
-                          Applied
-                        </button>
-                      ) : (
-                        <button
-                          className="btn-primary"
-                          onClick={() => handleApply(op.id)}
-                          title="Apply for this opportunity"
-                        >
-                          Apply
-                        </button>
-                      )}
-                    </>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h2 className="text-lg font-semibold leading-snug">
+                      <Link to={`/opportunities/${op.id}`} className="hover:underline">
+                        {op.title}
+                      </Link>
+                    </h2>
+                    {badge && (
+                      <span className={badge.classes} title={badge.title}>
+                        {badge.label}
+                      </span>
+                    )}
+                  </div>
+
+                  <p
+                    className="text-sm line-3"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
+                    {op.description}
+                  </p>
+
+                  {/* Tags. The schedule, the place and the volunteer count
+                      were three labelled lines of emoji; they are the same
+                      facts, read faster. */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {op.requires_dbs && <span className="tag">DBS check</span>}
+                    {/* No schedule tag when when_needed is empty. The row
+                        may still HAVE times -- they live in
+                        opportunity_timeblocks, which this list does not
+                        read -- so printing "Schedule TBC" here would be a
+                        claim the detail page then contradicts. Saying
+                        nothing is the honest option at this size. */}
+                    {op.generally_needed ? (
+                      <span className="tag-plain">Flexible timing</span>
+                    ) : Array.isArray(op.when_needed) && op.when_needed.length > 0 ? (
+                      <span className="tag-plain">{formatOpportunitySchedule(op)}</span>
+                    ) : null}
+                    {op.location && <span className="tag-plain">{op.location}</span>}
+                    {op.volunteers_needed > 1 && (
+                      <span className="tag-plain">{op.volunteers_needed} needed</span>
+                    )}
+                  </div>
+
+                  {/* Safeguarding. The platform vets nobody; say so where the
+                      requirement is, not only in the page preamble. */}
+                  {op.requires_dbs && (
+                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                      The DBS check is arranged by the organisation, not by Well
+                      Windsor.
+                    </p>
                   )}
+
+                  <div className="flex flex-wrap items-center gap-3 pt-3 mt-auto">
+                    <Link to={`/opportunities/${op.id}`} className="btn-secondary btn-sm">
+                      Read more
+                    </Link>
+
+                    {userProfile?.role === 'volunteer' && (
+                      <>
+                        {alreadyEnquired ? (
+                          <button
+                            className="btn-secondary btn-sm opacity-60 cursor-not-allowed"
+                            disabled
+                            title="You have already registered interest in this role"
+                          >
+                            Interest registered
+                          </button>
+                        ) : (
+                          <button
+                            className="btn-primary btn-sm"
+                            onClick={() => handleApply(op.id)}
+                            title="Register interest in this role"
+                          >
+                            Register interest
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </li>
             );

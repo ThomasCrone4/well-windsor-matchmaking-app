@@ -156,64 +156,79 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--color-background)' }}>
-      {/* ---------------- HERO ---------------- */}
-      <section className="relative overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(165deg, var(--color-brand-subtle) 0%, var(--color-background) 62%)',
-          }}
-        />
-        <div className="container relative py-12 md:py-20">
-          <div className="grid gap-10 md:grid-cols-[1.15fr_0.85fr] md:items-center">
-            <div>
-              <p
-                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase mb-5"
-                style={{
-                  backgroundColor: 'var(--color-brand)',
-                  color: 'var(--color-on-brand)',
-                }}
-              >
-                Windsor &middot; Maidenhead &middot; Slough
-              </p>
+      {/* ---------------- HERO ----------------
+          The slogan IS the hero: the school photograph at full bleed with
+          the line over it, three lines, the last in cyan so "plays a role"
+          lands on the word the whole product turns on.
 
-              <h1
-                className="text-4xl md:text-6xl font-bold leading-[1.05] mb-4"
-                style={{ color: 'var(--color-text-primary)' }}
-              >
-                Connect with volunteer opportunities in Windsor
-              </h1>
+          The photograph sits under the copy as a real <img> rather than a
+          CSS background so it can carry a srcset -- the 1920 file is 6x the
+          bytes of the 480 and a phone should not pay for it. */}
+      <section
+        className="relative isolate overflow-hidden"
+        style={{ backgroundColor: '#06222a' }}
+      >
+        <picture>
+          <source
+            type="image/webp"
+            sizes="100vw"
+            srcSet="/images/wellwindsorshootstill037-480.webp 480w,
+                    /images/wellwindsorshootstill037-800.webp 800w,
+                    /images/wellwindsorshootstill037-1280.webp 1280w,
+                    /images/wellwindsorshootstill037-1920.webp 1920w"
+          />
+          <img
+            src="/images/wellwindsorshootstill037-1280.jpg"
+            sizes="100vw"
+            srcSet="/images/wellwindsorshootstill037-480.jpg 480w,
+                    /images/wellwindsorshootstill037-800.jpg 800w,
+                    /images/wellwindsorshootstill037-1280.jpg 1280w,
+                    /images/wellwindsorshootstill037-1920.jpg 1920w"
+            alt=""
+            aria-hidden="true"
+            fetchPriority="high"
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: 'center 32%' }}
+          />
+        </picture>
 
-              <p
-                className="text-lg md:text-xl max-w-xl mb-8"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
-                Support local schools and organisations. Find roles that match
-                your skills, your town and the hours you actually have.
-              </p>
+        <div className="hero-scrim" aria-hidden="true" />
 
-              <div className="flex flex-wrap gap-3">
-                <Link to={getStartedPath} className="btn-primary px-6 py-3 text-base">
-                  Get Started
-                </Link>
-                <Link to="/opportunities" className="btn-outline px-6 py-3 text-base">
-                  Browse opportunities
-                </Link>
-              </div>
-            </div>
+        <div className="relative mx-auto max-w-6xl px-4 pb-10 pt-40 sm:pt-48 md:py-28 lg:py-32">
+          {/*
+            The font-size lives on the h1 and the lines inherit it. `ch`
+            sizes against the element's OWN font-size, so putting the size
+            on the spans instead would measure max-width against a smaller
+            font and break the slogan mid-sentence.
+          */}
+          <h1
+            className="mb-4 max-w-[19ch] text-3xl font-semibold leading-[1.1] tracking-[-0.03em] sm:text-4xl md:text-5xl lg:text-[3.4rem]"
+            style={{ color: '#ffffff' }}
+          >
+            <span className="block">Adults show up.</span>
+            <span className="block">Children take part.</span>
+            {/* Cyan text is permitted here and only here: the scrim beneath
+                is #06222a, where #15ddef runs about 10.8:1. On any light
+                surface this same colour would be 1.66:1 and unreadable. */}
+            <span className="block font-bold" style={{ color: 'var(--color-brand)' }}>
+              Everyone plays a role.
+            </span>
+          </h1>
 
-            <div className="hidden md:flex justify-center">
-              <img
-                src="/WellWindsorLogo.png"
-                alt=""
-                aria-hidden="true"
-                width="890"
-                height="788"
-                className="w-full max-w-[340px] h-auto"
-              />
-            </div>
+          <p className="mb-7 max-w-[42ch] text-base md:text-lg" style={{ color: 'rgba(255,255,255,0.92)' }}>
+            Volunteering with schools and organisations across Windsor. Find
+            something that fits the time you actually have.
+          </p>
+
+          <div className="flex flex-wrap gap-3">
+            <Link to={getStartedPath} className="btn-primary px-6 py-3 text-base">
+              Get started
+            </Link>
+            <Link to="/opportunities" className="btn-on-photo px-6 py-3 text-base">
+              {stats.opportunities > 0
+                ? `Browse ${stats.opportunities} roles`
+                : 'Browse roles'}
+            </Link>
           </div>
         </div>
       </section>
@@ -259,7 +274,7 @@ export default function HomePage() {
               className="space-y-2 mb-5"
               style={{ color: 'var(--color-text-secondary)' }}
             >
-              <li>Browse roles by town, skills and when you are free</li>
+              <li>Browse roles by skills and by when you are free</li>
               <li>See at a glance which ones fit your availability</li>
               <li>Register your interest in a couple of clicks</li>
             </ul>
@@ -315,8 +330,12 @@ export default function HomePage() {
                 const orgName = orgNameById.get(op.org_id) ?? 'Organisation';
                 return (
                   <li key={op.id}>
+                    {/* The detail page exists now. This used to link to
+                        /opportunities?opId= -- the browse filtered down to
+                        one card, which was the nearest thing available. That
+                        query parameter still works; nothing links to it. */}
                     <Link
-                      to={`/opportunities?opId=${op.id}`}
+                      to={`/opportunities/${op.id}`}
                       className="card h-full flex flex-col hover:-translate-y-0.5 transition-transform"
                       aria-label={`View ${op.title}`}
                     >

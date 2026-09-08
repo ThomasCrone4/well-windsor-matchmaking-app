@@ -1,7 +1,7 @@
-// Applicants for one opportunity.
+// The people who registered interest in one opportunity.
 //
-// There is no accept/deny here any more. An application is an
-// expression of interest; the organisation reads it and either writes
+// There is no accept/deny here any more. Registering interest is exactly
+// that; the organisation reads it and either writes
 // to the volunteer or sets them aside. Nothing the organisation does on
 // this page is shown to the volunteer, by design — silence means no.
 //
@@ -67,10 +67,10 @@ export default function OpportunityApplicantsPage() {
       if (error) throw error;
     },
     onSuccess: (_result, { dismissed }) => {
-      toast.success(dismissed ? 'Moved to dismissed' : 'Moved back to applicants');
+      toast.success(dismissed ? 'Moved to dismissed' : 'Moved back to the list');
       queryClient.invalidateQueries({ queryKey: ['opportunity_applicants', opportunityId] });
     },
-    onError: () => toast.error('Could not update this applicant'),
+    onError: () => toast.error('Could not update this volunteer'),
   });
 
   const { active, dismissed } = useMemo(() => {
@@ -104,7 +104,7 @@ export default function OpportunityApplicantsPage() {
         </div>
 
         <p className="caption">
-          Applied {format(new Date(applicant.applied_at), 'd MMM yyyy')}
+          Registered {format(new Date(applicant.applied_at), 'd MMM yyyy')}
           {applicant.home_town ? ` · ${applicant.home_town}` : ''}
         </p>
 
@@ -158,14 +158,14 @@ export default function OpportunityApplicantsPage() {
                   ? `You contacted this volunteer recently — you can write again in ${hoursLeft} hour${
                       hoursLeft === 1 ? '' : 's'
                     }`
-                  : 'Write to this applicant'
+                  : 'Write to this volunteer'
               }
             >
               {hoursLeft > 0
                 ? `Contact again in ${hoursLeft}h`
                 : outreach?.contacted
                 ? 'Contact again'
-                : 'Contact this applicant'}
+                : 'Contact this volunteer'}
             </button>
 
             <button
@@ -179,7 +179,7 @@ export default function OpportunityApplicantsPage() {
               }
               disabled={setDismissed.isPending}
             >
-              {isDismissed ? 'Move back to applicants' : 'Dismiss'}
+              {isDismissed ? 'Move back to the list' : 'Dismiss'}
             </button>
           </div>
         )}
@@ -193,14 +193,14 @@ export default function OpportunityApplicantsPage() {
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title !mb-0">Applicants</h1>
+        <h1 className="title !mb-0">Interested volunteers</h1>
         <div className="spacer" />
       </div>
 
       <p className="page-description">
-        People who have applied to <strong>{opportunityTitle}</strong>. Write to anyone you
-        would like to hear more from — we send the email for you, and their reply comes
-        straight to your inbox. Dismissing an applicant only tidies this list; they are
+        People who registered interest in <strong>{opportunityTitle}</strong>. Write to anyone
+        you would like to hear more from — we send the email for you, and their reply comes
+        straight to your inbox. Dismissing someone only tidies this list; they are
         never told either way.
       </p>
 
@@ -213,16 +213,16 @@ export default function OpportunityApplicantsPage() {
         </div>
       ) : (applicants ?? []).length === 0 ? (
         <p className="muted italic mt-6">
-          No one has applied yet. Applications appear here as they arrive — we do not email
-          you about them.
+          No one has registered interest yet. People appear here as they arrive — we do not
+          email you about them.
         </p>
       ) : (
         <>
           <h2 className="section-title mt-6 mb-2 text-left">
-            Applicants ({active.length})
+            Interested ({active.length})
           </h2>
           {active.length === 0 ? (
-            <p className="muted italic">Every applicant has been dismissed.</p>
+            <p className="muted italic">Everyone here has been dismissed.</p>
           ) : (
             <ul className="stack-lg">{active.map((a) => renderApplicant(a, false))}</ul>
           )}

@@ -1,4 +1,4 @@
-// Applying to an opportunity.
+// Registering interest in an opportunity.
 //
 // Two things this deliberately does not do. It does not send the
 // organisation an email — that would let anyone spam a small charity
@@ -47,7 +47,7 @@ export default function EnquireOpportunitiesPage() {
     const { data: sessionData } = await supabase.auth.getSession();
     const user = sessionData?.session?.user;
     if (!user) {
-      toast.error('You must be logged in to apply.');
+      toast.error('You must be signed in to register interest.');
       setSubmitting(false);
       return;
     }
@@ -69,16 +69,16 @@ export default function EnquireOpportunitiesPage() {
       // opportunity, rather than a client-side check that a direct API
       // call could skip.
       if (insertError.code === '23505') {
-        toast.error('You have already applied to this opportunity.');
+        toast.error('You have already registered interest in this role.');
         navigate('/volunteer-dashboard');
         return;
       }
-      toast.error(insertError.message || 'Failed to send your application');
+      toast.error(insertError.message || 'Could not register your interest');
       console.error('Application insert error:', insertError);
       return;
     }
 
-    toast.success('Application sent');
+    toast.success('Interest registered');
     navigate('/volunteer-dashboard');
   };
 
@@ -97,12 +97,12 @@ export default function EnquireOpportunitiesPage() {
         <button onClick={() => navigate(-1)} className="btn btn-secondary btn-sm">
           ← Back
         </button>
-        <h1 className="title !mb-0">Apply</h1>
+        <h1 className="title !mb-0">Register interest</h1>
         <div className="spacer" />
       </div>
 
       <p className="muted mb-2">
-        You&rsquo;re applying to <strong>{opportunity.title || 'this role'}</strong>
+        You&rsquo;re registering interest in <strong>{opportunity.title || 'this role'}</strong>
         {opportunity.location ? ` – ${opportunity.location}` : ''}
       </p>
 
@@ -112,11 +112,11 @@ export default function EnquireOpportunitiesPage() {
 
       <div className="card stack mb-4">
         <p className="text">
-          Your application goes onto the organisation&rsquo;s list of applicants. They will
+          This goes onto the organisation&rsquo;s list of interested volunteers. They will
           email you directly if they would like to hear more.
         </p>
         <p className="caption">
-          You may not hear back from every application — organisations only contact the
+          You may not hear back from every role you register for — organisations only contact the
           people they want to take further, and silence is not a rejection you need to read
           anything into. Well Windsor does not vet or DBS-check organisations, and is not
           party to any arrangement you make with them.
@@ -163,7 +163,7 @@ export default function EnquireOpportunitiesPage() {
         </div>
 
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-          {submitting ? 'Sending…' : 'Send application'}
+          {submitting ? 'Sending…' : 'Register interest'}
         </button>
       </form>
 
@@ -171,7 +171,7 @@ export default function EnquireOpportunitiesPage() {
         isOpen={!!confirming}
         onClose={() => setConfirming(null)}
         onConfirm={() => apply(confirming)}
-        title="Send this application?"
+        title="Register your interest?"
         confirmText="Send"
         confirmStyle="primary"
         message={
@@ -182,7 +182,7 @@ export default function EnquireOpportunitiesPage() {
             </p>
             <p className="mt-2">
               They will not see your email address, phone number or date of birth unless you
-              reply to them yourself. You can withdraw the application from your dashboard.
+              reply to them yourself. You can withdraw this from your dashboard.
             </p>
           </>
         }

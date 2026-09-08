@@ -11,6 +11,9 @@ import { useNavigate } from 'react-router-dom';
 // 🔁 use your schedule.js
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
 import { TOWNS } from '../../../utils/towns';
+import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
+
+const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
 const getOpportunitySchema = (isDraft) =>
   z.object({
@@ -25,6 +28,16 @@ const getOpportunitySchema = (isDraft) =>
       ? z.string().optional()
       : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
     contact: isDraft ? z.string().optional() : z.string().min(1, 'Contact method is required'),
+    // Optional in both states -- the browse falls back to a neutral image.
+    // It MUST be declared here even so: zod strips keys the schema does not
+    // mention, so a field that is registered but unlisted silently never
+    // reaches the submit handler. That is what happens to `skills` on this
+    // form today.
+    category: z
+      .string()
+      .nullable()
+      .optional()
+      .refine((v) => !v || CATEGORY_VALUES.includes(v), 'Please choose a category'),
     generally_needed: z.boolean(),
     when_needed: z.any(),
     requires_dbs: z.boolean(),
@@ -54,6 +67,7 @@ export default function PostOpportunity() {
       location: '',
       town: '',
       contact: '',
+      category: '',
       generally_needed: true,
       when_needed: [],
       requires_dbs: false,
@@ -171,6 +185,9 @@ export default function PostOpportunity() {
       // and a draft is allowed to have neither yet.
       town: data.town || null,
       contact: data.contact || '',
+      // null rather than '': the CHECK accepts the three values or NULL,
+      // and '' would be rejected outright.
+      category: data.category || null,
       generally_needed: !!data.generally_needed,
       when_needed: data.generally_needed ? null : (data.when_needed ?? []), // keep JSON for editing UX
       requires_dbs: !!data.requires_dbs,
@@ -267,6 +284,32 @@ export default function PostOpportunity() {
             {errors.town
               ? <p className="error-text">{errors.town.message}</p>
               : <p className="help-text">Volunteers filter the browse by town.</p>}
+          </div>
+
+          {/* Category — picks the photograph on the listing. Optional:
+              without one the card gets a neutral Windsor image rather than
+              an empty slot. */}
+          <div className="form-row">
+            <label htmlFor="category" className="label">
+              Kind of role <span className="help-text">(optional)</span>
+            </label>
+            <select
+              id="category"
+              {...register('category')}
+              className={`select ${errors.category ? 'input-invalid' : ''}`}
+              aria-invalid={!!errors.category}
+            >
+              <option value="">No preference — use a general photo</option>
+              {OPPORTUNITY_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+            {errors.category
+              ? <p className="error-text">{errors.category.message}</p>
+              : <p className="help-text">
+                  Chooses the photograph shown on your listing. You cannot
+                  upload your own picture yet.
+                </p>}
           </div>
 
           {/* Location — free text, the human-readable place */}
