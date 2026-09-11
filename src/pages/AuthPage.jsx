@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import AvailabilityMatrix from '../components/AvailabilityMatrix';
 import { useNavigate } from 'react-router-dom';
 import { TOWNS } from '../utils/towns';
+import { MIN_VOLUNTEER_AGE, isOldEnough } from '../utils/age';
 
 export default function AuthPage() {
   const [email, setEmail] = useState('');
@@ -48,14 +49,10 @@ export default function AuthPage() {
       if (role === 'volunteer') {
         if (!dob) {
           newErrors.dob = 'Date of birth is required';
-        } else {
+        } else if (!isOldEnough(dob)) {
           // Mirrors the user_profiles_min_age constraint, so the user gets
           // a readable message instead of a Postgres error.
-          const thirteenthBirthday = new Date(dob);
-          thirteenthBirthday.setFullYear(thirteenthBirthday.getFullYear() + 13);
-          if (thirteenthBirthday > new Date()) {
-            newErrors.dob = 'You must be at least 13 years old to sign up';
-          }
+          newErrors.dob = `Volunteers must be ${MIN_VOLUNTEER_AGE} or over`;
         }
 
         // Bio & Skills only required if public
@@ -127,6 +124,18 @@ export default function AuthPage() {
     if (!data?.session) {
       toast.success('Account created. Check your email to confirm, then log in.');
       setIsSigningUp(false);
+      return;
+    }
+
+    // A new organisation starts unapproved (2026-09-11): it can save drafts
+    // but cannot publish or contact anyone until an admin approves it. Say
+    // so now, rather than letting the first "Post" fail.
+    if (role === 'organization') {
+      toast.success(
+        'Account created. Well Windsor will review your organisation before you can publish roles — you can start drafting now.',
+        { duration: 9000 }
+      );
+      navigate('/organization-dashboard');
       return;
     }
 

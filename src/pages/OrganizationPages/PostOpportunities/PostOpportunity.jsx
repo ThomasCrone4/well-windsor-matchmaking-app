@@ -12,6 +12,9 @@ import { useNavigate } from 'react-router-dom';
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
 import { TOWNS } from '../../../utils/towns';
 import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
+import useUserProfile from '../../../hooks/useUserProfile';
+import ApprovalNotice from '../../../components/ApprovalNotice';
+import { isPendingOrganisation } from '../../../utils/approval';
 
 const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
@@ -28,6 +31,12 @@ const getOpportunitySchema = (isDraft) =>
       ? z.string().optional()
       : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
     contact: isDraft ? z.string().optional() : z.string().min(1, 'Contact method is required'),
+    // The skills input has been on this form all along and every value
+    // typed into it was discarded: zod strips keys the schema does not
+    // name, so `data.skills` never reached submitOpportunity -- and
+    // postData did not send it either. Proven by the 2026-09-11 core-loop
+    // walk, which posted "first aid, marshalling" and read back NULL.
+    skills: z.string().optional(),
     // Optional in both states -- the browse falls back to a neutral image.
     // It MUST be declared here even so: zod strips keys the schema does not
     // mention, so a field that is registered but unlisted silently never
@@ -47,6 +56,9 @@ const getOpportunitySchema = (isDraft) =>
 export default function PostOpportunity() {
   const navigate = useNavigate();
   const [orgId, setOrgId] = useState(null);
+  const { profile } = useUserProfile();
+  // Publishing waits for approval (RLS refuses it otherwise); drafts do not.
+  const pending = isPendingOrganisation(profile);
   const [isDraft, setIsDraft] = useState(false);
 
   const schema = useMemo(() => getOpportunitySchema(isDraft), [isDraft]);
@@ -67,6 +79,7 @@ export default function PostOpportunity() {
       location: '',
       town: '',
       contact: '',
+      skills: '',
       category: '',
       generally_needed: true,
       when_needed: [],
@@ -185,6 +198,7 @@ export default function PostOpportunity() {
       // and a draft is allowed to have neither yet.
       town: data.town || null,
       contact: data.contact || '',
+      skills: data.skills?.trim() || null,
       // null rather than '': the CHECK accepts the three values or NULL,
       // and '' would be rejected outright.
       category: data.category || null,
@@ -238,6 +252,8 @@ export default function PostOpportunity() {
           Describe the role and when you need people. Save it as a draft to finish later, or post it and it goes live on the browse straight away.
         </p>
       </div>
+
+      {pending && <ApprovalNotice />}
 
       <form className="card-post">
         <div className="form-grid">
@@ -419,8 +435,10 @@ export default function PostOpportunity() {
               }, 0);
             }}
             className="btn-primary w-full"
+            disabled={pending}
+            title={pending ? 'Available once Well Windsor approves your organisation' : undefined}
           >
-            Post Opportunity
+            {pending ? 'Post opportunity — after approval' : 'Post opportunity'}
           </button>
 
           <button

@@ -7,12 +7,17 @@ import { format, parseISO, isValid } from 'date-fns';
 
 import { Edit2, Trash2 } from 'lucide-react';
 import ListSkeleton from '../../components/skeletons/ListSkeleton';
+import useUserProfile from '../../hooks/useUserProfile';
+import ApprovalNotice from '../../components/ApprovalNotice';
+import { isPendingOrganisation } from '../../utils/approval';
 
 
 export default function OrganizationDashboard() {
   const [opportunities, setOpportunities] = useState([]);
   const [applicationsCount, setApplicationsCount] = useState({});
   const [orgId, setOrgId] = useState(null);
+  const { profile } = useUserProfile();
+  const pending = isPendingOrganisation(profile);
   const [loading, setLoading] = useState(true);
   const [showReasonDropdown, setShowReasonDropdown] = useState(null);
   const [selectedReason, setSelectedReason] = useState('');
@@ -67,12 +72,13 @@ export default function OrganizationDashboard() {
     fetchOrgIdAndData();
   }, []);
 
-  const handleDelete = async (id, date_needed) => {
-    const hasPassed = new Date(date_needed) < new Date();
-
-    const confirmMsg = hasPassed
-      ? '⚠️ This opportunity is in the past. If you plan to offer it again, consider editing the date instead. Are you sure you want to delete it permanently?'
-      : 'Are you sure you want to delete this opportunity? This will also remove everyone who registered interest in it.';
+  // This used to warn "this opportunity is in the past" by testing
+  // date_needed -- a column nothing writes, NULL on every row, and
+  // new Date(null) is 1 January 1970. So every single delete said the role
+  // was in the past. The audit caught it; the warning is now just true.
+  const handleDelete = async (id) => {
+    const confirmMsg =
+      'Delete this opportunity permanently? Everyone who registered interest in it will be removed too. If you might offer it again, close it instead.';
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -236,7 +242,7 @@ export default function OrganizationDashboard() {
                     </button>
                     <button
                       aria-label="Delete"
-                      onClick={() => handleDelete(op.id, op.date_needed)}
+                      onClick={() => handleDelete(op.id)}
                       className="icon-btn icon-btn-danger"
                       title="Delete"
                     >
@@ -312,6 +318,7 @@ export default function OrganizationDashboard() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
       <div className="page-head">
+        {pending && <ApprovalNotice />}
         <h1 className="title">Your opportunities</h1>
         <p className="page-description">
           Post what you need and see who has registered interest. People who

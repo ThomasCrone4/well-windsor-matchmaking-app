@@ -5,11 +5,18 @@ import { toast } from 'react-hot-toast';
 import { Link, useNavigate } from 'react-router-dom';
 import CardSkeleton from '../../../components/skeletons/CardSkeleton';
 import { summariseOutreach, cooldownHoursRemaining } from '../../../utils/outreach';
+import useUserProfile from '../../../hooks/useUserProfile';
+import ApprovalNotice from '../../../components/ApprovalNotice';
+import { isPendingOrganisation } from '../../../utils/approval';
 
 export default function LookingForVolunteersPage() {
   const [filters, setFilters] = useState({ town: 'All'});
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
+  // The view returns nothing to an unapproved organisation, which on its
+  // own reads as "there are no volunteers". Say why instead.
+  const pending = isPendingOrganisation(profile);
 
   // 1) Get current org user id
   const { data: sessionUser } = useQuery({
@@ -154,6 +161,13 @@ export default function LookingForVolunteersPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
       <div className="page-head">
+        {pending && (
+          <ApprovalNotice>
+            Volunteers who have chosen to be discoverable appear here once Well
+            Windsor has approved your organisation. That review protects them:
+            it is the only check between a volunteer and whoever signs up.
+          </ApprovalNotice>
+        )}
         <h1 className="title">Find volunteers</h1>
         <p className="page-description">
           Volunteers who have chosen to be listed here. Write to anyone who looks like a fit

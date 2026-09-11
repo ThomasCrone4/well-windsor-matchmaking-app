@@ -11,11 +11,25 @@ import { ExternalLink, User, Building, Clock, MapPin, CheckCircle, XCircle } fro
 async function getAllOrganisations() {
   const { data, error } = await supabase
     .from('user_profiles')
-    .select('id,name,email,created_at')
+    .select('id,name,email,created_at,approved_at')
     .eq('role', 'organization')
     .order('name');
   if (error) throw error;
-  return data;
+  // Waiting-for-approval first: that is the queue an admin is here to clear.
+  return [...(data ?? [])].sort(
+    (a, b) => Number(!!a.approved_at) - Number(!!b.approved_at)
+  );
+}
+
+// The only way an organisation becomes approved. set_organisation_approval
+// is SECURITY DEFINER and checks is_admin(auth.uid()) itself -- approved_at
+// is not writable by any client, so there is no update() to get wrong here.
+async function setOrganisationApproval(orgId, approved) {
+  const { error } = await supabase.rpc('set_organisation_approval', {
+    p_org_id: orgId,
+    p_approved: approved,
+  });
+  if (error) throw error;
 }
 
 async function getAllOpportunities({ status, orgId, showExpired, q, orgs }) {
@@ -144,6 +158,17 @@ export default function AdminDashboard() {
     onError: (e) => toast.error(e.message || 'Failed to update town'),
   });
 
+  const approvalMut = useMutation({
+    mutationFn: ({ id, approved }) => setOrganisationApproval(id, approved),
+    onSuccess: (_r, { approved }) => {
+      toast.success(approved ? 'Organisation approved' : 'Approval withdrawn');
+      qc.invalidateQueries({ queryKey: ['admin-orgs'] });
+    },
+    onError: (e) => toast.error(e.message || 'Could not update approval'),
+  });
+
+  const pendingOrgCount = (orgs ?? []).filter((o) => !o.approved_at).length;
+
   // Get org name by ID
   const getOrgName = (orgId) => {
     return orgs?.find(o => o.id === orgId)?.name || 'Unknown Organisation';
@@ -201,7 +226,7 @@ export default function AdminDashboard() {
         <TabBtn id="opportunities" count={opportunities?.length}>
           Opportunities
         </TabBtn>
-        <TabBtn id="organizations" count={orgs?.length}>
+        <TabBtn id="organizations" count={pendingOrgCount || orgs?.length}>
           Organizations
         </TabBtn>
         <TabBtn id="volunteers" count={volunteers?.length}>
@@ -428,6 +453,11 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-3 mb-2">
                           <Building size={20} className="text-brand-ink shrink-0" />
                           <h3 className="font-semibold text-lg" style={{ color: 'var(--color-text-primary)' }}>{org.name}</h3>
+                          {org.approved_at ? (
+                            <span className="badge badge-success">Approved</span>
+                          ) : (
+                            <span className="badge badge-warning">Waiting for approval</span>
+                          )}
                         </div>
                         
                         <div className="space-y-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
@@ -447,6 +477,31 @@ export default function AdminDashboard() {
                       </div>
                       
                       <div className="flex flex-col gap-2 shrink-0">
+                        {/* Approving lets this organisation publish roles,
+                            see discoverable volunteers and email them.
+                            Withdrawing takes its live roles off the public
+                            browse immediately (RLS), without closing them. */}
+                        {org.approved_at ? (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Withdraw approval for ${org.name}? Their live roles will disappear from the browse and they will not be able to contact volunteers.`)) {
+                                approvalMut.mutate({ id: org.id, approved: false });
+                              }
+                            }}
+                            disabled={approvalMut.isPending}
+                            className="btn-secondary btn-sm"
+                          >
+                            Withdraw approval
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => approvalMut.mutate({ id: org.id, approved: true })}
+                            disabled={approvalMut.isPending}
+                            className="btn-primary btn-sm"
+                          >
+                            Approve
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setActiveTab('opportunities');

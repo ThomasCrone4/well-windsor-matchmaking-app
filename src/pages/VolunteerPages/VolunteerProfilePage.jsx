@@ -13,13 +13,22 @@ import FormSkeleton from '../../components/skeletons/FormSkeleton';
 // ✅ import the schedule helpers you already have
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../utils/schedule';
 import { townOptionsFor } from '../../utils/towns';
+import { MIN_VOLUNTEER_AGE, isOldEnough } from '../../utils/age';
 
 const profileSchema = z
   .object({
     name: z.string().min(1, 'Name is required'),
     contact_number: z.string().optional(),
     home_town: z.string().min(1, 'Select a home town'),
-    dob: z.string().optional(),
+    // Required, and 18+. It used to be optional here, and clearing it
+    // switched the database's age check off entirely -- that CHECK passed
+    // on NULL. The database now refuses a volunteer with no date of birth,
+    // so this form has to insist too or saving would fail with a
+    // constraint error instead of a sentence.
+    dob: z
+      .string({ required_error: 'Date of birth is required' })
+      .min(1, 'Date of birth is required')
+      .refine(isOldEnough, `Volunteers must be ${MIN_VOLUNTEER_AGE} or over`),
     bio: z.string().optional(),
     skills: z.string().optional(),
     available_anytime: z.boolean(),
@@ -313,9 +322,17 @@ export default function VolunteerProfilePage() {
         {/* Date of Birth */}
         <div className="form-row">
           <label className="label">
-            Date of Birth <span className="help-text">(optional)</span>
+            Date of birth <span className="required" />
           </label>
-          <input type="date" {...register('dob')} className="input" />
+          <input
+            type="date"
+            {...register('dob')}
+            className={`input ${errors.dob ? 'input-invalid' : ''}`}
+            aria-invalid={!!errors.dob}
+          />
+          {errors.dob
+            ? <p className="error-text">{errors.dob.message}</p>
+            : <p className="help-text">Volunteers must be {MIN_VOLUNTEER_AGE} or over. Organisations never see your date of birth.</p>}
         </div>
 
         {/* Bio */}

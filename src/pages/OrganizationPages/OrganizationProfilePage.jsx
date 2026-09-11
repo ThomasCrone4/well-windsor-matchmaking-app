@@ -13,12 +13,11 @@ const orgSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   home_town: z.string().min(1, 'Select a town'),
   contact_number: z.string().optional(),
-  email: z.string().email('Must be a valid email').optional(),
 });
 
 export default function OrganisationProfilePage() {
   const [hydrated, setHydrated] = useState(false);
-  const { userId, profile, loading } = useUserProfile();
+  const { user, userId, profile, loading } = useUserProfile();
   const queryClient = useQueryClient();
 
   const {
@@ -40,7 +39,6 @@ export default function OrganisationProfilePage() {
         name: profile.name ?? '',
         home_town: profile.home_town ?? '',
         contact_number: profile.contact_number ?? '',
-        email: profile.email ?? '',
       });
       setHydrated(true);
     }
@@ -57,7 +55,9 @@ export default function OrganisationProfilePage() {
         name: trimOrNull(formData.name),
         home_town: trimOrNull(formData.home_town),
         contact_number: trimOrNull(formData.contact_number),
-        email: trimOrNull(formData.email),
+        // No `email`. It is not client-writable any more (the audit found
+        // send-outreach trusted it), and replies to your messages go to
+        // your login address, which is what send-outreach now uses.
       };
 
       const { error } = await supabase
@@ -96,7 +96,6 @@ export default function OrganisationProfilePage() {
         name: profile.name ?? '',
         home_town: profile.home_town ?? '',
         contact_number: profile.contact_number ?? '',
-        email: profile.email ?? '',
       });
       toast.success('Changes discarded');
     }
@@ -165,19 +164,19 @@ export default function OrganisationProfilePage() {
           />
         </div>
 
-        {/* Contact Email */}
+        {/* Where replies go. This was an editable "Contact Email" that
+            wrote user_profiles.email -- the column send-outreach used to
+            trust. Replies now always go to the login address. */}
         <div className="form-row">
-          <label className="label">
-            Contact Email <span className="help-text">(optional)</span>
-          </label>
-          <input
-            {...register('email')}
-            type="email"
-            className={`input ${errors.email ? 'input-invalid' : ''}`}
-            placeholder="e.g. admin@windsorprimary.org.uk"
-            aria-invalid={!!errors.email}
-          />
-          {errors.email && <p className="error-text">{errors.email.message}</p>}
+          <span className="label">Replies go to</span>
+          <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>
+            {user?.email ?? '—'}
+          </p>
+          <p className="help-text">
+            When you write to a volunteer, their reply comes to the email you
+            sign in with, so they will see this address. You won&rsquo;t see
+            theirs unless they reply.
+          </p>
         </div>
 
         {/* Actions */}

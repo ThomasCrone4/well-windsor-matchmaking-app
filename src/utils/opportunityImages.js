@@ -62,9 +62,14 @@ const NEUTRAL = [
 ];
 
 const BY_CATEGORY = {
+  // Was unsplash-image-z-7yz6-f1zq, a stock shot of a man reading to a
+  // boy. The charity asked for it to be removed from the approved design
+  // on 2026-09-10 and the same swap is made here, so the app and the
+  // stakeholder mockup show the same picture for the same kind of role.
+  // This one is the charity's own asset and shows no identifiable faces.
   in_schools: {
-    base: 'unsplash-image-z-7yz6-f1zq',
-    alt: 'An adult and a child reading a book together on a sofa',
+    base: 'image-asset-1',
+    alt: 'Many hands stacked together in the middle of a circle of people',
   },
   behind_scenes: {
     base: 'unsplash-image-oycl7y4y0bk',

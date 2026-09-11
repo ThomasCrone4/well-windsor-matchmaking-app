@@ -4,8 +4,10 @@ A volunteer marketplace connecting volunteers with local organisations in the
 Royal Borough of Windsor and Maidenhead. Built for Well Windsor, a UK charity
 (reg. 1207021) funding mental-health provision in Windsor schools.
 
-**This is Windsor, UK — not Windsor, Ontario.** Towns in scope: Windsor,
-Maidenhead, Slough.
+**This is Windsor, UK — not Windsor, Ontario.** The product is **Windsor
+only** in the UI (`src/utils/towns.js` is `['Windsor']`), while the `town`
+CHECK still admits Maidenhead and Slough, so a town can be added back with a
+one-line change and no migration.
 
 **Real users, real data.** The production database holds accounts belonging to
 actual people. Treat destructive operations accordingly.
@@ -51,8 +53,10 @@ volunteer's profile row, and adding one is not the answer. Use a view:
 | `public_organisations` | every organisation: id, name, home_town, bio |
 
 All four run with owner rights (`security_invoker = false`) and carry no
-contact columns; the first three gate on `auth.uid()`, and
-`public_organisations` is readable by `anon` too. Supabase's linter flags
+contact columns. `public_volunteers` returns rows only to an **approved
+organisation** (`is_approved_org(auth.uid())`), not to volunteers or pending
+orgs. `public_organisations` lists approved organisations only and is
+readable by `anon` too. Supabase's linter flags
 all of them as "Security Definer View" — that is the design, not a finding.
 
 **Organisations are public entities, and `anon` can already read them on
@@ -88,6 +92,36 @@ there is no constraint to match) and `UNSPECIFIED` (the organisation gave
 no schedule, so there is nothing to compare). Deriving one from the other
 is what shipped "Full availability match" on every flexible role — six of
 the fourteen live opportunities.
+
+**Organisations must be approved before they can act (2026-09-11).**
+`user_profiles.approved_at` NULL means pending: the org may save drafts, but
+RLS refuses `status = 'active'`, `public_volunteers` returns nothing,
+`send-outreach` returns 403, and the public browse hides any role whose org
+is unapproved, so withdrawing approval takes its roles down at once. The
+column is **not client-writable**; the only path is
+`set_organisation_approval()`, which checks `is_admin(auth.uid())`. Admins
+approve from the Organisations tab. The six orgs that existed on 2026-09-11
+were grandfathered as approved.
+
+**Volunteers are 18+ with a required date of birth (2026-09-11).** The
+`user_profiles_min_age` CHECK enforces it and refuses a NULL dob. The old
+CHECK passed on NULL, so clearing your dob switched the check off.
+`src/utils/age.js` mirrors it so forms can say it in words.
+
+**`send-outreach` addresses mail from `auth.users`, never
+`user_profiles.email`.** Recipient and Reply-To both come from
+`auth.admin.getUserById`, and an unconfirmed address is refused. It used to
+read the profile column, which every user could rewrite, making the
+function a way to mail anyone under the charity's name. `user_profiles` now
+grants UPDATE on nine named columns only; `email`, `role` and `approved_at`
+are not among them.
+
+**The schedule lives in two places, and they disagree.** `when_needed`
+(jsonb) is what the forms write for their own editing; the normalised
+`opportunity_timeblocks` is what matching and auto-close read. On the seed
+rows `when_needed` is NULL while a timeblock exists. Read timeblocks when
+you need the truth (the detail page does). `date_needed` is dead: NULL on
+every row, written by nothing.
 
 **Zod `.optional()` does not accept `null`, and `reset()` feeds it the raw
 database row.** `EditOpportunity` resets the form from `select('*')`, so
@@ -137,7 +171,10 @@ don't remove that branch.
 Migrations live in `supabase/migrations/` and are applied via the Supabase
 MCP connector. **Write the migration to a file first, then apply it**, so the
 repo and the remote ledger stay in step — filenames must match the version in
-`supabase_migrations.schema_migrations`.
+`supabase_migrations.schema_migrations`. The connector assigns its own
+timestamp on every apply, so **rename the file after each one**. Checking
+only the first of several is how a mismatch got committed on 2026-09-08. A
+failed apply records nothing and rolls back whole.
 
 Do not hand-maintain schema documentation. It goes stale within a day and
 then actively misleads; query the live database instead.
@@ -241,6 +278,21 @@ will raise `UnicodeEncodeError` before you see any output.
    what is needed. Caught on `opportunity_applicants` by an anon probe
    returning `200 []` where `42501` was expected — reading the migration
    back would never have shown it.
+1c. **Trap 1b applies to functions too, and bites on DROP + CREATE.**
+   `CREATE OR REPLACE` cannot change a return type, so adding a column to a
+   `RETURNS TABLE` means dropping the function, and the recreated one is
+   born with EXECUTE granted to `anon` *by name*. `revoke ... from public`
+   leaves it there. Hit 2026-09-08 on `match_opportunities_by_availability`.
+   Prefer a same-signature `CREATE OR REPLACE`, which keeps the ACL, and
+   re-probe any function you drop.
+1d. **`information_schema.column_privileges` lists every column when a
+   grant is table-wide**, which looks exactly like a column-level grant
+   list. This was misread twice. 20260908202130's comment wrongly says
+   `volunteer_opportunities` has column-level grants. And `authenticated`
+   held table-wide UPDATE on `user_profiles`, so a column-level REVOKE would
+   have done nothing, and a new `approved_at` column would have been
+   self-writable by every org. **Read `pg_class.relacl`.** To take one
+   column away, revoke the table privilege and grant back a named list.
 2. A `DELETE`/`PATCH` matching zero rows returns `HTTP 204` whether it was
    permitted or blocked. That is not proof of denial — probe a real row id
    and look for `42501`.
@@ -338,28 +390,50 @@ real column, and `requires_dbs` shows on the browse.
 
 ### Where to pick up
 
-**Phases 4.2 and 4.5 are both done** (2026-09-04). The build now emits
-**zero** esbuild diagnostics — the `UserManagement.jsx:227` malformed
-ternary was the last one, and it went with the file. Bundle 1,070.83 →
-635.88 kB; eslint 19 errors/7 warnings → 14/3.
+**Phase 3 (design) is done and merged** (PR #4, 2026-09-08). New work
+branches from `main`. eslint baseline is **13 errors, 3 warnings**, all
+pre-existing.
 
-1. **Admin suspend/remove is unbuilt, not merely unwired.** `UserManagement`
-   shipped Ban and Suspend buttons that wrote `user_profiles.is_active` —
-   **a column that has never existed** — and an Impersonate button writing
-   to `impersonation_logs`, a table that has never existed. Deleting the page
-   removed the buttons, not a capability; there was none. Building it for
-   real needs a migration adding `is_active` with an admin-only write policy
-   *plus* a service-role Edge Function to set `auth.users.banned_until`: the
-   browser cannot ban anyone by itself, and an `is_active` flag nothing
-   enforces is the same lie in a new column.
-2. **Phase 3 — design** needs the brand palette from the user before it can
-   start. That is the only real blocker on the list.
-3. Before any deploy: **Phase 5.0**, delete the `5eed…` seed opportunities
-   and the junk accounts. Decided to keep them for now; they are a hard gate
-   on going public, not a task to schedule early.
+**The 2026-09-11 audit** (branch `v0-audit`) probed every table, view and
+function from outside, as anon and as throwaway users. The core access
+model held. Six gaps did not, and all six are fixed and re-proven: profile
+email rewritable (and trusted by `send-outreach`), org contact emails
+readable by anon, dob removable (age check off), volunteers browsing other
+volunteers, cross-user notification counts, and orgs changing role. The
+same branch added org approval, 18+, and a working nightly auto-close
+(`pg_cron` at 00:05 UTC: a role closes the day after its last timeblock
+ends; flexible roles never close on their own). Re-run these after any
+access change: `.scratch/probe_security2.py`, `walk_audit.py`,
+`walk_core_loop.py` (the whole loop through the UI) and `walk_design.py`.
 
-`v0-launch-prep` is **pushed** and level with `origin/v0-launch-prep`, 11
-commits ahead of `main`.
+Before going public, none of which is code:
+1. **Real content.** 13 of the 14 live roles are `5eed…` seed rows credited
+   to real organisations, and the 14th is a test. Phase 5.0 deletes them and
+   leaves an empty browse, so the charity needs real organisations posting.
+2. **Email.** Brevo shows `wellwindsor.org.uk` unauthenticated and the
+   `volunteer@` sender inactive; the only active sender is a personal Gmail.
+   Needs DNS records, then Supabase Auth's SMTP pointed at Brevo, then
+   **email confirmation switched on** (decided 2026-09-11).
+   `send-outreach` already refuses unconfirmed addresses.
+3. **Dashboard toggles** the advisor flags: leaked-password protection
+   (HaveIBeenPwned) and the pending Postgres security patch.
+4. Privacy policy and a data-deletion route; hosting (Cloudflare Pages).
+
+Known, not yet fixed, lower priority:
+- Signed-in users can read organisations' `email` and `contact_number` from
+  `user_profiles` (the orgs-are-public policy plus table-wide SELECT). The
+  match RPC also still returns `contact` to volunteers.
+- Browse cards read `when_needed`, so the seed roles show no schedule tag.
+- ML and Log Hours residue: `pgvector` in `public`, the `embedding_*`
+  columns, `match_results`, `calculate_match_score`,
+  `match_volunteers_for_opportunity`, the `hours_*` functions,
+  `get_public_counts`, `site_settings`.
+- The `enquiry_attachments` bucket is unused and accepts uploads of any
+  size or type from any signed-in user.
+- Admins get no notification when an org signs up; they must check the page.
+- **Admin suspend/remove is unbuilt, not merely unwired.** It needs an
+  enforced `is_active` plus a service-role function setting
+  `auth.users.banned_until`. Org approval is the nearest thing that exists.
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured

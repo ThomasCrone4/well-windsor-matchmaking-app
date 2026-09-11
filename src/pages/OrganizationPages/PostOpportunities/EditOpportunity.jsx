@@ -15,6 +15,9 @@ import useUnsavedChangesWarning from '../../../hooks/useUnsavedWarning';
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
 import { TOWNS } from '../../../utils/towns';
 import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
+import useUserProfile from '../../../hooks/useUserProfile';
+import ApprovalNotice from '../../../components/ApprovalNotice';
+import { isPendingOrganisation } from '../../../utils/approval';
 
 const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
@@ -71,6 +74,8 @@ export default function EditOpportunity() {
   const queryClient = useQueryClient();
   const originalData = useRef(null);
   const [isDraft, setIsDraft] = useState(false);
+  const { profile } = useUserProfile();
+  const pending = isPendingOrganisation(profile);
 
   const {
     register,
@@ -319,6 +324,8 @@ export default function EditOpportunity() {
         <h1 className="title !mb-0">Edit opportunity</h1>
         <div className="spacer" />
       </div>
+      {pending && isDraft && <ApprovalNotice />}
+
       <div className="card relative">
         {isLoading ? (
           <p className="muted">Loading opportunity...</p>
@@ -483,7 +490,8 @@ export default function EditOpportunity() {
               {isDraft && (
                 <button
                   type="button"
-                  disabled={isSubmitting || mutation.isPending}
+                  disabled={pending || isSubmitting || mutation.isPending}
+                  title={pending ? 'Available once Well Windsor approves your organisation' : undefined}
                   onClick={handleSubmit((data) => {
                     const requiredSchema = getSchema(false); // strict validation
                     const result = requiredSchema.safeParse(data);
@@ -501,9 +509,9 @@ export default function EditOpportunity() {
 
                     handleSave(data, 'active');
                   }, onInvalid)}
-                  className="btn btn-success"
+                  className="btn btn-primary"
                 >
-                  Post Opportunity
+                  {pending ? 'Post opportunity — after approval' : 'Post opportunity'}
                 </button>
               )}
 

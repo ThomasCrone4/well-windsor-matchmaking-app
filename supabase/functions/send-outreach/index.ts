@@ -104,32 +104,32 @@ Deno.serve(async (req) => {
   // RLS deliberately hides from the organisation.
   const admin = createClient(supabaseUrl, serviceKey);
 
-  // --- Caller must be an organisation ----------------------------------
+  // --- Caller must be an APPROVED organisation --------------------------
   const { data: org } = await admin
     .from('user_profiles')
-    .select('id, name, role, email')
+    .select('id, name, role, approved_at')
     .eq('id', callerId)
     .single();
 
   if (!org || org.role !== 'organization') {
     return json({ error: 'Only organisations can contact volunteers' }, 403);
   }
-  if (!org.email) {
-    return json({ error: 'Your organisation profile has no email address to reply to' }, 400);
+  // Decided 2026-09-11: an organisation cannot write to anyone until a
+  // Well Windsor admin has approved it. RLS keeps unapproved organisations
+  // out of the volunteer list; this is the same rule at the only other door.
+  if (!org.approved_at) {
+    return json({ error: 'Your organisation is awaiting approval by Well Windsor' }, 403);
   }
 
   // --- Target must be a volunteer --------------------------------------
   const { data: volunteer } = await admin
     .from('user_profiles')
-    .select('id, name, role, email, public_profile')
+    .select('id, name, role, public_profile')
     .eq('id', volunteerId)
     .single();
 
   if (!volunteer || volunteer.role !== 'volunteer') {
     return json({ error: 'Volunteer not found' }, 404);
-  }
-  if (!volunteer.email) {
-    return json({ error: 'That volunteer has no email address on file' }, 400);
   }
 
   // --- May this org contact this volunteer? ----------------------------
@@ -145,6 +145,36 @@ Deno.serve(async (req) => {
   const hasApplied = (applicationCount ?? 0) > 0;
   if (!hasApplied && !volunteer.public_profile) {
     return json({ error: 'This volunteer has not made their profile discoverable' }, 403);
+  }
+
+  // --- Addresses come from the LOGIN account, never the profile ---------
+  // This used to send to user_profiles.email and reply to the org's
+  // user_profiles.email. A signed-in user could rewrite that column on
+  // their own row, so a throwaway volunteer pointed at a stranger's inbox,
+  // plus a throwaway organisation, turned this function into a way to send
+  // anyone anything under the charity's name -- the one thing the header
+  // above says it cannot do. Found by the 2026-09-11 audit. The column is
+  // no longer client-writable either, but the address a message goes to
+  // should not depend on a grant staying correct.
+  //
+  // Resolved only after the permission check above, so an organisation
+  // cannot use the error below to learn anything about a volunteer it
+  // has no right to contact.
+  //
+  // auth.users.email is only proven once email confirmation is on, so an
+  // unconfirmed address is refused outright rather than trusted.
+  const [{ data: volAuth }, { data: orgAuth }] = await Promise.all([
+    admin.auth.admin.getUserById(volunteerId),
+    admin.auth.admin.getUserById(callerId),
+  ]);
+  const volunteerEmail = volAuth?.user?.email_confirmed_at ? volAuth.user.email : null;
+  const orgEmail = orgAuth?.user?.email_confirmed_at ? orgAuth.user.email : null;
+
+  if (!orgEmail) {
+    return json({ error: 'Please confirm your email address before contacting volunteers' }, 403);
+  }
+  if (!volunteerEmail) {
+    return json({ error: 'That volunteer has not confirmed their email address yet' }, 409);
   }
 
   // --- Rate limits ------------------------------------------------------
@@ -217,9 +247,9 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         sender: { name: SENDER_NAME, email: SENDER_EMAIL },
-        to: [{ email: volunteer.email, name: volunteer.name ?? undefined }],
+        to: [{ email: volunteerEmail, name: volunteer.name ?? undefined }],
         // The whole point: their reply goes to the org, not to us.
-        replyTo: { email: org.email, name: org.name ?? undefined },
+        replyTo: { email: orgEmail, name: org.name ?? undefined },
         subject,
         htmlContent,
         textContent,

@@ -100,7 +100,6 @@ export default function HomePage() {
           title,
           description,
           location,
-          contact,
           requires_dbs,
           when_needed,
           generally_needed,
