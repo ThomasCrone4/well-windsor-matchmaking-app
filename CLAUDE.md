@@ -507,25 +507,27 @@ and two Edge Functions.
   pg_cron schedules in UTC and the two disagree for half the year.
   `org_digest_state` is the per-organisation watermark; it moves even on a
   quiet day, so a silent day cannot make tomorrow repeat today.
-- **Mail to real people is HELD until launch, and this is the control that
-  matters.** `email_delivery_is_live()` reads the `email_delivery_mode`
-  Vault secret, which is `test`. In test mode `send-email` refuses any
-  recipient not on `.invalid` and marks the row `held` — kept in full, not
-  sent, not lost. Go live with one statement:
+- **Charity-facing alerts are redirected to a personal inbox until launch.**
+  `charity_notification_recipients()` reads the `charity_notification_email`
+  Vault secret and falls back to `hello@wellwindsor.org.uk` when it is
+  absent. **Delete the secret at launch** and it reverts on its own; APP-3
+  (workflow 4) replaces the whole function with the editable list.
 
-  ```sql
-  select vault.update_secret(
-           (select id from vault.secrets where name = 'email_delivery_mode'),
-           'live');
-  ```
-
-  It exists because **eleven real "a problem was reported" emails reached
+  This exists because **eleven real "a problem was reported" emails reached
   `hello@wellwindsor.org.uk` during workflow 2 testing, and three were
   opened by a person.** `probe_wf1.py` files problem reports, the trigger
-  emails the charity, and the drain was scheduled. The note written an hour
-  earlier said that exact path needed the drain paused first — and the probe
-  was then run several times anyway. **A rule that depends on remembering is
-  not a control.**
+  emails the charity, and the drain was scheduled. A note had been written an
+  hour earlier saying that exact path needed the drain paused first — and
+  the probe was then run several times anyway. **A rule that depends on
+  remembering is not a control; move the address, not the discipline.**
+- **Email really sends, and that is deliberate.** The user tests the app for
+  real, so there is no global hold. `email_delivery_mode` (Vault) is `live`
+  and exists only as a kill switch: set it to `test` and `send-email` holds
+  anything not on `.invalid`, marking the row `held` — kept in full, not
+  sent, not lost. **Claude must not send to a real address unless the user
+  asks.** Volunteer- and organisation-facing mail already goes to `.invalid`
+  throwaways; the charity-facing mail is redirected above; so an ordinary
+  test run reaches nobody real.
 - **A `.invalid` account also raises no alert at all.** `is_test_address()`
   guards both the signup email and the in-app admin notification, so a
   throwaway organisation stays invisible to the charity even in live mode.
