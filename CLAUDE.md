@@ -325,6 +325,16 @@ will raise `UnicodeEncodeError` before you see any output.
    already have an unrelated permitting relationship proves nothing —
    the earlier relationship, not the one under test, explains a pass.
    Use a fresh pair with no history for the negative case.
+6b. **A trigger that notifies "every admin" reaches the real admin, even
+   when every id you touched was a throwaway.** Inserting a
+   `problem_reports` row or signing up a throwaway organisation fans out to
+   `admins`, which contains a real person. Six junk `problem_reported`
+   notifications landed in the live admin's feed during workflow 1 before
+   this was noticed — in-app only, and deleted, but not something the
+   throwaway-id rule prevents on its own. Before testing anything that
+   notifies a *class* of user rather than a named one, check who is in that
+   class, and clean up by `type` and timestamp afterwards rather than by
+   `user_id like '7e57%'`.
 6. **Never use a real user's id as a test target — including for a test
    you expect to be REJECTED.** A negative test is only free if the
    expectation holds. On 2026-09-03 a "this org has no relationship,
@@ -432,16 +442,43 @@ Known, not yet fixed, lower priority:
   `user_profiles` (the orgs-are-public policy plus table-wide SELECT). The
   match RPC also still returns `contact` to volunteers.
 - Browse cards read `when_needed`, so the seed roles show no schedule tag.
-- ML and Log Hours residue: `pgvector` in `public`, the `embedding_*`
-  columns, `match_results`, `calculate_match_score`,
-  `match_volunteers_for_opportunity`, the `hours_*` functions,
-  `get_public_counts`, `site_settings`.
 - The `enquiry_attachments` bucket is unused and accepts uploads of any
   size or type from any signed-in user.
-- Admins get no notification when an org signs up; they must check the page.
-- **Admin suspend/remove is unbuilt, not merely unwired.** It needs an
-  enforced `is_active` plus a service-role function setting
-  `auth.users.banned_until`. Org approval is the nearest thing that exists.
+- **Admin suspend/remove is unbuilt.** Out of scope by decision
+  (BUILD-PLAN) — withdrawing an organisation's approval already takes its
+  roles down, and `user_status` has been deleted rather than left as a flag
+  that means nothing. Do not build `is_active`.
+
+**Workflow 1 is done (2026-09-13, branch `wf1-foundations`).** Four
+migrations, all applied and probed from outside:
+
+- **The ML and Log Hours residue is gone.** `match_results`,
+  `volunteer_hours`, `user_status`, `site_settings`, the `embedding_*`
+  columns, `logged_hours`, the `hours_*`/`calculate_match_score`/
+  `match_volunteers_for_opportunity`/`get_public_counts` functions and
+  `pgvector` are all dropped. The old "residue" list here is obsolete.
+- **`audit_logs` is append-only and records system events.** `admin_id` is
+  now `actor_id` + `actor_kind` (`admin`/`system`/`user`), both foreign
+  keys dropped so an account deletion cannot blank the log, and UPDATE and
+  DELETE are refused *even to the table owner* by trigger. The only writer
+  is `record_audit_event()`; the only editor is
+  `redact_user_from_audit_log()` (ADM-4), which workflow 3 calls. EXECUTE
+  on both is revoked from `public`, `anon` and `authenticated`, so neither
+  is reachable from a browser.
+- **`notifications` has six CHECKed types and the client cannot write one.**
+  No INSERT grant to anyone; UPDATE is granted on `read_at` alone. Four
+  triggers are live: interest registered, outreach sent, role closed, and
+  organisation signed up — so admins **are** now told about a new
+  organisation. `role_removed` has its type but waits for workflow 5's
+  soft-delete column; `problem_reported` is wired.
+- **`problem_reports` is the one table `anon` may INSERT into,** on three
+  columns only. Reads are admin-only. That combination means **a reporter
+  cannot read the row back, so `Prefer: return=representation` fails on the
+  RETURNING even though the INSERT is allowed** — post without `.select()`.
+  This produced four false passes in a probe before it was spotted.
+
+Re-runnable: `.scratch/probe_wf1.py` (47 outside-in cases) and
+`.scratch/walk_wf1.py` (16 UI checks).
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
