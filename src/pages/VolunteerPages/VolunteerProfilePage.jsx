@@ -14,6 +14,8 @@ import FormSkeleton from '../../components/skeletons/FormSkeleton';
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../utils/schedule';
 import { townOptionsFor } from '../../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../../utils/age';
+import DeleteAccountSection from '../../components/DeleteAccountSection';
+import ChangeEmailSection from '../../components/ChangeEmailSection';
 
 const profileSchema = z
   .object({
@@ -47,7 +49,7 @@ const profileSchema = z
 export default function VolunteerProfilePage() {
   const queryClient = useQueryClient();
   const [hydrated, setHydrated] = useState(false);
-  const { userId, profile, loading } = useUserProfile();
+  const { user, userId, profile, loading } = useUserProfile();
 
   const {
     register,
@@ -371,12 +373,55 @@ export default function VolunteerProfilePage() {
             <input type="checkbox" {...register('available_anytime')} className="check" />
             Flexible Availability
           </label>
+        </div>
 
-          {/* Public Profile */}
-          <label className="check-label">
-            <input type="checkbox" {...register('public_profile')} className="check" />
-            Allow organisations to view my profile and contact me
+        {/*
+          CON-6. This was a checkbox sitting beside "Flexible Availability",
+          which is not a control anyone would find when they wanted it. ACC-4
+          only holds — discoverable staying ON by default — because turning it
+          off is easy, so the switch has to be findable, say plainly what it
+          does, and say what stays true when it is off. Every unprompted
+          outreach email points here.
+        */}
+        <div
+          id="discoverable"
+          className="card"
+          style={{ borderColor: publicProfile ? 'var(--color-brand-ink)' : 'var(--color-border)' }}
+        >
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              {...register('public_profile')}
+              className="check mt-1"
+              aria-describedby="discoverable-help"
+            />
+            <span>
+              <span
+                className="block font-semibold"
+                style={{ color: 'var(--color-text-primary)' }}
+              >
+                Let approved organisations find and email me
+              </span>
+              <span
+                id="discoverable-help"
+                className="block text-sm mt-1"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                {publicProfile
+                  ? 'Organisations Well Windsor has approved can see your name, town, skills and bio, and can write to you through us. They never see your email address unless you reply.'
+                  : 'You are not listed. Organisations cannot find you or write to you out of the blue — but one whose role you register for can still reply to you.'}
+              </span>
+            </span>
           </label>
+
+          {/* The errors themselves sit on the bio and skills fields, which is
+              where they get fixed. This switch is below both, so ticking it
+              would otherwise surface a message off-screen. */}
+          {(errors.public_profile_bio || errors.public_profile_skills) && (
+            <p className="error-text mt-2">
+              Add a bio and your skills above before organisations can find you.
+            </p>
+          )}
         </div>
 
         {/* Availability Matrix */}
@@ -409,6 +454,10 @@ export default function VolunteerProfilePage() {
           </button>
         </div>
       </form>
+
+      <ChangeEmailSection currentEmail={user?.email} />
+
+      <DeleteAccountSection />
     </div>
   );
 }

@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
 import FormSkeleton from '../../components/skeletons/FormSkeleton';
 import { townOptionsFor } from '../../utils/towns';
+import DeleteAccountSection from '../../components/DeleteAccountSection';
+import ChangeEmailSection from '../../components/ChangeEmailSection';
 
 const orgSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -198,6 +200,10 @@ export default function OrganisationProfilePage() {
           </button>
         </div>
       </form>
+
+      <ChangeEmailSection currentEmail={user?.email} />
+
+      <DeleteAccountSection />
     </div>
   );
 }

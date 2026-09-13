@@ -213,17 +213,32 @@ Deno.serve(async (req) => {
   const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
   const safeOrgName = escapeHtml(org.name ?? 'An organisation');
 
+  // CON-6. ACC-4 keeps "discoverable" on by default only because turning it
+  // off is easy, and a control nobody can find is not a control. So every
+  // UNPROMPTED message says where the switch is. A message to someone who
+  // registered for this organisation's role is not unprompted — they asked —
+  // and CON-4 is explicit that this is not marketing and carries no
+  // unsubscribe, so the wording points at a setting rather than offering to
+  // opt them out of something they chose.
+  const discoverableNote = hasApplied
+    ? ''
+    : 'You are hearing from them because your profile is set to be found by ' +
+      'approved organisations. You can change that under "Let approved ' +
+      'organisations find and email me" in your Well Windsor profile.';
+
   const htmlContent = `
     <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:600px">
       <p style="margin:0 0 16px"><strong>${safeOrgName}</strong> has got in touch with you through Well Windsor.</p>
       <div style="padding:16px;border-left:3px solid #14b8a6;background:#f9fafb;margin:0 0 20px">${safeMessage}</div>
       <p style="margin:0 0 8px">Reply directly to this email to continue the conversation with them.</p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-      <p style="font-size:13px;color:#6b7280;margin:0">
+      <p style="font-size:13px;color:#6b7280;margin:0 0 8px">
         Sent via Well Windsor, which connects volunteers with local organisations.
         Well Windsor does not vet or DBS-check organisations or volunteers, and is
         not party to any arrangement you make.
+        Registered charity number 1207021.
       </p>
+      ${discoverableNote ? `<p style="font-size:13px;color:#6b7280;margin:0">${escapeHtml(discoverableNote)}</p>` : ''}
     </div>`;
 
   const textContent =
@@ -231,7 +246,9 @@ Deno.serve(async (req) => {
     `${message}\n\n` +
     `Reply directly to this email to continue the conversation with them.\n\n` +
     `---\nSent via Well Windsor. Well Windsor does not vet or DBS-check ` +
-    `organisations or volunteers, and is not party to any arrangement you make.`;
+    `organisations or volunteers, and is not party to any arrangement you make.\n` +
+    `Registered charity number 1207021.` +
+    (discoverableNote ? `\n\n${discoverableNote}` : '');
 
   // --- Send -------------------------------------------------------------
   let providerMessageId: string | null = null;

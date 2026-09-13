@@ -538,6 +538,42 @@ and two Edge Functions.
 
 Re-runnable: `.scratch/probe_wf2.py` (41 outside-in cases).
 
+**Workflow 3 is built (2026-09-13, branch `wf3-accounts`).** Three migrations
+and two Edge Functions.
+
+- **`ProtectedRoute` renders a page, it does not redirect.** A signed-in
+  person in the wrong area used to be sent to `/auth` with a toast, which
+  reads as "you have been logged out" and invites them to sign in again with
+  the account they are already using. `AdminRoute` did the same to `/` and
+  called `toast.error` from its render body, so it re-fired on every render.
+  Not signed in still redirects — that genuinely is what they need.
+- **Deleting an account cascades further than the plan expected.**
+  `org_outreach` is `ON DELETE CASCADE` on *both* its org and volunteer
+  columns, so deleting a volunteer erases the evidence that an organisation
+  was permitted to write to them — the same thing `INT-4` keeps withdrawn
+  registrations for. `prepare_account_deletion()` therefore writes a dated
+  `outreach_preserved_on_deletion` entry per message (org, role, date,
+  status — never text or names) **before** `auth.admin.deleteUser`, then runs
+  the ADM-4 redaction. `audit_logs` has no foreign keys, which is what lets
+  it outlive the account.
+- **`delete-account` takes no user id.** It deletes `auth.uid()` and nothing
+  else, so there is no parameter to point at someone else, and it requires
+  `{"confirm":"DELETE"}` so a stray request cannot delete an account. It
+  refuses an admin, because there is exactly one admin row.
+- **`auth.users.email` and `user_profiles.email` are kept in step** by a
+  trigger. They could drift, and drift is how `send-outreach` became a way to
+  mail anyone under the charity's name.
+- **A `.invalid` problem report now raises neither the email nor the bell.**
+  `problem_report_is_test()` treats a `.invalid` reply address or reporter as
+  a test — a real visitor never types one. This replaces the old note saying
+  "pause the drain first", which was wrong twice and put junk in the live
+  admin's feed both times. **Every probe must give a `.invalid`
+  `contact_email` when filing a report.**
+
+Re-runnable: `.scratch/probe_wf3.py` (30 cases, and it signs up its own
+doomed account so it can be run more than once) and `.scratch/walk_wf3.py`
+(17 UI checks).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception
