@@ -25,9 +25,11 @@ export function NotificationsProvider({ children }) {
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['notifications', userId],
     queryFn: async () => {
+      // Explicit columns, not '*': SELECT is granted column by column, so a
+      // column added later would make '*' fail for everyone at once.
       const { data, error } = await supabase
         .from('notifications')
-        .select('*')
+        .select('id, user_id, type, reference_id, message, read_at, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -102,28 +104,10 @@ export function NotificationsProvider({ children }) {
     },
   });
 
-  // Create notification (helper for components)
-  const createNotification = async (targetUserId, type, message, referenceId = null) => {
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: targetUserId,
-          type,
-          message,
-          reference_id: referenceId,
-        });
-      
-      if (error) throw error;
-      
-      // Invalidate if it's for current user
-      if (targetUserId === userId) {
-        queryClient.invalidateQueries(['notifications', userId]);
-      }
-    } catch (error) {
-      console.error('Failed to create notification:', error);
-    }
-  };
+  // There is deliberately no createNotification here. The database writes
+  // every notification, through SECURITY DEFINER triggers, and the client
+  // holds no INSERT grant on the table at all — not even into its own feed.
+  // The helper that used to live here was never called by anything.
 
   // Real-time subscription for new notifications
   useEffect(() => {
@@ -167,7 +151,6 @@ export function NotificationsProvider({ children }) {
     markAsRead: (id) => markAsReadMutation.mutate(id),
     markAllAsRead: () => markAllAsReadMutation.mutate(),
     deleteNotification: (id) => deleteNotificationMutation.mutate(id),
-    createNotification,
   };
 
   return (
