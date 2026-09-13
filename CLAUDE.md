@@ -507,11 +507,28 @@ and two Edge Functions.
   pg_cron schedules in UTC and the two disagree for half the year.
   `org_digest_state` is the per-organisation watermark; it moves even on a
   quiet day, so a silent day cannot make tomorrow repeat today.
-- **A `.invalid` account never raises a real alert.** `is_test_address()`
-  guards the signup alert, because with the drain live a throwaway
-  organisation would otherwise email `hello@wellwindsor.org.uk` for real.
-  **An anonymous problem report has no identity to test, so testing that
-  path still means unscheduling `drain-email-outbox` first.**
+- **Mail to real people is HELD until launch, and this is the control that
+  matters.** `email_delivery_is_live()` reads the `email_delivery_mode`
+  Vault secret, which is `test`. In test mode `send-email` refuses any
+  recipient not on `.invalid` and marks the row `held` — kept in full, not
+  sent, not lost. Go live with one statement:
+
+  ```sql
+  select vault.update_secret(
+           (select id from vault.secrets where name = 'email_delivery_mode'),
+           'live');
+  ```
+
+  It exists because **eleven real "a problem was reported" emails reached
+  `hello@wellwindsor.org.uk` during workflow 2 testing, and three were
+  opened by a person.** `probe_wf1.py` files problem reports, the trigger
+  emails the charity, and the drain was scheduled. The note written an hour
+  earlier said that exact path needed the drain paused first — and the probe
+  was then run several times anyway. **A rule that depends on remembering is
+  not a control.**
+- **A `.invalid` account also raises no alert at all.** `is_test_address()`
+  guards both the signup email and the in-app admin notification, so a
+  throwaway organisation stays invisible to the charity even in live mode.
 - Sending is still from the development Gmail: the domain is
   unauthenticated, so Brevo rewrites the From to `…@brevosend.com`.
   `BREVO_SENDER_EMAIL` / `EMAIL_REPLY_TO` / `EMAIL_PRIVACY_URL` /

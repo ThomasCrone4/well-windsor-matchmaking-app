@@ -256,10 +256,37 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Could not read the outbox' }), { status: 500 });
   }
 
+  // While the project is in test mode, anything not addressed to a .invalid
+  // throwaway is held rather than sent. Eleven real emails reached the
+  // charity's inbox during workflow 2 testing before this existed.
+  const { data: isLive } = await admin.rpc('email_delivery_is_live');
+  const live = isLive === true;
+
   let sent = 0;
   let failed = 0;
+  let held = 0;
 
   for (const row of (rows ?? []) as Row[]) {
+    if (!live && !/\.invalid$/i.test(row.to_email.trim())) {
+      held++;
+      await admin
+        .from('email_outbox')
+        .update({
+          status: 'held',
+          last_error: 'Held: delivery mode is test and this is not a .invalid address.',
+        })
+        .eq('id', row.id);
+      await admin.rpc('record_audit_event', {
+        p_action_type: 'email_held',
+        p_actor_kind: 'system',
+        p_target_user_id: row.related_user_id,
+        p_target_table: 'email_outbox',
+        p_target_record_id: row.id,
+        p_metadata: { template: row.template },
+      });
+      continue;
+    }
+
     const [htmlContent, textContent] = render(row);
     let providerMessageId: string | null = null;
     let sendError: string | null = null;
@@ -340,7 +367,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  return new Response(JSON.stringify({ ok: true, sent, failed }), {
+  return new Response(JSON.stringify({ ok: true, sent, failed, held, live }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
