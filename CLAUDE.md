@@ -480,6 +480,37 @@ migrations, all applied and probed from outside:
 Re-runnable: `.scratch/probe_wf1.py` (47 outside-in cases) and
 `.scratch/walk_wf1.py` (16 UI checks).
 
+**Workflow 2 is built (2026-09-13, branch `wf2-email`).** Three migrations
+and two Edge Functions.
+
+- **Email goes through an outbox, never straight out of a trigger.** A
+  trigger that called Brevo over HTTP would make approving an organisation
+  fail whenever Brevo was down. Triggers `INSERT` into `email_outbox`;
+  `drain-email-outbox` (pg_cron, every minute) pings the **`send-email`**
+  Edge Function, which sends and writes the result back. A failed send is a
+  row with an error, not a lost email. Five attempts, then `abandoned`.
+- **`send-email` runs with `verify_jwt = false`** — it is reachable by
+  anyone on the internet. Its only door is a secret in Vault, compared
+  inside the database by `verify_email_hook_secret()`. **Do not make the
+  Edge Function read `vault.decrypted_secrets` itself**: PostgREST only
+  exposes configured schemas, `vault` is not one, and it fails closed with
+  a 401 that looks exactly like a wrong secret.
+- **The digest runs hourly and acts only at 08:00 Europe/London**, because
+  pg_cron schedules in UTC and the two disagree for half the year.
+  `org_digest_state` is the per-organisation watermark; it moves even on a
+  quiet day, so a silent day cannot make tomorrow repeat today.
+- **A `.invalid` account never raises a real alert.** `is_test_address()`
+  guards the signup alert, because with the drain live a throwaway
+  organisation would otherwise email `hello@wellwindsor.org.uk` for real.
+  **An anonymous problem report has no identity to test, so testing that
+  path still means unscheduling `drain-email-outbox` first.**
+- Sending is still from the development Gmail: the domain is
+  unauthenticated, so Brevo rewrites the From to `…@brevosend.com`.
+  `BREVO_SENDER_EMAIL` / `EMAIL_REPLY_TO` / `EMAIL_PRIVACY_URL` /
+  `EMAIL_LOGO_URL` are the switches — set secrets, do not edit code.
+
+Re-runnable: `.scratch/probe_wf2.py` (41 outside-in cases).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception
