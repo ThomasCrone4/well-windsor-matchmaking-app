@@ -358,7 +358,15 @@ write test — not just a read probe — before it's considered done.
 
 ## Current state
 
-Working towards a publishable v0. Full plan, including what is being
+**Start at `BUILD-PLAN.md` in this repo.** It is the step-by-step plan for
+v1, written 2026-09-13 from 43 product decisions the user signed off on the
+logic map (https://claude.ai/code/artifact/5ceb5a1e-9810-477d-b37e-8d5cd55bd5b3).
+Eight workflows, each a vertical slice, each finished completely before the
+next one starts. It carries a verified snapshot of the live database and
+repo as of that date — trust it over the older notes below where they
+disagree.
+
+Working towards a publishable v0. Earlier plan, including what was
 deliberately removed:
 
     C:\Users\thoma\.claude\plans\i-m-picking-up-this-glowing-platypus.md
