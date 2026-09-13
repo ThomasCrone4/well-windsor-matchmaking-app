@@ -283,5 +283,32 @@ Deno.serve(async (req) => {
     return json({ error: 'Could not send the message. Please try again shortly.' }, 502);
   }
 
+  // CON-1: who, which role, a copy of the text — and never the volunteer's
+  // address. Queued rather than sent inline: the volunteer's message has
+  // already gone, and a failure to send this receipt must not report the
+  // outreach itself as failed.
+  let roleTitle: string | null = null;
+  if (opportunityId) {
+    const { data: opp } = await admin
+      .from('volunteer_opportunities')
+      .select('title')
+      .eq('id', opportunityId)
+      .maybeSingle();
+    roleTitle = opp?.title ?? null;
+  }
+
+  await admin.rpc('enqueue_email', {
+    p_template: 'outreach_copy',
+    p_to_email: orgEmail,
+    p_subject: `Your message to ${volunteer.name ?? 'a volunteer'} has been sent`,
+    p_to_name: org.name ?? null,
+    p_payload: {
+      volunteer_name: volunteer.name ?? 'a volunteer',
+      role_title: roleTitle,
+      message,
+    },
+    p_related_user_id: callerId,
+  });
+
   return json({ ok: true, message_id: providerMessageId });
 });
