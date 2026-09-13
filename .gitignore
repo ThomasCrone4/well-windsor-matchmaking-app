@@ -43,3 +43,6 @@ pnpm-lock.yaml
 
 # Local scratch/working notes
 .scratch/
+
+# Supabase CLI scratch
+supabase/.temp/
