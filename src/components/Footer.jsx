@@ -5,10 +5,13 @@
 // It sits on the secondary surface now, with a hairline above it, and the
 // links use brand-ink rather than the cyan fill (#15ddef is 1.66:1 on a
 // light ground and could never have carried them).
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import ReportProblemDialog from './ReportProblemDialog';
 
 export default function Footer() {
   const year = new Date().getFullYear();
+  const [reportOpen, setReportOpen] = useState(false);
 
   return (
     <footer
@@ -93,6 +96,16 @@ export default function Footer() {
             >
               hello@wellwindsor.org.uk
             </a>
+            {/* ADM-7. A button, not a Link: the form is open to signed-out
+                visitors, who are the people most likely to be stuck. */}
+            <button
+              type="button"
+              onClick={() => setReportOpen(true)}
+              style={{ color: 'var(--color-brand-ink)' }}
+              className="text-left hover:underline"
+            >
+              Report a problem
+            </button>
           </nav>
         </div>
 
@@ -109,6 +122,8 @@ export default function Footer() {
           </span>
         </div>
       </div>
+
+      <ReportProblemDialog isOpen={reportOpen} onClose={() => setReportOpen(false)} />
     </footer>
   );
 }

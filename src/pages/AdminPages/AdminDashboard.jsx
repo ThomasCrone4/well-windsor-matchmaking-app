@@ -94,6 +94,38 @@ async function toggleTownActive(id, is_active) {
   if (error) throw error;
 }
 
+// created_at is a timestamp, handled_at is a timestamptz, and either can be
+// null on a row that has not been handled — parse defensively rather than
+// handing an Invalid Date to format().
+function fmtDate(value) {
+  if (!value) return 'unknown date';
+  const parsed = parseISO(value);
+  return isValid(parsed) ? format(parsed, 'PPp') : 'unknown date';
+}
+
+// ADM-7. The list is the point: an emailed report with no state cannot be
+// tracked, and two admins cannot see each other's work.
+async function getProblemReports() {
+  const { data, error } = await supabase
+    .from('problem_reports')
+    .select('id,message,contact_email,page_url,status,created_at,handled_at,handled_by,reporter_id')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  // Unhandled first: that is the queue an admin is here to clear.
+  return [...(data ?? [])].sort(
+    (a, b) => Number(a.status === 'handled') - Number(b.status === 'handled')
+  );
+}
+
+// Only `status` is writable. handled_at and handled_by are stamped by a
+// database trigger, so handling cannot be back-dated or pinned on another
+// admin.
+async function setReportStatus(id, status) {
+  const { error } = await supabase.from('problem_reports').update({ status }).eq('id', id);
+  if (error) throw error;
+}
+
 // ===== Page =====
 export default function AdminDashboard() {
   const qc = useQueryClient();
@@ -158,6 +190,21 @@ export default function AdminDashboard() {
     onError: (e) => toast.error(e.message || 'Failed to update town'),
   });
 
+  const { data: reports, isPending: reportsPending } = useQuery({
+    queryKey: ['admin-problem-reports'],
+    queryFn: getProblemReports,
+    staleTime: 60 * 1000,
+  });
+
+  const reportMut = useMutation({
+    mutationFn: ({ id, status }) => setReportStatus(id, status),
+    onSuccess: (_r, { status }) => {
+      toast.success(status === 'handled' ? 'Report marked handled' : 'Report reopened');
+      qc.invalidateQueries({ queryKey: ['admin-problem-reports'] });
+    },
+    onError: (e) => toast.error(e.message || 'Could not update the report'),
+  });
+
   const approvalMut = useMutation({
     mutationFn: ({ id, approved }) => setOrganisationApproval(id, approved),
     onSuccess: (_r, { approved }) => {
@@ -168,6 +215,7 @@ export default function AdminDashboard() {
   });
 
   const pendingOrgCount = (orgs ?? []).filter((o) => !o.approved_at).length;
+  const newReportCount = (reports ?? []).filter((r) => r.status === 'new').length;
 
   // Get org name by ID
   const getOrgName = (orgId) => {
@@ -234,6 +282,9 @@ export default function AdminDashboard() {
         </TabBtn>
         <TabBtn id="towns" count={towns?.filter(t => t.is_active)?.length}>
           Towns
+        </TabBtn>
+        <TabBtn id="reports" count={newReportCount}>
+          Reports
         </TabBtn>
       </div>
 
@@ -648,6 +699,100 @@ export default function AdminDashboard() {
             isAdding={addTownMut.isPending}
             isToggling={toggleTownMut.isPending}
           />
+        </section>
+      )}
+
+      {/* PROBLEM REPORTS (ADM-7) */}
+      {activeTab === 'reports' && (
+        <section className="space-y-4">
+          <div className="card">
+            <h2 className="section-title mb-2">Problem reports</h2>
+            <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              Sent from the &ldquo;Report a problem&rdquo; link in the footer, by
+              visitors as well as signed-in people. Marking one handled records
+              who did it and when, so two admins can see each other&rsquo;s work.
+            </p>
+          </div>
+
+          {reportsPending ? (
+            <div className="card" style={{ color: 'var(--color-text-secondary)' }}>
+              Loading reports…
+            </div>
+          ) : (reports ?? []).length === 0 ? (
+            <div className="card" style={{ color: 'var(--color-text-secondary)' }}>
+              No problem reports. Nothing to clear.
+            </div>
+          ) : (
+            (reports ?? []).map((r) => {
+              const handled = r.status === 'handled';
+              return (
+                <div
+                  key={r.id}
+                  className="card"
+                  style={{ opacity: handled ? 0.65 : 1 }}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="px-2 py-1 text-xs font-medium rounded-full"
+                        style={
+                          handled
+                            ? { backgroundColor: 'var(--color-background-secondary)',
+                                color: 'var(--color-text-secondary)' }
+                            : { backgroundColor: 'var(--color-danger)', color: '#fff' }
+                        }
+                      >
+                        {handled ? 'HANDLED' : 'NEW'}
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                        <Clock className="inline w-3 h-3 mr-1" />
+                        {fmtDate(r.created_at)}
+                      </span>
+                    </div>
+
+                    <button
+                      className={handled ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
+                      disabled={reportMut.isPending}
+                      onClick={() =>
+                        reportMut.mutate({ id: r.id, status: handled ? 'new' : 'handled' })
+                      }
+                    >
+                      {handled ? 'Reopen' : 'Mark handled'}
+                    </button>
+                  </div>
+
+                  <p
+                    className="mt-3 whitespace-pre-wrap text-sm"
+                    style={{ color: 'var(--color-text-primary)' }}
+                  >
+                    {r.message}
+                  </p>
+
+                  <div
+                    className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
+                    <span>
+                      {r.reporter_id ? 'From a signed-in account' : 'From a signed-out visitor'}
+                    </span>
+                    {r.page_url && <span>Page: {r.page_url}</span>}
+                    {r.contact_email ? (
+                      <a
+                        href={`mailto:${r.contact_email}`}
+                        style={{ color: 'var(--color-brand-ink)' }}
+                        className="hover:underline"
+                      >
+                        {r.contact_email}
+                      </a>
+                    ) : (
+                      <span>No reply address given</span>
+                    )}
+                    {handled && r.handled_at && <span>Handled {fmtDate(r.handled_at)}</span>}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </section>
       )}
     </div>
