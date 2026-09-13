@@ -334,7 +334,15 @@ will raise `UnicodeEncodeError` before you see any output.
    throwaway-id rule prevents on its own. Before testing anything that
    notifies a *class* of user rather than a named one, check who is in that
    class, and clean up by `type` and timestamp afterwards rather than by
-   `user_id like '7e57%'`.
+   `user_id like '7e57%'` — the row belongs to the *admin*, so deleting the
+   throwaway that caused it cascades nothing.
+   **Partly closed since:** `is_test_address()` now stops a `.invalid`
+   account raising either the email or the bell alert on organisation
+   signup. It was added to the email path first and the bell was missed,
+   which put two more junk rows in the live admin's feed an hour later —
+   **when two triggers fire on one event, guard both or neither.** An
+   anonymous problem report has no identity to test, so testing that path
+   still means unscheduling `drain-email-outbox` first.
 6. **Never use a real user's id as a test target — including for a test
    you expect to be REJECTED.** A negative test is only free if the
    expectation holds. On 2026-09-03 a "this org has no relationship,
