@@ -570,9 +570,25 @@ and two Edge Functions.
   admin's feed both times. **Every probe must give a `.invalid`
   `contact_email` when filing a report.**
 
-Re-runnable: `.scratch/probe_wf3.py` (30 cases, and it signs up its own
-doomed account so it can be run more than once) and `.scratch/walk_wf3.py`
-(17 UI checks).
+- **ACC-8's self-service flow cannot be tested with throwaways, and is
+  therefore unproven.** Supabase Auth validates deliverability on the
+  user-facing `PUT /auth/v1/user` and rejects any domain with no MX — both
+  `.invalid` and `example.com`. It reports the **current** address as
+  invalid, so an account on `.invalid` can never change its own email at
+  all. `admin.updateUserById` is *not* validated, which is why ADM-8 is
+  proven end to end and ACC-8 is not. Testing ACC-8 needs a real deliverable
+  address. Whether the old address is also notified depends on Supabase's
+  **"Secure email change"** setting, which cannot be read from here.
+
+Re-runnable: `.scratch/probe_wf3.py` (37 cases — it signs up its own doomed
+account so it can be run more than once, and it covers the ADM-8 happy path,
+not only the denials) and `.scratch/walk_wf3.py` (17 UI checks).
+
+**Prove the feature works, not only that it refuses.** Workflow 3's first
+pass tested every way ADM-8 could fail and never once that it succeeds —
+the same shape as `has_application_with()`, which read correctly in every
+comment and had no status filter in its SQL. A suite of denials can be
+entirely green while the feature does nothing at all.
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
