@@ -1,11 +1,12 @@
 // src/pages/AdminPages/AdminDashboard.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 import { toast } from 'react-hot-toast';
 import { format, parseISO, isValid } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { ExternalLink, User, Building, Clock, MapPin, CheckCircle, XCircle } from 'lucide-react';
+import AdminAccessTab from './AdminAccessTab';
 
 // ===== Data fetchers =====
 async function getAllOrganisations() {
@@ -131,6 +132,10 @@ export default function AdminDashboard() {
   const qc = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('opportunities');
+  const [currentUserId, setCurrentUserId] = useState(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id ?? null));
+  }, []);
 
   // Opp filters
   const [oppStatus, setOppStatus] = useState('All');
@@ -285,6 +290,9 @@ export default function AdminDashboard() {
         </TabBtn>
         <TabBtn id="reports" count={newReportCount}>
           Reports
+        </TabBtn>
+        <TabBtn id="access">
+          Access
         </TabBtn>
       </div>
 
@@ -701,6 +709,9 @@ export default function AdminDashboard() {
           />
         </section>
       )}
+
+      {/* RECIPIENT LIST AND ADMIN ACCOUNTS (APP-3, APP-6) */}
+      {activeTab === 'access' && <AdminAccessTab currentUserId={currentUserId} />}
 
       {/* PROBLEM REPORTS (ADM-7) */}
       {activeTab === 'reports' && (

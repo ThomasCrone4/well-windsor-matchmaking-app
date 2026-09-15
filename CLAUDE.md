@@ -590,6 +590,46 @@ the same shape as `has_application_with()`, which read correctly in every
 comment and had no status filter in its SQL. A suite of denials can be
 entirely green while the feature does nothing at all.
 
+**Workflow 4 is built (2026-09-14, branch `wf4-approval`).** Three
+migrations and one new admin tab.
+
+- **`notification_recipients` (APP-3)** is who gets emailed when an
+  organisation is waiting. `hello@wellwindsor.org.uk` is the permanent row
+  and **cannot be deleted, paused, demoted or readdressed by anyone,
+  including the table owner** — it is a trigger, not a policy, because
+  "cannot be removed" has to mean cannot, not cannot-from-the-UI. A partial
+  unique index allows only one permanent row. Every change is logged.
+- **The development redirect still wins over the list.**
+  `charity_notification_email` in Vault short-circuits
+  `charity_notification_recipients()`, because hello@ is now unpausable by
+  design and building the list must not undo the fix for the eleven emails
+  that reached the charity. Delete the secret at launch and it falls
+  through to the table.
+- **APP-6:** `list_admins()`, `grant_admin()` and `revoke_admin()`, all
+  admin-only and logged. `admins` cannot carry an `is_admin()` policy —
+  that function reads `admins`, so a policy there recurses (trap 3) — which
+  is why listing every admin is a SECURITY DEFINER function and the only
+  policy on the table is self-read.
+- **Nobody removes their own admin access.** Found by reading `relacl`:
+  `authenticated` held `arwd` on `admins` and the DELETE policy checked only
+  that the caller *is* an admin, never which row was going — with one admin
+  row, a one-click lockout of the whole charity. Direct INSERT/UPDATE/DELETE
+  are revoked and a `BEFORE DELETE` trigger blocks self-removal even if a
+  future migration hands the privilege back.
+
+> **Never `revoke all on public.admins from anon`.** `volunteer_opportunities`,
+> `user_profiles`, `applications` and `towns` each carry a policy scoped to
+> the **PUBLIC** role whose `USING` is `is_admin(auth.uid())`, and
+> `is_admin()` is not SECURITY DEFINER — so it reads `admins` as the caller.
+> Without the grant, **every anonymous read fails with
+> `42501: permission denied for table admins`** and the logged-out browse
+> returns 401. Done for real in workflow 4 and caught only by re-running
+> `probe_security2`. anon needs the privilege to *run* the function; RLS is
+> what stops it seeing any rows.
+
+Re-runnable: `.scratch/probe_wf4.py` (37 cases, including the APP-6 happy
+path) and `.scratch/walk_wf4.py` (17 UI checks).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception
