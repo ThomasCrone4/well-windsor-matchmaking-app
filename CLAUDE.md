@@ -51,9 +51,18 @@ volunteer's profile row, and adding one is not the answer. Use a view:
 | `opportunity_applicants` | people who applied to *your* opportunities |
 | `org_outreach_sent` | *your* outreach log, with the volunteer's name |
 | `public_organisations` | every organisation: id, name, home_town, bio |
+| `my_registrations` | *your own* registrations, with the role attached |
 
-All four run with owner rights (`security_invoker = false`) and carry no
-contact columns. `public_volunteers` returns rows only to an **approved
+All five run with owner rights (`security_invoker = false`) and carry no
+contact columns.
+
+`my_registrations` exists because a volunteer reads roles through
+`opportunities: public reads active only`, so the moment a role closes or is
+removed the embedded join returns NULL and their dashboard printed the bare
+word "Opportunity". That was true of every **closed** role since the policy
+was written — it only became visible when ROLE-1 gave people a reason to
+look. `applications.opportunity_title` looks like the fix and is NULL on
+every row, written by nothing. `public_volunteers` returns rows only to an **approved
 organisation** (`is_approved_org(auth.uid())`), not to volunteers or pending
 orgs. `public_organisations` lists approved organisations only and is
 readable by `anon` too. Supabase's linter flags
@@ -116,12 +125,47 @@ function a way to mail anyone under the charity's name. `user_profiles` now
 grants UPDATE on nine named columns only; `email`, `role` and `approved_at`
 are not among them.
 
-**The schedule lives in two places, and they disagree.** `when_needed`
-(jsonb) is what the forms write for their own editing; the normalised
-`opportunity_timeblocks` is what matching and auto-close read. On the seed
-rows `when_needed` is NULL while a timeblock exists. Read timeblocks when
-you need the truth (the detail page does). `date_needed` is dead: NULL on
-every row, written by nothing.
+**`opportunity_timeblocks` is the schedule — the whole schedule (2026-09-15).**
+`when_needed`, `date_needed` and `contact` are **dropped columns**; writing
+any of them is a `PGRST204`. Every surface reads timeblocks now: the browse
+cards, the home page, the detail page, the org dashboard, the edit form's
+matrix and `match_opportunities_by_availability`.
+
+Two things bite here:
+
+- **Postgres `time` renders as `HH:MM:SS`,** and `toMinutes()` used to accept
+  only `HH:MM`. So every time parsed as null, `consistent` came out false,
+  and every schedule anywhere read **"Times vary"** instead of the hours. It
+  was invisible while only the detail page read timeblocks. `npm run build`
+  and eslint were both clean on it; the Playwright walk found it.
+- **Both forms rewrite timeblocks by deleting every row and re-inserting, on
+  every save,** whether or not anything changed. A trigger on that table
+  would therefore fire on saves that changed nothing. That is what
+  `schedule_revision` is for: the client compares with `sameSchedule()` and
+  bumps the counter only on a real change, giving the parent row something
+  honest for the ROLE-2 notice to notice.
+
+**A role is removed, never deleted (2026-09-15).** `deleted_at` non-null
+means gone: hidden from the browse policy, the timeblocks policy, the match
+RPC, the nightly auto-close and registration. Its registrations survive —
+that is the point, and `applications.opportunity_id` is `ON DELETE CASCADE`,
+so a hard DELETE would erase them. `DELETE` is therefore revoked from
+`anon` and `authenticated` **and** refused by trigger. Two consequences that
+have already caught scripts out:
+
+- **Any probe or walk that cleaned up with a `DELETE` now fails silently and
+  leaves a throwaway role live on the public browse.** Five of them did.
+  `PATCH {"deleted_at": "now()"}` is the cleanup now.
+- **Removal is terminal** — clearing `deleted_at` is refused, because a
+  volunteer told "this role was removed" must not have that quietly
+  reversed. A fixture role a test removes cannot be reused; create a fresh
+  one per run. ROLE-4 makes *closed* the reversible state, not removed.
+
+The no-hard-delete trigger is scoped to `current_user in ('authenticated',
+'anon')` so that **ACC-6 still cascades** — `volunteer_opportunities.org_id`
+is `ON DELETE CASCADE` on `user_profiles`, and an unconditional raise would
+break account deletion. Proven by running the real `delete-account` function,
+not by reading the trigger.
 
 **Zod `.optional()` does not accept `null`, and `reset()` feeds it the raw
 database row.** `EditOpportunity` resets the form from `select('*')`, so
@@ -447,9 +491,9 @@ Before going public, none of which is code:
 
 Known, not yet fixed, lower priority:
 - Signed-in users can read organisations' `email` and `contact_number` from
-  `user_profiles` (the orgs-are-public policy plus table-wide SELECT). The
-  match RPC also still returns `contact` to volunteers.
-- Browse cards read `when_needed`, so the seed roles show no schedule tag.
+  `user_profiles` (the orgs-are-public policy plus table-wide SELECT).
+  (The match RPC no longer returns `contact` — workflow 5 dropped the column
+  outright, so that half of this is closed.)
 - The `enquiry_attachments` bucket is unused and accepts uploads of any
   size or type from any signed-in user.
 - **Admin suspend/remove is unbuilt.** Out of scope by decision
@@ -477,8 +521,10 @@ migrations, all applied and probed from outside:
   No INSERT grant to anyone; UPDATE is granted on `read_at` alone. Four
   triggers are live: interest registered, outreach sent, role closed, and
   organisation signed up — so admins **are** now told about a new
-  organisation. `role_removed` has its type but waits for workflow 5's
-  soft-delete column; `problem_reported` is wired.
+  organisation. `problem_reported` is wired. (`role_removed` waited for
+  workflow 5's soft-delete column and is now live — `notify_role_closed` was
+  replaced by `notify_role_state_change`, which covers removed, closed and
+  changed.)
 - **`problem_reports` is the one table `anon` may INSERT into,** on three
   columns only. Reads are admin-only. That combination means **a reporter
   cannot read the row back, so `Prefer: return=representation` fails on the
@@ -629,6 +675,53 @@ migrations and one new admin tab.
 
 Re-runnable: `.scratch/probe_wf4.py` (37 cases, including the APP-6 happy
 path) and `.scratch/walk_wf4.py` (17 UI checks).
+
+**Workflow 5 is built (2026-09-15, branch `wf5-roles`).** Eight migrations.
+Items: ROLE-5, ROLE-3, ROLE-2, ROLE-1, ROLE-4, APP-5, BRW-4.
+
+- **One schedule (ROLE-5), no contact column (ROLE-3).** See the convention
+  notes above — including the `HH:MM:SS` bug that had every schedule reading
+  "Times vary", and `schedule_revision`.
+- **Removal is a state, not a deletion (ROLE-1).** See the note above.
+- **Closing or changing tells the registrants (ROLE-2).** One trigger,
+  `notify_role_state_change`, handles all three transitions so their
+  precedence is explicit: removed beats closed beats changed, and an
+  already-removed role says nothing further. A change is noticed on title,
+  description, location, town, flexible-or-not, DBS, and
+  `schedule_revision`.
+- **Reopening happens in the edit form (ROLE-4).** The dashboard's one-click
+  "Mark as Active" is gone: it put a role back on the browse with whatever
+  dates it closed with, usually already past. The form offers it while the
+  organisation is looking at those dates, and only when the dates are ahead.
+- **APP-5 is split on purpose.** Length limits are CHECK constraints
+  (`title` 120, `description` 5000, `location` 200, `skills` 300,
+  `closed_reason` 200, `volunteers_needed` 1-500) because the form is not
+  the only way in; the banned-word list is client-side only, in
+  `src/utils/contentChecks.js`, because a false positive in the database is
+  a 23514 nobody can read. **No SQL-injection or HTML filter** — the user
+  asked, the reasoning against is in the APP-5 thread, and they accepted it.
+- **BRW-4:** the browse searches description, skills and organisation name,
+  not just the title.
+- **The advisor's twelve anon-executable SECURITY DEFINER functions are down
+  to three,** all deliberate: `count_volunteers`, `count_organisations` and
+  `is_approved_org` — the last of which **anon must keep**, because the
+  public browse policy calls it (same shape as the `admins` lesson in
+  workflow 4).
+
+Two regressions this workflow caused and fixed, both worth remembering
+because neither was visible from the code:
+
+- **`org_can_crud_their_posts`'s WITH CHECK is evaluated on the NEW row,** so
+  setting `deleted_at` on an `active` role was refused for any organisation
+  whose approval had been withdrawn. With DELETE revoked, its roles were
+  stuck in the table permanently. Approval now gates publishing only —
+  removal is always permitted.
+- **`set_application_org_id()` and the applications INSERT policy disagreed**
+  about `deleted_at` until they were made to agree. When two things guard one
+  event, guard both or neither.
+
+Re-runnable: `.scratch/probe_wf5.py` (50 cases, self-seeding) and
+`.scratch/walk_wf5.py` (39 UI checks).
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured

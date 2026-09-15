@@ -178,11 +178,19 @@ export function toMinutes(t) {
   if (!t) return null;
   const s = String(t).trim();
 
-  // 24h "H:MM" or "HH:MM"
-  if (/^\d{1,2}:\d{2}$/.test(s)) {
-    const [hStr, mStr] = s.split(':');
-    const h = Number(hStr);
-    const m = Number(mStr);
+  // 24h "H:MM", "HH:MM", or "HH:MM:SS".
+  //
+  // The seconds matter. `opportunity_timeblocks.start_time` is a Postgres
+  // `time`, which PostgREST renders as "10:00:00" -- and that failed this
+  // test, so toMinutes returned null, so `consistent` was false, so every
+  // schedule anywhere read "Times vary" instead of the actual hours. It was
+  // invisible while only the detail page read timeblocks; ROLE-5 points every
+  // surface at them, so it was on every card. Found by the Playwright walk,
+  // with the build and eslint both clean.
+  const m24 = s.match(/^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+  if (m24) {
+    const h = Number(m24[1]);
+    const m = Number(m24[2]);
     if (Number.isNaN(h) || Number.isNaN(m)) return null;
     if (h < 0 || h > 23 || m < 0 || m > 59) return null;
     return h * 60 + m;
@@ -253,7 +261,51 @@ export function formatBlockLabel(block) {
   return `${dayLabel} • ${timeLabel} • ${dateLabel}`;
 }
 
-// For an opportunity-like object: { generally_needed?: boolean, when_needed?: Block[] }
+// -----------------------------------------------------------------------------
+// opportunity_timeblocks is the only schedule there is (ROLE-5)
+// -----------------------------------------------------------------------------
+// The jsonb `when_needed` column is gone. It was written by the two forms for
+// their own editing convenience while opportunity_timeblocks was what matching
+// and auto-close actually read, and the two disagreed: when_needed was NULL on
+// all fourteen live roles while eight of them had real timeblocks. Anything
+// formatting from when_needed therefore reported "Schedule TBC" for roles that
+// had times, which is why the browse cards showed no schedule at all.
+//
+// The table stores days as int[] 0..6 in DAYS order; the formatters here want
+// labels. This is the one place that conversion happens.
+export function blocksFromTimeblockRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((b) => ({
+    ...b,
+    days: (b?.days ?? []).map((i) => (typeof i === 'number' ? DAYS[i] : i)).filter(Boolean),
+  }));
+}
+
+/**
+ * True when two sets of blocks describe the same schedule.
+ *
+ * Both forms rewrite opportunity_timeblocks by deleting every row and
+ * re-inserting on every save, so the table cannot tell a real change from a
+ * re-save. ROLE-2 has to tell registrants when the times change and stay quiet
+ * when they have not, so the comparison happens here and the caller bumps
+ * `schedule_revision` only when this returns false.
+ */
+export function sameSchedule(a, b) {
+  const key = (blocks) =>
+    JSON.stringify(
+      (Array.isArray(blocks) ? blocks : [])
+        .map((x) => [
+          normalizeDayIndices(x?.days).join(','),
+          toMinutes(x?.start_time) ?? '',
+          toMinutes(x?.end_time ?? x?.start_time) ?? '',
+          x?.start_date ? String(x.start_date).slice(0, 10) : '',
+          x?.end_date ? String(x.end_date).slice(0, 10) : '',
+        ].join('|'))
+        .sort()
+    );
+  return key(a) === key(b);
+}
+
+// For an opportunity-like object: { generally_needed?: boolean, timeblocks?: Block[] }
 export function formatOpportunitySchedule(op, {
   anytimeLabel = 'Anytime',
   daysVaryLabel = 'Days vary',
@@ -262,7 +314,7 @@ export function formatOpportunitySchedule(op, {
 } = {}) {
   if (op?.generally_needed) return anytimeLabel;
 
-  const blocks = Array.isArray(op?.when_needed) ? op.when_needed : [];
+  const blocks = Array.isArray(op?.timeblocks) ? op.timeblocks : [];
   if (blocks.length === 0) return tbcLabel;
 
   const { start, end } = deriveDateRangeFromBlocks(blocks);
@@ -289,7 +341,13 @@ export function formatOpportunitySchedule(op, {
 // -----------------------------------------------------------------------------
 export function getStartDateForSort(op) {
   if (op?.generally_needed) return new Date(); // treat as available now
-  const { start } = deriveDateRangeFromBlocks(op?.when_needed);
+  // earliest_start when the match RPC supplied it, otherwise derive it from
+  // the timeblocks the caller attached.
+  if (op?.earliest_start) {
+    const d = toDate(op.earliest_start);
+    if (d) return d;
+  }
+  const { start } = deriveDateRangeFromBlocks(op?.timeblocks);
   return start || new Date(8640000000000000); // far-future sentinel
 }
 

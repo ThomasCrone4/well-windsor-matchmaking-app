@@ -40,8 +40,13 @@ export default function NotificationsDropdown() {
       case 'interest_registered':
         return ref ? `/opportunity/${ref}/applicants` : '/organization-dashboard';
       case 'role_changed':
-      case 'role_removed':
         return ref ? `/opportunities/${ref}` : '/volunteer-dashboard';
+      // ROLE-1. A removed role's detail page is a dead end by design -- the
+      // policy hides it, so this would land on "This role isn't available"
+      // and look like a broken link rather than an explanation. The
+      // volunteer's own page names the role and says who removed it.
+      case 'role_removed':
+        return '/volunteer-dashboard';
       case 'outreach_received':
         return '/volunteer-dashboard';
       case 'org_awaiting_approval':

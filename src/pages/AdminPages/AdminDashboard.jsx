@@ -33,19 +33,24 @@ async function setOrganisationApproval(orgId, approved) {
   if (error) throw error;
 }
 
-async function getAllOpportunities({ status, orgId, showExpired, q, orgs }) {
+async function getAllOpportunities({ status, orgId, showRemoved, q, orgs }) {
   let query = supabase
     .from('volunteer_opportunities')
-    .select('id,title,description,location,requires_dbs,status,org_id,when_needed,date_needed,created_at')
+    .select('id,title,description,location,requires_dbs,status,org_id,deleted_at,created_at')
     .order('created_at', { ascending: false });
 
   if (status && status !== 'All') query = query.eq('status', status.toLowerCase());
   if (orgId && orgId !== 'All') query = query.eq('org_id', orgId);
 
-  if (!showExpired) {
-    const now = new Date().toISOString();
-    query = query.or(`date_needed.is.null,date_needed.gte.${now}`);
-  }
+  // ROLE-1. Removed roles are hidden from everyone else — including the
+  // organisation that removed them — so the admin is the only one who can
+  // still see one, and that is worth being able to do deliberately.
+  //
+  // This replaces a "Show expired" checkbox that filtered on `date_needed`,
+  // a column nothing ever wrote. It was NULL on every row, so the
+  // `date_needed.is.null` arm matched everything and the control did nothing
+  // at all in either position.
+  if (!showRemoved) query = query.is('deleted_at', null);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -141,7 +146,7 @@ export default function AdminDashboard() {
   const [oppStatus, setOppStatus] = useState('All');
   const [oppOrg, setOppOrg] = useState('All');
   const [oppQ, setOppQ] = useState('');
-  const [showExpired, setShowExpired] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
 
   // Volunteer filters
   const [volQ, setVolQ] = useState('');
@@ -158,8 +163,8 @@ export default function AdminDashboard() {
   });
 
   const { data: opportunities, isLoading: oppLoading } = useQuery({
-    queryKey: ['admin-opportunities', oppStatus, oppOrg, showExpired, oppQ],
-    queryFn: () => getAllOpportunities({ status: oppStatus, orgId: oppOrg, showExpired, q: oppQ, orgs }),
+    queryKey: ['admin-opportunities', oppStatus, oppOrg, showRemoved, oppQ],
+    queryFn: () => getAllOpportunities({ status: oppStatus, orgId: oppOrg, showRemoved, q: oppQ, orgs }),
     staleTime: 2 * 60 * 1000,
     enabled: !!orgs, // Wait for orgs to load first
   });
@@ -352,22 +357,22 @@ export default function AdminDashboard() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={showExpired}
-                    onChange={(e) => setShowExpired(e.target.checked)}
+                    checked={showRemoved}
+                    onChange={(e) => setShowRemoved(e.target.checked)}
                     className="w-4 h-4"
                   />
-                  <span className="text-sm">Show expired</span>
+                  <span className="text-sm">Show removed</span>
                 </label>
               </div>
             </div>
 
-            {(oppQ || oppStatus !== 'All' || oppOrg !== 'All' || showExpired) && (
+            {(oppQ || oppStatus !== 'All' || oppOrg !== 'All' || showRemoved) && (
               <button
                 onClick={() => {
                   setOppQ('');
                   setOppStatus('All');
                   setOppOrg('All');
-                  setShowExpired(false);
+                  setShowRemoved(false);
                 }}
                 className="btn-secondary btn-sm mt-4"
               >
@@ -388,10 +393,11 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {opportunities?.map((op) => {
-                  const dateNeeded = op.date_needed && isValid(parseISO(op.date_needed)) 
-                    ? format(parseISO(op.date_needed), 'PPP')
-                    : 'Ongoing';
-                  
+                  // The "date needed" line that stood here read a column
+                  // nothing ever wrote, so it printed "Ongoing" on every row
+                  // in the table. Posted date is a fact; that was not.
+                  const posted = fmtDate(op.created_at);
+
                   return (
                     <div key={op.id} className="border rounded-lg p-4 hover:opacity-90 transition" style={{ borderColor: 'var(--color-border)' }}>
                       <div className="flex items-start justify-between gap-4">
@@ -412,8 +418,14 @@ export default function AdminDashboard() {
                             </div>
                             <div className="flex items-center gap-2">
                               <Clock size={14} />
-                              <span>{dateNeeded}</span>
+                              <span>Posted {posted}</span>
                             </div>
+                            {op.deleted_at && (
+                              <div className="flex items-center gap-2" style={{ color: 'var(--color-danger)' }}>
+                                <XCircle size={14} />
+                                <span>Removed {fmtDate(op.deleted_at)}</span>
+                              </div>
+                            )}
                             {op.requires_dbs && (
                               <div className="flex items-center gap-2 text-red-600">
                                 <CheckCircle size={14} />

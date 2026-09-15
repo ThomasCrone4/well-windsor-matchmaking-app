@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { isThisWeek, isThisMonth } from 'date-fns';
-import { formatOpportunitySchedule } from '../utils/schedule';
+import { formatOpportunitySchedule, blocksFromTimeblockRows } from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
 import OpportunityPhoto from '../components/OpportunityPhoto';
 
@@ -131,8 +131,8 @@ export default function OpportunitiesPage() {
               description,
               location,
               town,
+              skills,
               requires_dbs,
-              when_needed,
               generally_needed,
               volunteers_needed,
               status,
@@ -157,8 +157,8 @@ export default function OpportunitiesPage() {
           description,
           location,
           town,
+          skills,
           requires_dbs,
-          when_needed,
           generally_needed,
           volunteers_needed,
           status,
@@ -202,6 +202,42 @@ export default function OpportunitiesPage() {
     return map;
   }, [orgRows]);
 
+  // ROLE-5. The schedule lives in opportunity_timeblocks and nowhere else now.
+  // This list used to read the `when_needed` jsonb, which was NULL on every
+  // live role while eight of them had real times — so the cards showed no
+  // schedule at all and the "This Week"/"This Month" filter had nothing to
+  // work with on the logged-out path. One query for the visible ids covers
+  // both paths: anon holds SELECT here and `public_read_active_blocks` gates
+  // it on the parent being active and not removed.
+  const oppIds = useMemo(
+    () => (opps ?? []).map((o) => o.id).filter(Boolean),
+    [opps]
+  );
+
+  const { data: blockRows } = useQuery({
+    queryKey: ['browse_timeblocks', oppIds],
+    enabled: oppIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('opportunity_timeblocks')
+        .select('opportunity_id, days, start_time, end_time, start_date, end_date')
+        .in('opportunity_id', oppIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const blocksByOpp = useMemo(() => {
+    const map = new Map();
+    for (const row of blocksFromTimeblockRows(blockRows ?? [])) {
+      const list = map.get(row.opportunity_id) ?? [];
+      list.push(row);
+      map.set(row.opportunity_id, list);
+    }
+    return map;
+  }, [blockRows]);
+
   const handleApply = async (opportunityId) => {
     const { data: sessionData } = await supabase.auth.getSession();
     const user = sessionData?.session?.user;
@@ -239,14 +275,16 @@ export default function OpportunitiesPage() {
     navigate(`/opportunities/${opportunityId}/enquire`);
   };
 
-  // Earliest start for filtering:
+  // Earliest start for filtering. The match RPC hands volunteers an
+  // earliest_start computed in the database; the logged-out path derives the
+  // same thing from the timeblocks fetched above.
   const getEarliestStart = (op) => {
     if (op?.earliest_start) {
       const d = new Date(op.earliest_start);
       return isNaN(d.valueOf()) ? null : d;
     }
-    if (!op?.when_needed || !Array.isArray(op.when_needed)) return null;
-    const validDates = op.when_needed
+    const blocks = blocksByOpp.get(op?.id) ?? [];
+    const validDates = blocks
       .map((b) => (b?.start_date ? new Date(b.start_date) : null))
       .filter((d) => d instanceof Date && !isNaN(d.valueOf()));
     if (validDates.length === 0) return null;
@@ -271,7 +309,21 @@ export default function OpportunitiesPage() {
       // what its label has always promised.
       const matched = !matchedOnly || MATCHING_KINDS.has(op.match_kind);
 
-      const matchesSearch = (op.title || '').toLowerCase().includes(searchTerm.toLowerCase());
+      // BRW-4. Title alone missed the obvious searches: someone looking for
+      // "reading" or "first aid" found nothing unless an organisation had put
+      // the word in the title, and searching for a school by name found
+      // nothing at all. Description, skills and the organisation's name are
+      // all on the card already — this searches what the reader can see.
+      const haystack = [
+        op.title,
+        op.description,
+        op.skills,
+        op.org_name ?? orgNameById.get(op.org_id),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      const matchesSearch = haystack.includes(searchTerm.trim().toLowerCase());
 
       return matchesTown && matchesStart && matched && matchesSearch;
     });
@@ -356,7 +408,7 @@ export default function OpportunitiesPage() {
             <input
               id="search"
               type="text"
-              placeholder="Search by title…"
+              placeholder="Search roles, skills or organisations…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="input"
@@ -423,6 +475,7 @@ export default function OpportunitiesPage() {
           {finalList.map((op) => {
             const alreadyEnquired = !!userProfile?.id && appliedSet.has(op.id);
             const orgName = (op.org_name ?? orgNameById.get(op.org_id)) || 'Organisation';
+            const blocks = blocksByOpp.get(op.id) ?? [];
 
             // Availability badge, volunteers only -- it is a statement about
             // *your* schedule, so it means nothing to a logged-out visitor.
@@ -480,16 +533,19 @@ export default function OpportunitiesPage() {
                       facts, read faster. */}
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
                     {op.requires_dbs && <span className="tag">DBS check</span>}
-                    {/* No schedule tag when when_needed is empty. The row
-                        may still HAVE times -- they live in
-                        opportunity_timeblocks, which this list does not
-                        read -- so printing "Schedule TBC" here would be a
-                        claim the detail page then contradicts. Saying
-                        nothing is the honest option at this size. */}
+                    {/* ROLE-5. This now reads the same rows the matcher and
+                        the detail page read, so the tag can no longer
+                        contradict them. It used to read `when_needed`, which
+                        was NULL on every live role — the reason no card has
+                        ever shown a schedule. Still silent rather than
+                        "Schedule TBC" when a non-flexible role genuinely has
+                        no times: saying nothing is honest, guessing is not. */}
                     {op.generally_needed ? (
                       <span className="tag-plain">Flexible timing</span>
-                    ) : Array.isArray(op.when_needed) && op.when_needed.length > 0 ? (
-                      <span className="tag-plain">{formatOpportunitySchedule(op)}</span>
+                    ) : blocks.length > 0 ? (
+                      <span className="tag-plain">
+                        {formatOpportunitySchedule({ ...op, timeblocks: blocks })}
+                      </span>
                     ) : null}
                     {/* location is meant to be the venue -- "St Edward's,
                         Parsonage Lane". On every row today it just repeats

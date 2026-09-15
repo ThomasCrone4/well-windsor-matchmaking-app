@@ -49,18 +49,17 @@ export default function VolunteerDashboard() {
     queryKey: ['my_applications', userId],
     enabled: !!userId,
     queryFn: async () => {
+      // my_registrations, not applications joined to volunteer_opportunities.
+      // A volunteer reads roles through `opportunities: public reads active
+      // only`, so the embedded join returned NULL for anything closed or
+      // removed and this list printed the bare word "Opportunity". The view
+      // runs with owner rights, is scoped to auth.uid(), and carries no
+      // contact column — see the migration for why a view rather than a
+      // policy.
       const { data, error } = await supabase
-        .from('applications')
-        .select(`
-          id,
-          created_at,
-          subject,
-          message,
-          org:org_id ( name ),
-          volunteer_opportunities ( title, location, date_needed )
-        `)
-        .eq('volunteer_id', userId)
-        .order('created_at', { ascending: false });
+        .from('my_registrations')
+        .select('*')
+        .order('registered_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -144,17 +143,34 @@ export default function VolunteerDashboard() {
       ) : (
         <ul className="stack-lg">
           {applications.map((application) => (
-            <li key={application.id} className="card stack">
+            <li key={application.application_id} className="card stack">
               <h3 className="card-title">
-                {application.volunteer_opportunities?.title || 'Opportunity'}
+                {application.opportunity_title || 'Opportunity'}
               </h3>
               <p className="caption">
-                {application.org?.name || 'Organisation'} ·{' '}
-                {application.volunteer_opportunities?.location || 'Location not given'}
+                {application.org_name || 'Organisation'} ·{' '}
+                {application.opportunity_location || 'Location not given'}
               </p>
               <p className="caption">
-                Registered {format(new Date(application.created_at), 'PPP')}
+                Registered {format(new Date(application.registered_at), 'PPP')}
               </p>
+
+              {/* ROLE-1 and ROLE-2. The organisation is never asked to
+                  explain itself and the volunteer is never left guessing why
+                  a role vanished. Removed wins over closed: a removed role is
+                  not coming back, and saying "closed" would invite them to
+                  watch for it. */}
+              {application.opportunity_removed ? (
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                  This role was removed by the organisation. Your registration
+                  stays on your record, but there is nothing to hear back about.
+                </p>
+              ) : application.opportunity_status === 'closed' ? (
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                  This role has closed. If they had already been in touch, that
+                  conversation carries on by email.
+                </p>
+              ) : null}
 
               {application.subject?.trim() && (
                 <p className="highlight">{application.subject}</p>
@@ -217,7 +233,7 @@ export default function VolunteerDashboard() {
       <ConfirmDialog
         isOpen={!!withdrawing}
         onClose={() => setWithdrawing(null)}
-        onConfirm={() => withdraw.mutate(withdrawing.id)}
+        onConfirm={() => withdraw.mutate(withdrawing.application_id)}
         title="Withdraw your interest?"
         confirmText="Withdraw"
         confirmStyle="danger"
@@ -227,7 +243,7 @@ export default function VolunteerDashboard() {
               This takes you off the organisation&rsquo;s list of people
               interested in{' '}
               <strong>
-                {withdrawing?.volunteer_opportunities?.title || 'this opportunity'}
+                {withdrawing?.opportunity_title || 'this opportunity'}
               </strong>
               .
             </p>
