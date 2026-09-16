@@ -4,9 +4,11 @@ A volunteer marketplace for the Royal Borough of Windsor and Maidenhead,
 built for [Well Windsor](https://www.wellwindsor.org.uk) (registered charity
 1207021).
 
-Volunteers browse local opportunities and apply; organisations post what they
-need and respond. When an organisation accepts, both sides get each other's
-contact details and arrange the rest directly.
+Volunteers browse local roles and register interest; organisations post what
+they need and write to the people they want through the site. There is no
+accept or decline: a volunteer's email address is never shown to an
+organisation, a reply to the organisation's message goes straight to it, and
+the conversation carries on by email. Silence means no.
 
 **The platform does not vet or DBS-check volunteers.** Organisations are
 responsible for their own safeguarding checks.

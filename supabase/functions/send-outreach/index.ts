@@ -16,10 +16,12 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const BREVO_ENDPOINT = 'https://api.brevo.com/v3/smtp/email';
 
-// Verified sender in Brevo. Currently a personal address for development;
-// swap to notifications@wellwindsor.org.uk once the domain is
-// authenticated, by setting these secrets rather than editing code.
-const SENDER_EMAIL = Deno.env.get('BREVO_SENDER_EMAIL') ?? 'thomascrone2000@gmail.com';
+// Verified sender in Brevo, set by secret rather than by editing code.
+// No default, on purpose. It used to fall back to a personal Gmail address
+// hardcoded here, which published that address in a public repository. Set
+// the BREVO_SENDER_EMAIL Edge Function secret in Supabase (Dashboard -> Edge
+// Functions -> Secrets); until it is set, this function refuses to send.
+const SENDER_EMAIL = Deno.env.get('BREVO_SENDER_EMAIL') ?? '';
 const SENDER_NAME = Deno.env.get('BREVO_SENDER_NAME') ?? 'Well Windsor';
 
 // Rate limits. Deliberately strict: this sends under the charity's domain.
@@ -61,8 +63,8 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   const brevoKey = Deno.env.get('BREVO_KEY');
-  if (!brevoKey) {
-    console.error('BREVO_KEY is not set');
+  if (!brevoKey || !SENDER_EMAIL) {
+    console.error(!brevoKey ? 'BREVO_KEY is not set' : 'BREVO_SENDER_EMAIL is not set');
     return json({ error: 'Email is not configured' }, 500);
   }
 

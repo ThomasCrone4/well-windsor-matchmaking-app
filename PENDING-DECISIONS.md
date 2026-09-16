@@ -156,6 +156,13 @@ Still open on the logic map. Blocks nothing — approval works without it.
 
 Not decisions, but nothing in code can do them. Listed so they are not lost.
 
+- **`BREVO_SENDER_EMAIL`** Edge Function secret — set it in **Supabase**
+  (Dashboard → Edge Functions → Secrets), not Cloudflare or `.env.local`,
+  neither of which reaches an Edge Function. **Do this before `send-email` or
+  `send-outreach` is next deployed:** as of 2026-09-16 the code in the repo no
+  longer falls back to a hardcoded personal Gmail, and refuses to send without
+  the secret. (The deployed versions still have the fallback, so email works
+  today either way. Queued emails are kept, not lost, if it is missing.)
 - **`APP_URL`** Edge Function secret → the Cloudflare Pages origin. Without it,
   outreach emails name an attached role but do not link to it.
 - **DNS records** for wellwindsor.org.uk (charity). Blocks the switch to

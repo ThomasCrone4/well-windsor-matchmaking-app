@@ -1,0 +1,19 @@
+# Edge Function settings that exist only in the live project unless they are
+# written down here. Without this file, `supabase functions deploy send-email`
+# would deploy it with verify_jwt = true, and every email would silently stop:
+# the database's drain job calls it with a shared secret, not a user's JWT.
+#
+# Matches the live project as listed on 2026-09-16.
+project_id = "ludyyfwzqjvgakrkvixo"
+
+[functions.send-email]
+verify_jwt = false   # its door is verify_email_hook_secret(), checked inside the database
+
+[functions.send-outreach]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.admin-change-email]
+verify_jwt = true

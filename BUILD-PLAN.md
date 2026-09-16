@@ -28,6 +28,13 @@ Function if needed → UI → walk the flow → commit → PR → merge.
 
 ### Branching
 
+> **Superseded (2026-09-16).** In practice the workflows were built as a
+> chain — each branch off the previous one, `wf1-foundations` through
+> `wf8-launch` — and **the user handles all GitHub operations**: Claude
+> commits locally and never pushes, merges or opens a PR. `main` is watched by
+> Cloudflare Pages, so merging to it deploys. The instructions below are the
+> original plan, kept for the record.
+
 One branch per workflow, off `main`, merged by PR. `main` stays deployable.
 
     git checkout main && git pull
