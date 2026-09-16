@@ -896,7 +896,30 @@ still need an explicit yes).
 - Items 3–5 (dashboard toggles, hosting, email confirmation) are the user's;
   see `PENDING-DECISIONS.md`.
 
+- **Dependencies: `npm audit fix` (2026-09-16), lockfile only.** 0 vulnerabilities
+  after. `@supabase/supabase-js` jumped 2.49.9 → 2.116.0 and `react-router-dom`
+  7.13 → 7.18. All ten walks passed on the new versions.
+- **No walk had ever driven `supabase.functions.invoke`** — the probes call
+  Edge Functions over raw HTTP, bypassing supabase-js. `.scratch/walk_invoke.py`
+  now covers both browser callers (send outreach, delete account), including
+  the refusal path `outreach.js` reads out of `error.context`. When an account
+  is deleted, a 403 from `/auth/v1/logout` and a few 401s are expected and
+  harmless: supabase-js calls logout for any sign-out scope, ignores the
+  error, and clears the session (the walk proves it).
+- **Trap: "same lint findings" checks were vacuous until 2026-09-16.**
+  `eslint -f unix` is no longer bundled; it printed an error, both sides of the
+  diff were empty, and "identical" passed on nothing. The 13/3 *totals* were
+  real throughout; identity of the findings was not proven until
+  `.scratch/lint_list.cjs` (built-in `-f json`, refuses an empty list) showed
+  the same 16 findings at WF6 and after WF8. **A comparison of two empty files
+  is not a comparison — check the count on each side.**
+- **Stop a background dev server by its process tree, not the shell task.**
+  Killing the task left `vite` and `esbuild.exe` running, which locked
+  `node_modules` and made `npm ci` fail with EPERM, then ENOTEMPTY (OneDrive).
+  Find the PID listening on the port and `taskkill //PID <pid> //T //F`.
+
 Re-runnable: `.scratch/probe_wf8_final.py` (100), `.scratch/walk_wf8.py` (21),
+`.scratch/walk_invoke.py` (6, sends one email to a `.invalid` address),
 and `.scratch/probe_wf8_outbox.py` (signs up and approves a throwaway org;
 `--delete` deletes it; verify the outbox with SQL — it has no client grants).
 
