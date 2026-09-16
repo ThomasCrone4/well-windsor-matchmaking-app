@@ -145,6 +145,37 @@ Two things bite here:
   bumps the counter only on a real change, giving the parent row something
   honest for the ROLE-2 notice to notice.
 
+**A registration is withdrawn, never deleted (2026-09-16).** `applications`
+has no `subject` column (INT-2 — registering is a button plus one optional
+note) and gained `withdrawn_at` (INT-4). Withdrawn means invisible to the
+organisation, which is **never told** — enforced on the base table's SELECT
+policy, not only in `opportunity_applicants`, because the dashboard's
+"N people interested" count reads the table directly.
+
+Four things hold it together, and each closes a hole the others leave:
+
+- **The organisation cannot un-withdraw it.** RLS evaluates UPDATE's `USING`
+  against the *existing* row, so a dismiss policy without `withdrawn_at is
+  null` would let an org update a row it is not allowed to read.
+- **Only `withdraw_registration()` sets it.** A column grant would reach the
+  organisation too, via its dismiss policy — letting an org hide a
+  registration from itself in a way that looks exactly like the volunteer
+  withdrawing.
+- **DELETE is revoked and refused by trigger,** scoped to the browser roles
+  so ACC-6's cascade still works.
+- **The unique constraint is partial** (`where withdrawn_at is null`). It
+  used to be a plain `UNIQUE (volunteer_id, opportunity_id)`, which a kept
+  withdrawn row would have turned into a permanent lock-out — while the
+  withdraw dialog promises "you can register again later".
+
+> **A withdrawn registration is not permission to email (trap 4b).**
+> `send-outreach` unlocks contact if the volunteer "applied to one of your
+> roles", and INT-4 keeps those rows for ever. That count therefore filters
+> `withdrawn_at is null`. Without it, withdrawing would remove someone from
+> the organisation's list while leaving them emailable — the exact opposite
+> of what INT-4 is for. Whenever `applications` changes, re-read that count
+> with the change in mind.
+
 **A role is removed, never deleted (2026-09-15).** `deleted_at` non-null
 means gone: hidden from the browse policy, the timeblocks policy, the match
 RPC, the nightly auto-close and registration. Its registrations survive —
@@ -723,6 +754,53 @@ because neither was visible from the code:
 Re-runnable: `.scratch/probe_wf5.py` (50 cases, self-seeding) and
 `.scratch/walk_wf5.py` (39 UI checks).
 
+**Workflow 6 is built (2026-09-16, branch `wf6-interest`).** One migration
+and a redeploy of `send-outreach`. Items: INT-2, INT-3, INT-4, CON-5, CON-4,
+CON-2.
+
+- **INT-2 and INT-4** — see the note above. The one live registration had a
+  real person's subject *and* message, so the migration folded the subject
+  into the front of the note rather than dropping a third of what they
+  wrote.
+- **CON-5: outreach may name one of the organisation's OWN LIVE roles.**
+  Validated in `send-outreach`, not trusted from the client: another
+  organisation's role, a draft, a removed role and a non-existent id are all
+  refused. The picker only appears on a *cold* approach — from the
+  applicants page the role is already fixed. The email names the role and
+  links to it **only when `APP_URL` is set**; unset, the title still appears
+  without a link, because a link to a guessed host is worse than no link.
+  **`APP_URL` is not yet set** — set it to the Cloudflare Pages origin.
+- **CON-4 needed no code:** there is no unsubscribe link on an
+  organisation's message and that is the decision. What carries the weight
+  is the CON-6 pointer, which appears only on *unprompted* mail — and now
+  correctly appears for a volunteer who withdrew, because `hasApplied`
+  excludes withdrawn rows.
+- **CON-2 was already built** in workflow 1 (`notify_outreach_received`).
+  Verified rather than rebuilt: the volunteer gets the bell notification and
+  the organisation does not get one for its own message.
+- **INT-3 was settled by ROLE-1** and is verified here: a registration
+  survives its role being removed, and the volunteer is still told which
+  role it was, by name, via `my_registrations`.
+
+`opportunity_title` on `applications` is redundant now that
+`my_registrations` joins the title — but unlike `date_needed` it *is*
+written on every insert and two functions read it as a fallback, so it was
+deliberately left alone rather than swept up.
+
+> **Re-seed the throwaways at the start of a session: `.scratch/seed_throwaways.sql`.**
+> Deleting them at the end of a session is right, but it leaves every
+> earlier workflow's probe unable to log in, which looks exactly like the
+> probe being broken. `probe_wf3` and `probe_wf6` sign up their own
+> volunteers instead — **`probe_wf6` has to**, because `send-outreach`
+> enforces a 24-hour cooldown per (organisation, volunteer) pair, so a fixed
+> pair makes every positive send test fail with a 429 on the second run of
+> the day. `walk_wf6` has its own volunteer C for the same reason: the
+> probe's sends make the compose form render its cooldown notice, and the
+> CON-5 picker is then not on screen to find.
+
+Re-runnable: `.scratch/probe_wf6.py` (39 cases, self-seeding) and
+`.scratch/walk_wf6.py` (25 UI checks).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception
@@ -740,3 +818,9 @@ invisible to the volunteer, because silence means no. Everything after the
 introduction happens over the two parties' own email; we are not a mailbox.
 The UI must keep saying so plainly: "you may not hear back from every
 application."
+
+Since workflow 2 the organisation *is* told about new registrations, by the
+8am digest and the bell — but still never by an email per registration, and
+there is still nothing to accept or decline. And since workflow 6 the
+silence runs both ways: withdrawing is invisible to the organisation, which
+is never told, so neither side has to explain itself.

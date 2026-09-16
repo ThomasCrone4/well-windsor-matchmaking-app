@@ -41,7 +41,7 @@ export default function EnquireOpportunitiesPage() {
     },
   });
 
-  const apply = async ({ subject, message }) => {
+  const apply = async ({ message }) => {
     setSubmitting(true);
 
     const { data: sessionData } = await supabase.auth.getSession();
@@ -52,12 +52,15 @@ export default function EnquireOpportunitiesPage() {
       return;
     }
 
+    // INT-2: one optional note, no subject line. `subject` is a dropped
+    // column now, so sending it would be a PGRST204.
+    const note = (message ?? '').trim();
+
     const { error: insertError } = await supabase.from('applications').insert([
       {
         opportunity_id: opportunityId,
         volunteer_id: user.id,
-        subject: subject.trim(),
-        message: message.trim(),
+        message: note || null,
         opportunity_title: opportunity?.title ?? null,
       },
     ]);
@@ -123,43 +126,32 @@ export default function EnquireOpportunitiesPage() {
         </p>
       </div>
 
+      {/* INT-2. This asked for a subject AND a message, both required —
+          a lot of ceremony for "I'd like to help", and two chances to
+          stall. It is now a button plus one optional note. */}
       <form onSubmit={handleSubmit((values) => setConfirming(values))} className="card form">
         <div className="form-row">
-          <label htmlFor="application-subject" className="label required">
-            Subject
-          </label>
-          <input
-            id="application-subject"
-            type="text"
-            {...register('subject', {
-              required: 'A subject is required',
-              maxLength: { value: 200, message: 'Keep the subject under 200 characters' },
-            })}
-            placeholder="Interested in helping with…"
-            className={`input ${errors.subject ? 'input-invalid' : ''}`}
-            aria-invalid={!!errors.subject}
-          />
-          {errors.subject && <p className="error-text">{errors.subject.message}</p>}
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="application-message" className="label required">
-            Message
+          <label htmlFor="application-message" className="label">
+            Anything you&rsquo;d like to add? <span className="help-text">(optional)</span>
           </label>
           <textarea
             id="application-message"
             {...register('message', {
-              required: 'A message is required',
               maxLength: {
                 value: MESSAGE_MAX,
-                message: `Keep your message under ${MESSAGE_MAX} characters`,
+                message: `Keep your note under ${MESSAGE_MAX} characters`,
               },
             })}
-            placeholder="Tell them a little about yourself and why this role appeals to you."
+            placeholder="If you like, say a little about yourself or why this role appeals to you."
             className={`input textarea textarea-lg ${errors.message ? 'textarea-invalid' : ''}`}
             aria-invalid={!!errors.message}
           />
-          {errors.message && <p className="error-text">{errors.message.message}</p>}
+          {errors.message
+            ? <p className="error-text">{errors.message.message}</p>
+            : <p className="help-text">
+                They will see your profile either way, so this is only if there is
+                something it does not already say.
+              </p>}
         </div>
 
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
@@ -177,8 +169,8 @@ export default function EnquireOpportunitiesPage() {
         message={
           <>
             <p>
-              <strong>{opportunity.title || 'This organisation'}</strong> will be able to see
-              your name, your profile and this message.
+              They will be able to see your name, your profile and
+              {confirming?.message?.trim() ? ' your note' : ' nothing else'}.
             </p>
             <p className="mt-2">
               They will not see your email address, phone number or date of birth unless you

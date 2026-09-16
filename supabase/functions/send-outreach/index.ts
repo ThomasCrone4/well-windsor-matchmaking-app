@@ -136,15 +136,46 @@ Deno.serve(async (req) => {
   // Either the volunteer applied to one of the org's opportunities, or
   // they have opted into being discoverable. Without this check, any org
   // could email any volunteer.
+  //
+  // INT-4 and trap 4b. `withdrawn_at is null` is the load-bearing part.
+  // A withdrawn registration is kept for ever so the audit log can explain
+  // a message that was already sent — but it is not standing permission to
+  // send another one. Counting every row would mean a volunteer could
+  // withdraw, vanish from the organisation's list, and still be emailed by
+  // them; the whole point of INT-4 is that withdrawing undoes the asking.
+  //
+  // Trap 4b is the reason this is worth spelling out: every outreach
+  // permission rests on this table being honest, so whenever `applications`
+  // changes, this count has to be re-read with the change in mind.
   const { count: applicationCount } = await admin
     .from('applications')
     .select('id', { count: 'exact', head: true })
     .eq('org_id', callerId)
-    .eq('volunteer_id', volunteerId);
+    .eq('volunteer_id', volunteerId)
+    .is('withdrawn_at', null);
 
   const hasApplied = (applicationCount ?? 0) > 0;
   if (!hasApplied && !volunteer.public_profile) {
     return json({ error: 'This volunteer has not made their profile discoverable' }, 403);
+  }
+
+  // --- CON-5: an attached role must be one of the org's OWN live roles ---
+  // Checked here rather than trusted from the client. Without it the picker
+  // is a way to put any id on the site behind a link in an email sent under
+  // the charity's name — another organisation's draft, or a removed role —
+  // and a link in an email is trusted far more than a link on a page.
+  let role: { id: string; title: string } | null = null;
+  if (opportunityId) {
+    const { data: opp } = await admin
+      .from('volunteer_opportunities')
+      .select('id, title, org_id, status, deleted_at')
+      .eq('id', opportunityId)
+      .maybeSingle();
+
+    if (!opp || opp.org_id !== callerId || opp.status !== 'active' || opp.deleted_at) {
+      return json({ error: 'You can only attach one of your own live roles' }, 403);
+    }
+    role = { id: opp.id, title: opp.title };
   }
 
   // --- Addresses come from the LOGIN account, never the profile ---------
@@ -226,10 +257,30 @@ Deno.serve(async (req) => {
       'approved organisations. You can change that under "Let approved ' +
       'organisations find and email me" in your Well Windsor profile.';
 
+  // CON-5. The role is named whether or not it can be linked. APP_URL is
+  // where this site is actually served from, which is not the charity's own
+  // website — so when it is unset the title still appears and simply is not
+  // a link. A link to a guessed host is worse than no link, and this follows
+  // the same rule as the other addresses here: set a secret, do not edit
+  // code.
+  const appUrl = (Deno.env.get('APP_URL') ?? '').replace(/\/+$/, '');
+  const roleUrl = role && appUrl ? `${appUrl}/opportunities/${role.id}` : null;
+  const safeRoleTitle = role ? escapeHtml(role.title) : '';
+
+  const roleHtml = role
+    ? `<p style="margin:0 0 20px;padding:12px 16px;background:#f9fafb;border-radius:8px">
+         They mentioned this role:
+         ${roleUrl
+           ? `<a href="${escapeHtml(roleUrl)}" style="color:#0f766e;font-weight:600">${safeRoleTitle}</a>`
+           : `<strong>${safeRoleTitle}</strong>`}
+       </p>`
+    : '';
+
   const htmlContent = `
     <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:600px">
       <p style="margin:0 0 16px"><strong>${safeOrgName}</strong> has got in touch with you through Well Windsor.</p>
       <div style="padding:16px;border-left:3px solid #14b8a6;background:#f9fafb;margin:0 0 20px">${safeMessage}</div>
+      ${roleHtml}
       <p style="margin:0 0 8px">Reply directly to this email to continue the conversation with them.</p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
       <p style="font-size:13px;color:#6b7280;margin:0 0 8px">
@@ -244,6 +295,7 @@ Deno.serve(async (req) => {
   const textContent =
     `${org.name ?? 'An organisation'} has got in touch with you through Well Windsor.\n\n` +
     `${message}\n\n` +
+    (role ? `They mentioned this role: ${role.title}${roleUrl ? `\n${roleUrl}` : ''}\n\n` : '') +
     `Reply directly to this email to continue the conversation with them.\n\n` +
     `---\nSent via Well Windsor. Well Windsor does not vet or DBS-check ` +
     `organisations or volunteers, and is not party to any arrangement you make.\n` +
@@ -304,16 +356,9 @@ Deno.serve(async (req) => {
   // address. Queued rather than sent inline: the volunteer's message has
   // already gone, and a failure to send this receipt must not report the
   // outreach itself as failed.
-  let roleTitle: string | null = null;
-  if (opportunityId) {
-    const { data: opp } = await admin
-      .from('volunteer_opportunities')
-      .select('title')
-      .eq('id', opportunityId)
-      .maybeSingle();
-    roleTitle = opp?.title ?? null;
-  }
-
+  // The title comes from the CON-5 check above, which already proved the
+  // role belongs to this organisation. Looking it up again here would be a
+  // second, unchecked read of the same row.
   await admin.rpc('enqueue_email', {
     p_template: 'outreach_copy',
     p_to_email: orgEmail,
@@ -321,7 +366,7 @@ Deno.serve(async (req) => {
     p_to_name: org.name ?? null,
     p_payload: {
       volunteer_name: volunteer.name ?? 'a volunteer',
-      role_title: roleTitle,
+      role_title: role?.title ?? null,
       message,
     },
     p_related_user_id: callerId,

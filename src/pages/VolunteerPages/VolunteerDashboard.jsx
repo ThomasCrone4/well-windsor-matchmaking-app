@@ -85,9 +85,23 @@ export default function VolunteerDashboard() {
   const applications = applicationsData ?? [];
   const approaches = approachesData ?? [];
 
+  // INT-4. This used to DELETE the row. The row is now kept and marked
+  // withdrawn: it vanishes from the organisation's list as though it had
+  // never been made and they are never told, but the record survives so the
+  // audit log can still explain a message that was already sent. Delete it
+  // and a legitimate email starts looking like an unprompted approach to
+  // someone who never registered.
+  //
+  // Through an RPC rather than an UPDATE: granting `withdrawn_at` to
+  // `authenticated` would also hand it to the organisation via its dismiss
+  // policy, letting an org hide a registration from itself in a way that
+  // looks exactly like the volunteer withdrawing. DELETE is revoked and
+  // refused by trigger, so this is the only door.
   const withdraw = useMutation({
     mutationFn: async (applicationId) => {
-      const { error } = await supabase.from('applications').delete().eq('id', applicationId);
+      const { error } = await supabase.rpc('withdraw_registration', {
+        p_application_id: applicationId,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -247,7 +261,11 @@ export default function VolunteerDashboard() {
               </strong>
               .
             </p>
+            {/* INT-4: the organisation is never told, deliberately —
+                being told invites a chase, and nobody should have to
+                explain themselves. Worth saying out loud. */}
             <p className="mt-2">
+              It simply disappears from their list, and they are not told.
               You can register again later if you change your mind.
             </p>
           </>

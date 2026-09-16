@@ -115,10 +115,10 @@ export default function OpportunityApplicantsPage() {
         )}
         {applicant.bio?.trim() && <p className="text">{applicant.bio}</p>}
 
-        {applicant.subject?.trim() && (
-          <p className="highlight">{applicant.subject}</p>
-        )}
-
+        {/* INT-2 dropped the subject line: registering is a button plus one
+            optional note, so there is only the note to show. Existing
+            subjects were folded into the front of their note by the
+            migration rather than thrown away. */}
         {applicant.message?.trim() && (
           <div className="text whitespace-pre-line">{shownMessage}</div>
         )}
