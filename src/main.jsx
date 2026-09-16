@@ -6,11 +6,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from 'react-hot-toast';
 
+// Poppins, served from this site rather than Google Fonts: a request to
+// fonts.googleapis.com hands every visitor's IP address to Google before they
+// have read a word, which the privacy policy would otherwise have to declare.
+// Each file carries unicode-range subsets, so browsers fetch only what a page
+// uses.
+import '@fontsource/poppins/300.css';
+import '@fontsource/poppins/400.css';
+import '@fontsource/poppins/500.css';
+import '@fontsource/poppins/600.css';
+import '@fontsource/poppins/700.css';
 import './index.css';
 
 import HomePage from './pages/HomePage';
 import AuthPage from './pages/AuthPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import PrivacyPage from './pages/PrivacyPage';
+import DeleteMyDataPage from './pages/DeleteMyDataPage';
 import Redirector from './pages/Redirector';
 import OrganizationDashboard from './pages/OrganizationPages/OrganizationDashboard';
 import VolunteerDashboard from './pages/VolunteerPages/VolunteerDashboard';
@@ -62,6 +74,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     <Route path="/auth" element={<AuthPage />} />
                 <Route path="/redirect" element={<Redirector />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
+                {/* WF8.2. Public: someone who cannot sign in still needs both. */}
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/delete-my-data" element={<DeleteMyDataPage />} />
 
                 {/* Organisation pages */}
                 <Route

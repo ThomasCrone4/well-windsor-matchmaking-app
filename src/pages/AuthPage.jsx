@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
 import AvailabilityMatrix from '../components/AvailabilityMatrix';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTowns } from '../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../utils/age';
 
@@ -438,6 +438,17 @@ export default function AuthPage() {
               </>
             )}
           </>
+        )}
+
+        {/* Said before the account exists, not after (WF8.2). */}
+        {isSigningUp && (
+          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            Our{' '}
+            <Link to="/privacy" style={{ color: 'var(--color-brand-ink)' }} className="underline">
+              privacy policy
+            </Link>{' '}
+            explains what we keep about you and who can see it.
+          </p>
         )}
 
         {/* Submit */}

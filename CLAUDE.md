@@ -853,6 +853,51 @@ Re-runnable: `.scratch/probe_wf7.py` (74 cases, self-seeding) and
 `.scratch/walk_wf7.py` (47 UI checks). `walk_core_loop` and `walk_wf5` were
 updated: they selected `#town`, which no longer exists with one town.
 
+**Workflow 8 is in progress (2026-09-16, branch `wf8-launch`).** It is the
+launch gate and most of it is not code. **Open decisions live in
+`PENDING-DECISIONS.md` at the repo root** — the user reviews them in batches;
+add to it rather than stopping to ask (destructive or outward-facing actions
+still need an explicit yes).
+
+- **Final security pass (item 6): done.** Every table, view and SECURITY
+  DEFINER function was checked from `relacl`/`proacl`, then write-tested live:
+  `.scratch/probe_wf8_final.py` (100 cases; every refusal aimed at a throwaway
+  row and read back). RLS is on for all 14 tables; anon's only write is the
+  `problem_reports` INSERT; no SECURITY DEFINER function is on the default
+  PUBLIC grant. One fix: `authenticated` held DELETE on `user_profiles` with
+  no policy behind it — revoked (20260916155009). Harmless but noted:
+  `anon`/`authenticated` hold Postgres 17's MAINTAIN (`m`) on several tables
+  by Supabase default, unreachable through PostgREST; and
+  `log_admin_action()`/`create_notification()` are pre-WF1 residue, not
+  callable from a browser.
+- **The email outbox forgot nothing (fixed, 20260916160232).** Addresses,
+  names and full message text stayed for ever, including after account
+  deletion — against ADM-4. `prepare_account_deletion()` now blanks the
+  deleted person's rows, and `expire-email-outbox-content` (pg_cron, 03:20
+  UTC) blanks every sent/abandoned row 30 days after sending. `held` and
+  `failed` rows keep their content. Proven with the real `delete-account`
+  function and a backdated row. **Any new email template that carries personal
+  data is covered by the 30-day job, not by deletion** — deletion only finds
+  rows sent *to* or recorded *against* the account.
+- **Privacy policy (`/privacy`) and `/delete-my-data` are built, not
+  approved** (WF8-5). Every statement was checked against the live system.
+  **If you change what happens to personal data, change `PrivacyPage.jsx` in
+  the same commit.** Linked from the footer and the sign-up form.
+- **Poppins is self-hosted** (`@fontsource/poppins`, imported in `main.jsx`);
+  no page requests Google Fonts. `walk_wf8` checks this.
+- **`useUserProfile().loading` is slow for signed-out visitors:** its session
+  query throws with no session and React Query retries three times. Use
+  `useSession()` from `SessionContext` to decide signed-in-or-not.
+- **Seed data (item 1): script written, NOT run** —
+  `supabase/launch/delete_seed_data.sql`, outside `migrations/` on purpose.
+  Waiting on real organisations (WF8-1) and the junk-account list (WF8-3).
+- Items 3–5 (dashboard toggles, hosting, email confirmation) are the user's;
+  see `PENDING-DECISIONS.md`.
+
+Re-runnable: `.scratch/probe_wf8_final.py` (100), `.scratch/walk_wf8.py` (21),
+and `.scratch/probe_wf8_outbox.py` (signs up and approves a throwaway org;
+`--delete` deletes it; verify the outbox with SQL — it has no client grants).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception

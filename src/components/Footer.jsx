@@ -87,8 +87,15 @@ export default function Footer() {
             >
               Get in touch
             </a>
-            {/* FAQ & Support and Privacy Policy were both href="#" -- links
-                that went nowhere. Left out until the pages exist. */}
+            {/* FAQ & Support was href="#" -- a link that went nowhere, left
+                out until a page exists. The privacy policy exists now (WF8). */}
+            <Link
+              to="/privacy"
+              style={{ color: 'var(--color-brand-ink)' }}
+              className="hover:underline"
+            >
+              Privacy policy
+            </Link>
             <a
               href="mailto:hello@wellwindsor.org.uk"
               style={{ color: 'var(--color-brand-ink)' }}
