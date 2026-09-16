@@ -12,14 +12,19 @@ import FormSkeleton from '../../components/skeletons/FormSkeleton';
 
 // ✅ import the schedule helpers you already have
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../utils/schedule';
-import { townOptionsFor } from '../../utils/towns';
+import { useTowns, townOptionsFor } from '../../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../../utils/age';
+import DeleteAccountSection from '../../components/DeleteAccountSection';
+import ChangeEmailSection from '../../components/ChangeEmailSection';
 
 const profileSchema = z
   .object({
     name: z.string().min(1, 'Name is required'),
     contact_number: z.string().optional(),
-    home_town: z.string().min(1, 'Select a home town'),
+    // Not required here: with one town there is no picker to fill it in
+    // (ADM-6), and a hidden field that fails validation fails silently.
+    // onSubmit asks for it when the picker is showing.
+    home_town: z.string().nullable().optional(),
     // Required, and 18+. It used to be optional here, and clearing it
     // switched the database's age check off entirely -- that CHECK passed
     // on NULL. The database now refuses a volunteer with no date of birth,
@@ -47,7 +52,7 @@ const profileSchema = z
 export default function VolunteerProfilePage() {
   const queryClient = useQueryClient();
   const [hydrated, setHydrated] = useState(false);
-  const { userId, profile, loading } = useUserProfile();
+  const { user, userId, profile, loading } = useUserProfile();
 
   const {
     register,
@@ -65,6 +70,7 @@ export default function VolunteerProfilePage() {
 
   const availableAnytime = watch('available_anytime');
   const publicProfile = watch('public_profile');
+  const { towns, soleTown, showPicker } = useTowns();
 
   useEffect(() => {
     if (!hydrated && profile !== undefined) {
@@ -91,7 +97,7 @@ export default function VolunteerProfilePage() {
     // text
     name: trimOrNull(formData.name),
     contact_number: trimOrNull(formData.contact_number),
-    home_town: trimOrNull(formData.home_town),
+    home_town: trimOrNull(formData.home_town) ?? soleTown,
     bio: trimOrNull(formData.bio),
     skills: trimOrNull(formData.skills),
 
@@ -232,6 +238,10 @@ export default function VolunteerProfilePage() {
   });
 
   const onSubmit = (data) => {
+    if (showPicker && !trimOrNull(data.home_town)) {
+      toast.error('Please select your home town.');
+      return;
+    }
     if (!data.available_anytime && (!data.availability_matrix || data.availability_matrix.length === 0)) {
       toast.error('Please add at least one availability block.');
       return;
@@ -301,7 +311,8 @@ export default function VolunteerProfilePage() {
           />
         </div>
 
-        {/* Home Town */}
+        {/* Home Town — only when there is more than one (ADM-6) */}
+        {showPicker && (
         <div className="form-row">
           <label className="label">
             Home Town <span className="required" />
@@ -312,12 +323,13 @@ export default function VolunteerProfilePage() {
             aria-invalid={!!errors.home_town}
           >
             <option value="">Select your home town</option>
-            {townOptionsFor(watch('home_town')).map((t) => (
+            {townOptionsFor(towns, watch('home_town')).map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
           {errors.home_town && <p className="error-text">{errors.home_town.message}</p>}
         </div>
+        )}
 
         {/* Date of Birth */}
         <div className="form-row">
@@ -371,12 +383,55 @@ export default function VolunteerProfilePage() {
             <input type="checkbox" {...register('available_anytime')} className="check" />
             Flexible Availability
           </label>
+        </div>
 
-          {/* Public Profile */}
-          <label className="check-label">
-            <input type="checkbox" {...register('public_profile')} className="check" />
-            Allow organisations to view my profile and contact me
+        {/*
+          CON-6. This was a checkbox sitting beside "Flexible Availability",
+          which is not a control anyone would find when they wanted it. ACC-4
+          only holds — discoverable staying ON by default — because turning it
+          off is easy, so the switch has to be findable, say plainly what it
+          does, and say what stays true when it is off. Every unprompted
+          outreach email points here.
+        */}
+        <div
+          id="discoverable"
+          className="card"
+          style={{ borderColor: publicProfile ? 'var(--color-brand-ink)' : 'var(--color-border)' }}
+        >
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              {...register('public_profile')}
+              className="check mt-1"
+              aria-describedby="discoverable-help"
+            />
+            <span>
+              <span
+                className="block font-semibold"
+                style={{ color: 'var(--color-text-primary)' }}
+              >
+                Let approved organisations find and email me
+              </span>
+              <span
+                id="discoverable-help"
+                className="block text-sm mt-1"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                {publicProfile
+                  ? 'Organisations Well Windsor has approved can see your name, town, skills and bio, and can write to you through us. They never see your email address unless you reply.'
+                  : 'You are not listed. Organisations cannot find you or write to you out of the blue — but one whose role you register for can still reply to you.'}
+              </span>
+            </span>
           </label>
+
+          {/* The errors themselves sit on the bio and skills fields, which is
+              where they get fixed. This switch is below both, so ticking it
+              would otherwise surface a message off-screen. */}
+          {(errors.public_profile_bio || errors.public_profile_skills) && (
+            <p className="error-text mt-2">
+              Add a bio and your skills above before organisations can find you.
+            </p>
+          )}
         </div>
 
         {/* Availability Matrix */}
@@ -409,6 +464,10 @@ export default function VolunteerProfilePage() {
           </button>
         </div>
       </form>
+
+      <ChangeEmailSection currentEmail={user?.email} />
+
+      <DeleteAccountSection />
     </div>
   );
 }

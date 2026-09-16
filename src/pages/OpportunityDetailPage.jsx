@@ -14,7 +14,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase';
 import { useEffect, useState } from 'react';
-import { formatOpportunitySchedule, DAYS } from '../utils/schedule';
+import { formatOpportunitySchedule, blocksFromTimeblockRows } from '../utils/schedule';
 import OpportunityPhoto from '../components/OpportunityPhoto';
 
 export default function OpportunityDetailPage() {
@@ -60,7 +60,6 @@ export default function OpportunityDetailPage() {
           location,
           town,
           requires_dbs,
-          when_needed,
           generally_needed,
           volunteers_needed,
           skills,
@@ -94,17 +93,15 @@ export default function OpportunityDetailPage() {
     staleTime: 60_000,
   });
 
-  // The schedule lives in TWO places and they disagree. `when_needed` is the
-  // jsonb the forms write for their own editing UX; `opportunity_timeblocks`
-  // is the normalised mirror that match_opportunities_by_availability
-  // actually matches on. On the seed rows when_needed is NULL while a
-  // timeblock exists, so formatting from when_needed alone reports
-  // "Schedule TBC" for a role that has times -- the facts panel would be
-  // stating the opposite of what the matcher just used. Read the table the
-  // matcher reads, and fall back to when_needed.
+  // ROLE-5. opportunity_timeblocks is the schedule — the whole schedule, and
+  // the only one. The `when_needed` jsonb this page used to fall back to has
+  // been dropped: it was NULL on every live role while eight of them had real
+  // timeblocks, so the fallback could only ever have said "Schedule TBC"
+  // about a role whose times the matcher had just used.
   //
   // anon holds SELECT here and `public_read_active_blocks` gates it on the
-  // opportunity being active, so this works logged out.
+  // parent being active and not removed, so this works logged out and goes
+  // quiet the moment a role is taken down.
   const { data: timeblocks } = useQuery({
     queryKey: ['opportunity_timeblocks', id],
     enabled: !!op?.id && !op?.generally_needed,
@@ -171,18 +168,11 @@ export default function OpportunityDetailPage() {
 
   const orgName = org?.name ?? 'Organisation';
 
-  // opportunity_timeblocks stores days as int[] 0..6 in DAYS order; the
-  // formatter wants labels.
-  const blocksFromTable = (timeblocks ?? []).map((b) => ({
-    ...b,
-    days: (b.days ?? []).map((i) => DAYS[i]).filter(Boolean),
-  }));
+  const blocks = blocksFromTimeblockRows(timeblocks ?? []);
 
   const schedule = op.generally_needed
     ? 'Flexible — the organisation has no fixed times for this role'
-    : formatOpportunitySchedule(
-        blocksFromTable.length ? { ...op, when_needed: blocksFromTable } : op
-      );
+    : formatOpportunitySchedule({ ...op, timeblocks: blocks });
 
   // Facts the database actually holds. The mockup's panel also has a
   // "Commitment" row (“about 2 hours a week”); there is no column behind

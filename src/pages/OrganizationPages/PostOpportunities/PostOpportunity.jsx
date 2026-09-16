@@ -10,33 +10,52 @@ import { useNavigate } from 'react-router-dom';
 
 // 🔁 use your schedule.js
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
-import { TOWNS } from '../../../utils/towns';
+import { useTowns } from '../../../utils/towns';
 import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
 import useUserProfile from '../../../hooks/useUserProfile';
 import ApprovalNotice from '../../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../../utils/approval';
+import { LIMITS, checkFreeText, charsLeft } from '../../../utils/contentChecks';
 
 const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
-const getOpportunitySchema = (isDraft) =>
+// APP-5. Length limits mirror the CHECK constraints on the table, so the form
+// can say it in words instead of surfacing a 23514 nobody can read; the word
+// list is client-side only. See src/utils/contentChecks.js for why the split
+// is that way round.
+// `.superRefine()` returns a ZodEffects, which is NOT a ZodString and has no
+// `.min()`. Calling it threw at module scope and took the whole page down
+// into the ErrorBoundary — a crash the build and eslint were both clean on,
+// and that only the Playwright walk found. So the length rule is applied to
+// the string first, and the refinement wraps the result.
+const freeText = (field, { checkWords = false, min = 0, minMessage } = {}) => {
+  const base = min > 0 ? z.string().min(min, minMessage) : z.string();
+  return base.superRefine((v, ctx) => checkFreeText(v, field, ctx, { checkWords }));
+};
+
+const getOpportunitySchema = (isDraft, towns, showPicker) =>
   z.object({
-    title: isDraft ? z.string().optional() : z.string().min(1, 'Title is required'),
-    description: z.string().optional(),
-    location: isDraft ? z.string().optional() : z.string().min(1, 'Location is required'),
+    title: isDraft
+      ? freeText('title', { checkWords: true }).optional()
+      : freeText('title', { checkWords: true, min: 1, minMessage: 'Title is required' }),
+    description: freeText('description', { checkWords: true }).optional(),
+    location: isDraft
+      ? freeText('location').optional()
+      : freeText('location', { min: 1, minMessage: 'Location is required' }),
     // The filter key volunteers browse by. A draft may leave it blank; a
     // published opportunity may not (there is a CHECK constraint saying so),
     // because an active listing with no town is unreachable from a filtered
-    // browse.
-    town: isDraft
+    // browse. With one town there is no picker and nothing to validate: the
+    // role is filed under that town (ADM-6, src/utils/towns.js).
+    town: isDraft || !showPicker
       ? z.string().optional()
-      : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
-    contact: isDraft ? z.string().optional() : z.string().min(1, 'Contact method is required'),
+      : z.string().refine((v) => towns.includes(v), 'Please choose a town'),
     // The skills input has been on this form all along and every value
     // typed into it was discarded: zod strips keys the schema does not
     // name, so `data.skills` never reached submitOpportunity -- and
     // postData did not send it either. Proven by the 2026-09-11 core-loop
     // walk, which posted "first aid, marshalling" and read back NULL.
-    skills: z.string().optional(),
+    skills: freeText('skills').optional(),
     // Optional in both states -- the browse falls back to a neutral image.
     // It MUST be declared here even so: zod strips keys the schema does not
     // mention, so a field that is registered but unlisted silently never
@@ -48,9 +67,15 @@ const getOpportunitySchema = (isDraft) =>
       .optional()
       .refine((v) => !v || CATEGORY_VALUES.includes(v), 'Please choose a category'),
     generally_needed: z.boolean(),
+    // Still called when_needed here: it is the AvailabilityMatrix field name,
+    // not a column. The column of that name is gone -- these blocks are
+    // written to opportunity_timeblocks and nowhere else (ROLE-5).
     when_needed: z.any(),
     requires_dbs: z.boolean(),
-    volunteers_needed: z.coerce.number().min(1, 'Must be at least 1 volunteer'),
+    volunteers_needed: z.coerce
+      .number()
+      .min(1, 'Must be at least 1 volunteer')
+      .max(LIMITS.volunteers_needed, `That is more than ${LIMITS.volunteers_needed} — please check.`),
   });
 
 export default function PostOpportunity() {
@@ -60,8 +85,12 @@ export default function PostOpportunity() {
   // Publishing waits for approval (RLS refuses it otherwise); drafts do not.
   const pending = isPendingOrganisation(profile);
   const [isDraft, setIsDraft] = useState(false);
+  const { towns, soleTown, showPicker } = useTowns();
 
-  const schema = useMemo(() => getOpportunitySchema(isDraft), [isDraft]);
+  const schema = useMemo(
+    () => getOpportunitySchema(isDraft, towns, showPicker),
+    [isDraft, towns, showPicker]
+  );
 
   const {
     register,
@@ -78,7 +107,6 @@ export default function PostOpportunity() {
       description: '',
       location: '',
       town: '',
-      contact: '',
       skills: '',
       category: '',
       generally_needed: true,
@@ -89,6 +117,7 @@ export default function PostOpportunity() {
   });
 
   const generallyNeeded = watch('generally_needed');
+  const descriptionLeft = charsLeft(watch('description'), 'description');
 
   useEffect(() => {
     const fetchOrgId = async () => {
@@ -174,6 +203,24 @@ export default function PostOpportunity() {
     if (insErr) throw insErr;
   };
 
+  /**
+   * A rejected submit must never be silent. Not every field here renders an
+   * error slot -- `skills` still does not -- so without this, a validation
+   * failure looks exactly like a save that worked. That is precisely how
+   * saving an opportunity was impossible for months on the edit form, which
+   * has had this handler since; this form never did.
+   */
+  const onInvalid = (formErrors) => {
+    const fields = Object.keys(formErrors ?? {});
+    console.warn('PostOpportunity validation failed:', formErrors);
+    const first = fields.map((f) => formErrors[f]?.message).find(Boolean);
+    toast.error(
+      first || (fields.length
+        ? `Could not post — please check: ${fields.join(', ')}`
+        : 'Could not post — please check the form.')
+    );
+  };
+
   const submitOpportunity = async (data, status) => {
     if (!orgId) {
       toast.error('Organization ID not loaded');
@@ -194,16 +241,19 @@ export default function PostOpportunity() {
       title: data.title || '',
       description: data.description || '',
       location: data.location || '',
-      // null rather than '' -- the CHECK only accepts a real town or NULL,
-      // and a draft is allowed to have neither yet.
-      town: data.town || null,
-      contact: data.contact || '',
+      // null rather than '' -- the foreign key accepts a real town or NULL,
+      // and a draft is allowed to have neither yet. With the picker hidden
+      // this is the sole town, or null while the towns query is still
+      // loading, in which case the database files it under that town itself.
+      town: (showPicker ? data.town : soleTown) || null,
       skills: data.skills?.trim() || null,
       // null rather than '': the CHECK accepts the three values or NULL,
       // and '' would be rejected outright.
       category: data.category || null,
       generally_needed: !!data.generally_needed,
-      when_needed: data.generally_needed ? null : (data.when_needed ?? []), // keep JSON for editing UX
+      // No `when_needed` and no `contact`: both columns are gone (ROLE-5,
+      // ROLE-3). The schedule goes to opportunity_timeblocks below, which is
+      // where matching and the public pages have always read it from.
       requires_dbs: !!data.requires_dbs,
       volunteers_needed: Number(data.volunteers_needed) || 1,
       status,
@@ -229,7 +279,7 @@ export default function PostOpportunity() {
 
     // 2) Mirror matrix into opportunity_timeblocks with normalized values
     try {
-      await replaceTimeblocks(opportunityId, postData.when_needed ?? [], postData.generally_needed);
+      await replaceTimeblocks(opportunityId, data.when_needed ?? [], postData.generally_needed);
     } catch (e) {
       console.error('Saving timeblocks failed:', e);
       toast.error('Opportunity saved, but failed to save required times. Please edit and retry.');
@@ -272,18 +322,31 @@ export default function PostOpportunity() {
               : <p className="help-text">Clear, descriptive titles help volunteers find you.</p>}
           </div>
 
-          {/* Description */}
+          {/* Description. APP-5: the counter is here because the limit is
+              real -- there is a CHECK constraint behind it -- and finding
+              that out on submit, after writing 6,000 characters, is the
+              worst possible moment. */}
           <div className="form-row">
             <label htmlFor="description" className="label">Description</label>
             <textarea
               id="description"
               {...register('description')}
               className={`textarea ${errors.description ? 'textarea-invalid' : ''}`}
+              aria-invalid={!!errors.description}
               placeholder="Brief outline of the role, tasks, and impact."
             />
+            {errors.description
+              ? <p className="error-text">{errors.description.message}</p>
+              : <p className="help-text">
+                  {descriptionLeft < 0
+                    ? `${Math.abs(descriptionLeft).toLocaleString()} characters over the limit`
+                    : `${descriptionLeft.toLocaleString()} characters left`}
+                </p>}
           </div>
 
-          {/* Town — the filter key volunteers browse by */}
+          {/* Town — the filter key volunteers browse by. Only asked for when
+              there is more than one (ADM-6). */}
+          {showPicker && (
           <div className="form-row">
             <label htmlFor="town" className="label required">Town</label>
             <select
@@ -293,7 +356,7 @@ export default function PostOpportunity() {
               aria-invalid={!!errors.town}
             >
               <option value="">Select a town…</option>
-              {TOWNS.map((t) => (
+              {towns.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
@@ -301,6 +364,7 @@ export default function PostOpportunity() {
               ? <p className="error-text">{errors.town.message}</p>
               : <p className="help-text">Volunteers filter the browse by town.</p>}
           </div>
+          )}
 
           {/* Category — picks the photograph on the listing. Optional:
               without one the card gets a neutral Windsor image rather than
@@ -340,22 +404,16 @@ export default function PostOpportunity() {
             />
             {errors.location
               ? <p className="error-text">{errors.location.message}</p>
-              : <p className="help-text">The venue or address. Free text — the town above does the filtering.</p>}
+              : <p className="help-text">The venue or address.{showPicker && ' Free text — the town above does the filtering.'}</p>}
           </div>
 
-          {/* Contact */}
-          <div className="form-row">
-            <label htmlFor="contact" className="label required">Contact Email</label>
-            <input
-              id="contact"
-              {...register('contact')}
-              className={`input ${errors.contact ? 'input-invalid' : ''}`}
-              aria-invalid={!!errors.contact}
-              placeholder="e.g. email@org.com"
-              type="email"
-            />
-            {errors.contact && <p className="error-text">{errors.contact.message}</p>}
-          </div>
+          {/* ROLE-3. The required "Contact Email" field that stood here is
+              gone. No volunteer ever saw it -- an organisation is reached
+              through the Reply-To on the message it sends, never through a
+              column on a role -- and of the fourteen live values, seven
+              repeated the organisation's own login address and seven were
+              invented seed addresses. One fewer required field on the
+              longest form on the site. */}
 
           {/* Skills (optional) */}
           <div className="form-row">
@@ -431,7 +489,7 @@ export default function PostOpportunity() {
               e.preventDefault();
               setIsDraft(false);
               setTimeout(() => {
-                handleSubmit((form) => submitOpportunity(form, 'active'))();
+                handleSubmit((form) => submitOpportunity(form, 'active'), onInvalid)();
               }, 0);
             }}
             className="btn-primary w-full"
@@ -447,7 +505,7 @@ export default function PostOpportunity() {
               e.preventDefault();
               setIsDraft(true);
               setTimeout(() => {
-                handleSubmit((form) => submitOpportunity(form, 'draft'))();
+                handleSubmit((form) => submitOpportunity(form, 'draft'), onInvalid)();
               }, 0);
             }}
             className="btn-secondary w-full"

@@ -16,10 +16,12 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const BREVO_ENDPOINT = 'https://api.brevo.com/v3/smtp/email';
 
-// Verified sender in Brevo. Currently a personal address for development;
-// swap to notifications@wellwindsor.org.uk once the domain is
-// authenticated, by setting these secrets rather than editing code.
-const SENDER_EMAIL = Deno.env.get('BREVO_SENDER_EMAIL') ?? 'thomascrone2000@gmail.com';
+// Verified sender in Brevo, set by secret rather than by editing code.
+// No default, on purpose. It used to fall back to a personal Gmail address
+// hardcoded here, which published that address in a public repository. Set
+// the BREVO_SENDER_EMAIL Edge Function secret in Supabase (Dashboard -> Edge
+// Functions -> Secrets); until it is set, this function refuses to send.
+const SENDER_EMAIL = Deno.env.get('BREVO_SENDER_EMAIL') ?? '';
 const SENDER_NAME = Deno.env.get('BREVO_SENDER_NAME') ?? 'Well Windsor';
 
 // Rate limits. Deliberately strict: this sends under the charity's domain.
@@ -61,8 +63,8 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   const brevoKey = Deno.env.get('BREVO_KEY');
-  if (!brevoKey) {
-    console.error('BREVO_KEY is not set');
+  if (!brevoKey || !SENDER_EMAIL) {
+    console.error(!brevoKey ? 'BREVO_KEY is not set' : 'BREVO_SENDER_EMAIL is not set');
     return json({ error: 'Email is not configured' }, 500);
   }
 
@@ -136,15 +138,46 @@ Deno.serve(async (req) => {
   // Either the volunteer applied to one of the org's opportunities, or
   // they have opted into being discoverable. Without this check, any org
   // could email any volunteer.
+  //
+  // INT-4 and trap 4b. `withdrawn_at is null` is the load-bearing part.
+  // A withdrawn registration is kept for ever so the audit log can explain
+  // a message that was already sent — but it is not standing permission to
+  // send another one. Counting every row would mean a volunteer could
+  // withdraw, vanish from the organisation's list, and still be emailed by
+  // them; the whole point of INT-4 is that withdrawing undoes the asking.
+  //
+  // Trap 4b is the reason this is worth spelling out: every outreach
+  // permission rests on this table being honest, so whenever `applications`
+  // changes, this count has to be re-read with the change in mind.
   const { count: applicationCount } = await admin
     .from('applications')
     .select('id', { count: 'exact', head: true })
     .eq('org_id', callerId)
-    .eq('volunteer_id', volunteerId);
+    .eq('volunteer_id', volunteerId)
+    .is('withdrawn_at', null);
 
   const hasApplied = (applicationCount ?? 0) > 0;
   if (!hasApplied && !volunteer.public_profile) {
     return json({ error: 'This volunteer has not made their profile discoverable' }, 403);
+  }
+
+  // --- CON-5: an attached role must be one of the org's OWN live roles ---
+  // Checked here rather than trusted from the client. Without it the picker
+  // is a way to put any id on the site behind a link in an email sent under
+  // the charity's name — another organisation's draft, or a removed role —
+  // and a link in an email is trusted far more than a link on a page.
+  let role: { id: string; title: string } | null = null;
+  if (opportunityId) {
+    const { data: opp } = await admin
+      .from('volunteer_opportunities')
+      .select('id, title, org_id, status, deleted_at')
+      .eq('id', opportunityId)
+      .maybeSingle();
+
+    if (!opp || opp.org_id !== callerId || opp.status !== 'active' || opp.deleted_at) {
+      return json({ error: 'You can only attach one of your own live roles' }, 403);
+    }
+    role = { id: opp.id, title: opp.title };
   }
 
   // --- Addresses come from the LOGIN account, never the profile ---------
@@ -213,25 +246,63 @@ Deno.serve(async (req) => {
   const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
   const safeOrgName = escapeHtml(org.name ?? 'An organisation');
 
+  // CON-6. ACC-4 keeps "discoverable" on by default only because turning it
+  // off is easy, and a control nobody can find is not a control. So every
+  // UNPROMPTED message says where the switch is. A message to someone who
+  // registered for this organisation's role is not unprompted — they asked —
+  // and CON-4 is explicit that this is not marketing and carries no
+  // unsubscribe, so the wording points at a setting rather than offering to
+  // opt them out of something they chose.
+  const discoverableNote = hasApplied
+    ? ''
+    : 'You are hearing from them because your profile is set to be found by ' +
+      'approved organisations. You can change that under "Let approved ' +
+      'organisations find and email me" in your Well Windsor profile.';
+
+  // CON-5. The role is named whether or not it can be linked. APP_URL is
+  // where this site is actually served from, which is not the charity's own
+  // website — so when it is unset the title still appears and simply is not
+  // a link. A link to a guessed host is worse than no link, and this follows
+  // the same rule as the other addresses here: set a secret, do not edit
+  // code.
+  const appUrl = (Deno.env.get('APP_URL') ?? '').replace(/\/+$/, '');
+  const roleUrl = role && appUrl ? `${appUrl}/opportunities/${role.id}` : null;
+  const safeRoleTitle = role ? escapeHtml(role.title) : '';
+
+  const roleHtml = role
+    ? `<p style="margin:0 0 20px;padding:12px 16px;background:#f9fafb;border-radius:8px">
+         They mentioned this role:
+         ${roleUrl
+           ? `<a href="${escapeHtml(roleUrl)}" style="color:#0f766e;font-weight:600">${safeRoleTitle}</a>`
+           : `<strong>${safeRoleTitle}</strong>`}
+       </p>`
+    : '';
+
   const htmlContent = `
     <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:600px">
       <p style="margin:0 0 16px"><strong>${safeOrgName}</strong> has got in touch with you through Well Windsor.</p>
       <div style="padding:16px;border-left:3px solid #14b8a6;background:#f9fafb;margin:0 0 20px">${safeMessage}</div>
+      ${roleHtml}
       <p style="margin:0 0 8px">Reply directly to this email to continue the conversation with them.</p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-      <p style="font-size:13px;color:#6b7280;margin:0">
+      <p style="font-size:13px;color:#6b7280;margin:0 0 8px">
         Sent via Well Windsor, which connects volunteers with local organisations.
         Well Windsor does not vet or DBS-check organisations or volunteers, and is
         not party to any arrangement you make.
+        Registered charity number 1207021.
       </p>
+      ${discoverableNote ? `<p style="font-size:13px;color:#6b7280;margin:0">${escapeHtml(discoverableNote)}</p>` : ''}
     </div>`;
 
   const textContent =
     `${org.name ?? 'An organisation'} has got in touch with you through Well Windsor.\n\n` +
     `${message}\n\n` +
+    (role ? `They mentioned this role: ${role.title}${roleUrl ? `\n${roleUrl}` : ''}\n\n` : '') +
     `Reply directly to this email to continue the conversation with them.\n\n` +
     `---\nSent via Well Windsor. Well Windsor does not vet or DBS-check ` +
-    `organisations or volunteers, and is not party to any arrangement you make.`;
+    `organisations or volunteers, and is not party to any arrangement you make.\n` +
+    `Registered charity number 1207021.` +
+    (discoverableNote ? `\n\n${discoverableNote}` : '');
 
   // --- Send -------------------------------------------------------------
   let providerMessageId: string | null = null;
@@ -282,6 +353,26 @@ Deno.serve(async (req) => {
     console.error('send-outreach failed', sendError);
     return json({ error: 'Could not send the message. Please try again shortly.' }, 502);
   }
+
+  // CON-1: who, which role, a copy of the text — and never the volunteer's
+  // address. Queued rather than sent inline: the volunteer's message has
+  // already gone, and a failure to send this receipt must not report the
+  // outreach itself as failed.
+  // The title comes from the CON-5 check above, which already proved the
+  // role belongs to this organisation. Looking it up again here would be a
+  // second, unchecked read of the same row.
+  await admin.rpc('enqueue_email', {
+    p_template: 'outreach_copy',
+    p_to_email: orgEmail,
+    p_subject: `Your message to ${volunteer.name ?? 'a volunteer'} has been sent`,
+    p_to_name: org.name ?? null,
+    p_payload: {
+      volunteer_name: volunteer.name ?? 'a volunteer',
+      role_title: role?.title ?? null,
+      message,
+    },
+    p_related_user_id: callerId,
+  });
 
   return json({ ok: true, message_id: providerMessageId });
 });

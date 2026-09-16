@@ -1,11 +1,15 @@
 // src/pages/AdminPages/AdminDashboard.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 import { toast } from 'react-hot-toast';
 import { format, parseISO, isValid } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { ExternalLink, User, Building, Clock, MapPin, CheckCircle, XCircle } from 'lucide-react';
+import AdminAccessTab from './AdminAccessTab';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { TakeDownRoleDialog, SwitchAccountDialog } from './AdminActionDialogs';
+import { useTowns } from '../../utils/towns';
 
 // ===== Data fetchers =====
 async function getAllOrganisations() {
@@ -32,19 +36,24 @@ async function setOrganisationApproval(orgId, approved) {
   if (error) throw error;
 }
 
-async function getAllOpportunities({ status, orgId, showExpired, q, orgs }) {
+async function getAllOpportunities({ status, orgId, showRemoved, q, orgs }) {
   let query = supabase
     .from('volunteer_opportunities')
-    .select('id,title,description,location,requires_dbs,status,org_id,when_needed,date_needed,created_at')
+    .select('id,title,description,location,requires_dbs,status,org_id,deleted_at,created_at')
     .order('created_at', { ascending: false });
 
   if (status && status !== 'All') query = query.eq('status', status.toLowerCase());
   if (orgId && orgId !== 'All') query = query.eq('org_id', orgId);
 
-  if (!showExpired) {
-    const now = new Date().toISOString();
-    query = query.or(`date_needed.is.null,date_needed.gte.${now}`);
-  }
+  // ROLE-1. Removed roles are hidden from everyone else — including the
+  // organisation that removed them — so the admin is the only one who can
+  // still see one, and that is worth being able to do deliberately.
+  //
+  // This replaces a "Show expired" checkbox that filtered on `date_needed`,
+  // a column nothing ever wrote. It was NULL on every row, so the
+  // `date_needed.is.null` arm matched everything and the control did nothing
+  // at all in either position.
+  if (!showRemoved) query = query.is('deleted_at', null);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -89,8 +98,66 @@ async function addTown(name) {
   if (error) throw error;
 }
 
+// The database refuses to deactivate a town while any role or person is
+// filed under it, or the last active town (towns_guard). Its message says
+// how many of each, so it is shown as-is.
 async function toggleTownActive(id, is_active) {
   const { error } = await supabase.from('towns').update({ is_active }).eq('id', id);
+  if (error) throw error;
+}
+
+// ADM-1. Removal, not closing, and never DELETE: see
+// 20260916115724_wf7_admin_takes_down_a_role.sql. Audited with the reason.
+async function takeDownRole(opportunityId, reason) {
+  const { error } = await supabase.rpc('admin_take_down_role', {
+    p_opportunity_id: opportunityId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+}
+
+// ADM-2/ADM-5. The only way an account's type changes. `role` is not
+// writable by any client, admins included, so there is no update() to get
+// wrong here either.
+async function switchAccountType(userId, newRole, dob) {
+  const { data, error } = await supabase.rpc('admin_switch_account_type', {
+    p_user_id: userId,
+    p_new_role: newRole,
+    p_dob: dob,
+  });
+  if (error) throw error;
+  return data;
+}
+
+// created_at is a timestamp, handled_at is a timestamptz, and either can be
+// null on a row that has not been handled — parse defensively rather than
+// handing an Invalid Date to format().
+function fmtDate(value) {
+  if (!value) return 'unknown date';
+  const parsed = parseISO(value);
+  return isValid(parsed) ? format(parsed, 'PPp') : 'unknown date';
+}
+
+// ADM-7. The list is the point: an emailed report with no state cannot be
+// tracked, and two admins cannot see each other's work.
+async function getProblemReports() {
+  const { data, error } = await supabase
+    .from('problem_reports')
+    .select('id,message,contact_email,page_url,status,created_at,handled_at,handled_by,reporter_id')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  // Unhandled first: that is the queue an admin is here to clear.
+  return [...(data ?? [])].sort(
+    (a, b) => Number(a.status === 'handled') - Number(b.status === 'handled')
+  );
+}
+
+// Only `status` is writable. handled_at and handled_by are stamped by a
+// database trigger, so handling cannot be back-dated or pinned on another
+// admin.
+async function setReportStatus(id, status) {
+  const { error } = await supabase.from('problem_reports').update({ status }).eq('id', id);
   if (error) throw error;
 }
 
@@ -99,12 +166,16 @@ export default function AdminDashboard() {
   const qc = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('opportunities');
+  const [currentUserId, setCurrentUserId] = useState(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id ?? null));
+  }, []);
 
   // Opp filters
   const [oppStatus, setOppStatus] = useState('All');
   const [oppOrg, setOppOrg] = useState('All');
   const [oppQ, setOppQ] = useState('');
-  const [showExpired, setShowExpired] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
 
   // Volunteer filters
   const [volQ, setVolQ] = useState('');
@@ -112,6 +183,11 @@ export default function AdminDashboard() {
 
   // Organization filters
   const [orgQ, setOrgQ] = useState('');
+
+  // The two actions that ask a question first.
+  const [takingDown, setTakingDown] = useState(null);   // opportunity row
+  const [switching, setSwitching] = useState(null);     // { account, toRole }
+  const { showPicker: showTownFilter } = useTowns();
 
   // Queries
   const { data: orgs } = useQuery({ 
@@ -121,8 +197,8 @@ export default function AdminDashboard() {
   });
 
   const { data: opportunities, isLoading: oppLoading } = useQuery({
-    queryKey: ['admin-opportunities', oppStatus, oppOrg, showExpired, oppQ],
-    queryFn: () => getAllOpportunities({ status: oppStatus, orgId: oppOrg, showExpired, q: oppQ, orgs }),
+    queryKey: ['admin-opportunities', oppStatus, oppOrg, showRemoved, oppQ],
+    queryFn: () => getAllOpportunities({ status: oppStatus, orgId: oppOrg, showRemoved, q: oppQ, orgs }),
     staleTime: 2 * 60 * 1000,
     enabled: !!orgs, // Wait for orgs to load first
   });
@@ -145,6 +221,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       toast.success('Town added successfully');
       qc.invalidateQueries({ queryKey: ['towns'] });
+      qc.invalidateQueries({ queryKey: ['active-towns'] });
     },
     onError: (e) => toast.error(e.message || 'Failed to add town'),
   });
@@ -154,8 +231,52 @@ export default function AdminDashboard() {
     onSuccess: () => {
       toast.success('Town status updated');
       qc.invalidateQueries({ queryKey: ['towns'] });
+      qc.invalidateQueries({ queryKey: ['active-towns'] });
     },
     onError: (e) => toast.error(e.message || 'Failed to update town'),
+  });
+
+  const takeDownMut = useMutation({
+    mutationFn: ({ id, reason }) => takeDownRole(id, reason),
+    onSuccess: () => {
+      toast.success('Role taken down');
+      setTakingDown(null);
+      qc.invalidateQueries({ queryKey: ['admin-opportunities'] });
+    },
+    onError: (e) => toast.error(e.message || 'Could not take the role down'),
+  });
+
+  const switchMut = useMutation({
+    mutationFn: ({ id, toRole, dob }) => switchAccountType(id, toRole, dob),
+    onSuccess: (result, { toRole }) => {
+      const detail =
+        toRole === 'organization'
+          ? `${result?.registrations_withdrawn ?? 0} registration(s) withdrawn`
+          : `${result?.roles_closed ?? 0} live role(s) closed`;
+      toast.success(
+        `Now ${toRole === 'organization' ? 'an organisation, waiting for approval' : 'a volunteer'} (${detail})`
+      );
+      setSwitching(null);
+      qc.invalidateQueries({ queryKey: ['admin-orgs'] });
+      qc.invalidateQueries({ queryKey: ['admin-volunteers'] });
+      qc.invalidateQueries({ queryKey: ['admin-opportunities'] });
+    },
+    onError: (e) => toast.error(e.message || 'Could not switch the account'),
+  });
+
+  const { data: reports, isPending: reportsPending } = useQuery({
+    queryKey: ['admin-problem-reports'],
+    queryFn: getProblemReports,
+    staleTime: 60 * 1000,
+  });
+
+  const reportMut = useMutation({
+    mutationFn: ({ id, status }) => setReportStatus(id, status),
+    onSuccess: (_r, { status }) => {
+      toast.success(status === 'handled' ? 'Report marked handled' : 'Report reopened');
+      qc.invalidateQueries({ queryKey: ['admin-problem-reports'] });
+    },
+    onError: (e) => toast.error(e.message || 'Could not update the report'),
   });
 
   const approvalMut = useMutation({
@@ -168,6 +289,7 @@ export default function AdminDashboard() {
   });
 
   const pendingOrgCount = (orgs ?? []).filter((o) => !o.approved_at).length;
+  const newReportCount = (reports ?? []).filter((r) => r.status === 'new').length;
 
   // Get org name by ID
   const getOrgName = (orgId) => {
@@ -235,6 +357,12 @@ export default function AdminDashboard() {
         <TabBtn id="towns" count={towns?.filter(t => t.is_active)?.length}>
           Towns
         </TabBtn>
+        <TabBtn id="reports" count={newReportCount}>
+          Reports
+        </TabBtn>
+        <TabBtn id="access">
+          Access
+        </TabBtn>
       </div>
 
       {/* Content */}
@@ -293,22 +421,22 @@ export default function AdminDashboard() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={showExpired}
-                    onChange={(e) => setShowExpired(e.target.checked)}
+                    checked={showRemoved}
+                    onChange={(e) => setShowRemoved(e.target.checked)}
                     className="w-4 h-4"
                   />
-                  <span className="text-sm">Show expired</span>
+                  <span className="text-sm">Show removed</span>
                 </label>
               </div>
             </div>
 
-            {(oppQ || oppStatus !== 'All' || oppOrg !== 'All' || showExpired) && (
+            {(oppQ || oppStatus !== 'All' || oppOrg !== 'All' || showRemoved) && (
               <button
                 onClick={() => {
                   setOppQ('');
                   setOppStatus('All');
                   setOppOrg('All');
-                  setShowExpired(false);
+                  setShowRemoved(false);
                 }}
                 className="btn-secondary btn-sm mt-4"
               >
@@ -329,10 +457,11 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {opportunities?.map((op) => {
-                  const dateNeeded = op.date_needed && isValid(parseISO(op.date_needed)) 
-                    ? format(parseISO(op.date_needed), 'PPP')
-                    : 'Ongoing';
-                  
+                  // The "date needed" line that stood here read a column
+                  // nothing ever wrote, so it printed "Ongoing" on every row
+                  // in the table. Posted date is a fact; that was not.
+                  const posted = fmtDate(op.created_at);
+
                   return (
                     <div key={op.id} className="border rounded-lg p-4 hover:opacity-90 transition" style={{ borderColor: 'var(--color-border)' }}>
                       <div className="flex items-start justify-between gap-4">
@@ -353,8 +482,14 @@ export default function AdminDashboard() {
                             </div>
                             <div className="flex items-center gap-2">
                               <Clock size={14} />
-                              <span>{dateNeeded}</span>
+                              <span>Posted {posted}</span>
                             </div>
+                            {op.deleted_at && (
+                              <div className="flex items-center gap-2" style={{ color: 'var(--color-danger)' }}>
+                                <XCircle size={14} />
+                                <span>Removed {fmtDate(op.deleted_at)}</span>
+                              </div>
+                            )}
                             {op.requires_dbs && (
                               <div className="flex items-center gap-2 text-red-600">
                                 <CheckCircle size={14} />
@@ -395,6 +530,16 @@ export default function AdminDashboard() {
                             <User size={14} />
                             View Creator
                           </button>
+                          {!op.deleted_at && (
+                            <button
+                              onClick={() => setTakingDown(op)}
+                              className="btn-secondary btn-sm flex items-center gap-1"
+                              style={{ color: 'var(--color-danger)' }}
+                            >
+                              <XCircle size={14} />
+                              Take down
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -513,6 +658,12 @@ export default function AdminDashboard() {
                           <ExternalLink size={14} />
                           View Opportunities
                         </button>
+                        <button
+                          onClick={() => setSwitching({ account: org, toRole: 'volunteer' })}
+                          className="btn-secondary btn-sm"
+                        >
+                          Make volunteer
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -541,6 +692,7 @@ export default function AdminDashboard() {
                 />
               </div>
               
+              {showTownFilter && (
               <div className="form-row">
                 <label htmlFor="vol-town" className="label">Town</label>
                 <select 
@@ -555,6 +707,7 @@ export default function AdminDashboard() {
                   ))}
                 </select>
               </div>
+              )}
             </div>
 
             {(volQ || volTown !== 'All') && (
@@ -619,13 +772,21 @@ export default function AdminDashboard() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <Link
-                            to={`/volunteers/${v.id}`}
-                            className="btn-secondary btn-sm flex items-center gap-1 w-fit"
-                          >
-                            <User size={14} />
-                            View
-                          </Link>
+                          <div className="flex flex-wrap gap-2">
+                            <Link
+                              to={`/volunteers/${v.id}`}
+                              className="btn-secondary btn-sm flex items-center gap-1 w-fit"
+                            >
+                              <User size={14} />
+                              View
+                            </Link>
+                            <button
+                              onClick={() => setSwitching({ account: v, toRole: 'organization' })}
+                              className="btn-secondary btn-sm w-fit"
+                            >
+                              Make organisation
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -637,10 +798,17 @@ export default function AdminDashboard() {
         </section>
       )}
 
-      {/* TOWNS */}
+      {/* TOWNS (ADM-6) */}
       {activeTab === 'towns' && (
         <section className="card">
-          <h2 className="section-title mb-6">Manage Towns</h2>
+          <h2 className="section-title mb-2">Manage Towns</h2>
+          <p className="text-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+            While only one town is active, nobody is asked to choose a town
+            anywhere on the site &mdash; sign-up, profiles, posting a role, the
+            browse &mdash; and everything is filed under that town. Activate a
+            second town and every one of those choices appears at once. A town
+            cannot be deactivated while any role or person is filed under it.
+          </p>
           <TownEditor
             towns={towns || []}
             onAdd={(name) => addTownMut.mutate(name)}
@@ -650,6 +818,125 @@ export default function AdminDashboard() {
           />
         </section>
       )}
+
+      {/* RECIPIENT LIST AND ADMIN ACCOUNTS (APP-3, APP-6) */}
+      {activeTab === 'access' && <AdminAccessTab currentUserId={currentUserId} />}
+
+      {/* PROBLEM REPORTS (ADM-7) */}
+      {activeTab === 'reports' && (
+        <section className="space-y-4">
+          <div className="card">
+            <h2 className="section-title mb-2">Problem reports</h2>
+            <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              Sent from the &ldquo;Report a problem&rdquo; link in the footer, by
+              visitors as well as signed-in people. Marking one handled records
+              who did it and when, so two admins can see each other&rsquo;s work.
+            </p>
+          </div>
+
+          {reportsPending ? (
+            <div className="card" style={{ color: 'var(--color-text-secondary)' }}>
+              Loading reports…
+            </div>
+          ) : (reports ?? []).length === 0 ? (
+            <div className="card" style={{ color: 'var(--color-text-secondary)' }}>
+              No problem reports. Nothing to clear.
+            </div>
+          ) : (
+            (reports ?? []).map((r) => {
+              const handled = r.status === 'handled';
+              return (
+                <div
+                  key={r.id}
+                  className="card"
+                  style={{ opacity: handled ? 0.65 : 1 }}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="px-2 py-1 text-xs font-medium rounded-full"
+                        style={
+                          handled
+                            ? { backgroundColor: 'var(--color-background-secondary)',
+                                color: 'var(--color-text-secondary)' }
+                            : { backgroundColor: 'var(--color-danger)', color: '#fff' }
+                        }
+                      >
+                        {handled ? 'HANDLED' : 'NEW'}
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                        <Clock className="inline w-3 h-3 mr-1" />
+                        {fmtDate(r.created_at)}
+                      </span>
+                    </div>
+
+                    <button
+                      className={handled ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
+                      disabled={reportMut.isPending}
+                      onClick={() =>
+                        reportMut.mutate({ id: r.id, status: handled ? 'new' : 'handled' })
+                      }
+                    >
+                      {handled ? 'Reopen' : 'Mark handled'}
+                    </button>
+                  </div>
+
+                  <p
+                    className="mt-3 whitespace-pre-wrap text-sm"
+                    style={{ color: 'var(--color-text-primary)' }}
+                  >
+                    {r.message}
+                  </p>
+
+                  <div
+                    className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
+                    <span>
+                      {r.reporter_id ? 'From a signed-in account' : 'From a signed-out visitor'}
+                    </span>
+                    {r.page_url && <span>Page: {r.page_url}</span>}
+                    {r.contact_email ? (
+                      <a
+                        href={`mailto:${r.contact_email}`}
+                        style={{ color: 'var(--color-brand-ink)' }}
+                        className="hover:underline"
+                      >
+                        {r.contact_email}
+                      </a>
+                    ) : (
+                      <span>No reply address given</span>
+                    )}
+                    {handled && r.handled_at && <span>Handled {fmtDate(r.handled_at)}</span>}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </section>
+      )}
+
+      {takingDown && (
+        <TakeDownRoleDialog
+          role={takingDown}
+          orgName={getOrgName(takingDown.org_id)}
+          isPending={takeDownMut.isPending}
+          onClose={() => setTakingDown(null)}
+          onConfirm={(reason) => takeDownMut.mutate({ id: takingDown.id, reason })}
+        />
+      )}
+
+      {switching && (
+        <SwitchAccountDialog
+          account={switching.account}
+          toRole={switching.toRole}
+          isPending={switchMut.isPending}
+          onClose={() => setSwitching(null)}
+          onConfirm={(dob) =>
+            switchMut.mutate({ id: switching.account.id, toRole: switching.toRole, dob })
+          }
+        />
+      )}
     </div>
   );
 }
@@ -657,17 +944,26 @@ export default function AdminDashboard() {
 // ===== Small UI pieces =====
 function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
   const [name, setName] = useState('');
+  // { kind: 'add', name } or { kind: 'activate', id, name }
+  const [confirming, setConfirming] = useState(null);
   const active = towns.filter((t) => t.is_active);
   const inactive = towns.filter((t) => !t.is_active);
 
+  // Activating a town is a site-wide change the moment it lands: going from
+  // one active town to two puts a town picker on every form and the browse.
   const handleAdd = () => {
     if (!name.trim()) {
       toast.error('Town name is required');
       return;
     }
-    onAdd(name.trim());
-    setName('');
+    setConfirming({ kind: 'add', name: name.trim() });
   };
+
+  const confirmMessage =
+    confirming &&
+    (active.length === 1
+      ? `${confirming.name} will be active alongside ${active[0].name}. Town choices will appear straight away on sign-up, profiles, the role forms and the browse, everywhere on the site.`
+      : `${confirming.name} will be offered as a choice everywhere a town is picked.`);
 
   return (
     <div className="space-y-8">
@@ -680,7 +976,7 @@ function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             className="input"
-            placeholder="e.g. Windsor"
+            placeholder="e.g. Maidenhead"
           />
         </div>
         <div className="flex items-end">
@@ -737,7 +1033,7 @@ function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
                 <li key={t.id} className="px-4 py-3 flex items-center justify-between hover:opacity-90">
                   <span style={{ color: 'var(--color-text-secondary)' }}>{t.name}</span>
                   <button
-                    onClick={() => onToggle(t.id, true)}
+                    onClick={() => setConfirming({ kind: 'activate', id: t.id, name: t.name })}
                     disabled={isToggling}
                     className="btn-secondary btn-sm"
                   >
@@ -751,6 +1047,23 @@ function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
           </ul>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={!!confirming}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => {
+          if (confirming.kind === 'add') {
+            onAdd(confirming.name);
+            setName('');
+          } else {
+            onToggle(confirming.id, true);
+          }
+        }}
+        title={confirming?.kind === 'add' ? `Add ${confirming?.name}?` : `Activate ${confirming?.name}?`}
+        message={confirmMessage}
+        confirmText={confirming?.kind === 'add' ? 'Add town' : 'Activate'}
+        confirmStyle="primary"
+      />
     </div>
   );
 }

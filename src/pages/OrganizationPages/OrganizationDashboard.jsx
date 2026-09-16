@@ -3,18 +3,21 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../utils/supabase';
 import { toast } from 'react-hot-toast';
-import { format, parseISO, isValid } from 'date-fns';
 
 import { Edit2, Trash2 } from 'lucide-react';
 import ListSkeleton from '../../components/skeletons/ListSkeleton';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import useUserProfile from '../../hooks/useUserProfile';
 import ApprovalNotice from '../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../utils/approval';
+import { blocksFromTimeblockRows, formatBlockLabel } from '../../utils/schedule';
 
 
 export default function OrganizationDashboard() {
   const [opportunities, setOpportunities] = useState([]);
   const [applicationsCount, setApplicationsCount] = useState({});
+  const [blocksByOpp, setBlocksByOpp] = useState({});
+  const [removing, setRemoving] = useState(null);
   const [orgId, setOrgId] = useState(null);
   const { profile } = useUserProfile();
   const pending = isPendingOrganisation(profile);
@@ -35,10 +38,15 @@ export default function OrganizationDashboard() {
       const uid = userData.user.id;
       setOrgId(uid);
 
+      // ROLE-1. Removed roles stay in the table so their registrations
+      // survive, so this list has to exclude them explicitly — the
+      // organisation's own SELECT policy is `org_id = auth.uid()` and would
+      // otherwise keep showing what they just took down.
       const { data: ops, error: opsError } = await supabase
         .from('volunteer_opportunities')
         .select('*')
         .eq('org_id', uid)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (opsError) {
@@ -64,6 +72,24 @@ export default function OrganizationDashboard() {
             setApplicationsCount(countMap);
           }
         }
+
+        // ROLE-5. The times are in opportunity_timeblocks and nowhere else.
+        if (ids.length > 0) {
+          const { data: blocks, error: blocksError } = await supabase
+            .from('opportunity_timeblocks')
+            .select('opportunity_id, days, start_time, end_time, start_date, end_date')
+            .in('opportunity_id', ids);
+
+          if (blocksError) {
+            console.error('Error fetching timeblocks:', blocksError.message);
+          } else {
+            const map = {};
+            for (const row of blocksFromTimeblockRows(blocks)) {
+              (map[row.opportunity_id] ??= []).push(row);
+            }
+            setBlocksByOpp(map);
+          }
+        }
       }
 
       setLoading(false);
@@ -72,24 +98,29 @@ export default function OrganizationDashboard() {
     fetchOrgIdAndData();
   }, []);
 
-  // This used to warn "this opportunity is in the past" by testing
-  // date_needed -- a column nothing writes, NULL on every row, and
-  // new Date(null) is 1 January 1970. So every single delete said the role
-  // was in the past. The audit caught it; the warning is now just true.
-  const handleDelete = async (id) => {
-    const confirmMsg =
-      'Delete this opportunity permanently? Everyone who registered interest in it will be removed too. If you might offer it again, close it instead.';
+  // ROLE-1. This was a hard DELETE, and applications.opportunity_id is ON
+  // DELETE CASCADE -- so removing a role erased every registration on it, as
+  // the old confirm text admitted out loud. Now it sets deleted_at: the role
+  // and its registrations stay, the public stops seeing it at once, and the
+  // people who registered are told by the notify_on_role_state_change
+  // trigger.
+  //
+  // The database refuses a hard DELETE from a browser now, so this is the
+  // only route, not merely the one the UI offers.
+  const handleRemove = async (op) => {
+    const { error } = await supabase
+      .from('volunteer_opportunities')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', op.id);
 
-    if (!window.confirm(confirmMsg)) return;
-
-    const { error } = await supabase.from('volunteer_opportunities').delete().eq('id', id);
+    setRemoving(null);
 
     if (error) {
-      toast.error('Failed to delete opportunity');
+      toast.error('Could not remove this role');
       console.error(error);
     } else {
-      toast.success('Opportunity deleted');
-      setOpportunities((prev) => prev.filter((o) => o.id !== id));
+      toast.success('Role removed');
+      setOpportunities((prev) => prev.filter((o) => o.id !== op.id));
     }
   };
 
@@ -110,34 +141,22 @@ export default function OrganizationDashboard() {
       setShowReasonDropdown(null);
       setSelectedReason('');
       setCustomReason('');
-      if (newStatus === 'active') navigate(`/edit-opportunity/${id}`);
     }
   };
 
-  const renderWhenNeeded = (blocks) => {
+  // ROLE-5. Reads opportunity_timeblocks -- the rows matching, auto-close and
+  // the public detail page all read -- rather than the `when_needed` jsonb
+  // this list used to print, which was NULL on every live role.
+  const renderTimesNeeded = (blocks) => {
     if (!Array.isArray(blocks) || blocks.length === 0) return null;
 
     return (
       <div className="muted mt-1 text-sm">
         <p className="font-semibold">Times needed</p>
         <ul className="list-disc list-inside ml-2 space-y-1">
-          {blocks.map((block, idx) => {
-            const { days, start_time, end_time, start_date, end_date } = block;
-            return (
-              <li key={idx}>
-                {days?.length > 0 && start_time && end_time ? (
-                  <>
-                    {days.join(', ')} — {start_time} to {end_time}
-                  </>
-                ) : (
-                  'Timing info incomplete'
-                )}
-                {start_date && end_date && isValid(new Date(start_date)) && isValid(new Date(end_date)) && (
-                  <> ({format(parseISO(start_date), 'MMM d')} to {format(parseISO(end_date), 'MMM d')})</>
-                )}
-              </li>
-            );
-          })}
+          {blocks.map((block, idx) => (
+            <li key={idx}>{formatBlockLabel(block)}</li>
+          ))}
         </ul>
       </div>
     );
@@ -182,20 +201,17 @@ export default function OrganizationDashboard() {
                   {op.location && op.location !== op.town && (
                     <span className="tag-plain">{op.location}</span>
                   )}
-                  {isValid(new Date(op.date_needed)) &&
-                    new Date(op.date_needed).getFullYear() > 1971 && (
-                      <span className="tag-plain">
-                        {format(new Date(op.date_needed), 'd MMM yyyy')}
-                      </span>
-                    )}
+                  {/* The date tag that stood here read `date_needed`, a column
+                      nothing ever wrote. It was NULL on every row and
+                      new Date(null) is 1 January 1970, so the guard against
+                      1971 was the only thing keeping "1 Jan 1970" off every
+                      card. Column and tag are both gone. */}
                   <span className="tag-plain">
                     {op.volunteers_needed ?? 1} needed
                   </span>
                 </div>
 
-                {!op.generally_needed && renderWhenNeeded(op.when_needed)}
-
-                <p className="caption">{op.contact}</p>
+                {!op.generally_needed && renderTimesNeeded(blocksByOpp[op.id])}
 
                 {op.status !== 'draft' && (
                   <p className="highlight">
@@ -214,12 +230,18 @@ export default function OrganizationDashboard() {
                       View interested volunteers
                     </button>
                   )}
+                  {/* ROLE-4. The "Mark as Active" button that stood here put
+                      a role straight back on the browse with whatever dates
+                      it closed with -- usually dates already in the past.
+                      Reopening now happens in the edit form, where the
+                      organisation is looking at those dates while it decides.
+                      One button, one place, no reopening by accident. */}
                   {op.status == 'closed' && (
                     <button
-                      onClick={() => handleStatusChange(op.id, 'active')}
+                      onClick={() => navigate(`/edit-opportunity/${op.id}`)}
                       className="btn-success-outline btn-sm"
                     >
-                      Mark as Active
+                      Review and reopen
                     </button>
                   )}
                   {op.status == 'active' && (
@@ -241,10 +263,10 @@ export default function OrganizationDashboard() {
                       <Edit2 size={18} />
                     </button>
                     <button
-                      aria-label="Delete"
-                      onClick={() => handleDelete(op.id)}
+                      aria-label="Remove"
+                      onClick={() => setRemoving(op)}
                       className="icon-btn icon-btn-danger"
-                      title="Delete"
+                      title="Remove"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -358,6 +380,39 @@ export default function OrganizationDashboard() {
           {renderSection('Closed', 'Closed', { hideWhenEmpty: true })}
         </>
       )}
+
+      {/* ConfirmDialog rather than window.confirm, and the wording is now
+          true: nobody is erased. It also says removal cannot be undone,
+          because the database refuses to clear deleted_at -- a volunteer
+          told "this role was removed" must not have that quietly reversed. */}
+      <ConfirmDialog
+        isOpen={!!removing}
+        onClose={() => setRemoving(null)}
+        onConfirm={() => handleRemove(removing)}
+        title="Remove this role?"
+        confirmText="Remove role"
+        confirmStyle="danger"
+        message={
+          <>
+            <p>
+              <strong>{removing?.title || 'This role'}</strong> will disappear
+              from the browse straight away, and anyone who registered interest
+              will be told it was removed.
+            </p>
+            <p className="mt-2">
+              {(applicationsCount[removing?.id] ?? 0) > 0
+                ? `The ${applicationsCount[removing?.id]} ${
+                    applicationsCount[removing?.id] === 1 ? 'person' : 'people'
+                  } who registered will stay on your records — nothing about them is deleted.`
+                : 'Nobody has registered interest in it yet.'}
+            </p>
+            <p className="mt-2">
+              This cannot be undone. If you might offer it again, close it
+              instead — a closed role can be reopened.
+            </p>
+          </>
+        }
+      />
     </div>
   );
 }

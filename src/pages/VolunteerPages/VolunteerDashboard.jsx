@@ -49,18 +49,17 @@ export default function VolunteerDashboard() {
     queryKey: ['my_applications', userId],
     enabled: !!userId,
     queryFn: async () => {
+      // my_registrations, not applications joined to volunteer_opportunities.
+      // A volunteer reads roles through `opportunities: public reads active
+      // only`, so the embedded join returned NULL for anything closed or
+      // removed and this list printed the bare word "Opportunity". The view
+      // runs with owner rights, is scoped to auth.uid(), and carries no
+      // contact column — see the migration for why a view rather than a
+      // policy.
       const { data, error } = await supabase
-        .from('applications')
-        .select(`
-          id,
-          created_at,
-          subject,
-          message,
-          org:org_id ( name ),
-          volunteer_opportunities ( title, location, date_needed )
-        `)
-        .eq('volunteer_id', userId)
-        .order('created_at', { ascending: false });
+        .from('my_registrations')
+        .select('*')
+        .order('registered_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -86,9 +85,23 @@ export default function VolunteerDashboard() {
   const applications = applicationsData ?? [];
   const approaches = approachesData ?? [];
 
+  // INT-4. This used to DELETE the row. The row is now kept and marked
+  // withdrawn: it vanishes from the organisation's list as though it had
+  // never been made and they are never told, but the record survives so the
+  // audit log can still explain a message that was already sent. Delete it
+  // and a legitimate email starts looking like an unprompted approach to
+  // someone who never registered.
+  //
+  // Through an RPC rather than an UPDATE: granting `withdrawn_at` to
+  // `authenticated` would also hand it to the organisation via its dismiss
+  // policy, letting an org hide a registration from itself in a way that
+  // looks exactly like the volunteer withdrawing. DELETE is revoked and
+  // refused by trigger, so this is the only door.
   const withdraw = useMutation({
     mutationFn: async (applicationId) => {
-      const { error } = await supabase.from('applications').delete().eq('id', applicationId);
+      const { error } = await supabase.rpc('withdraw_registration', {
+        p_application_id: applicationId,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -144,17 +157,34 @@ export default function VolunteerDashboard() {
       ) : (
         <ul className="stack-lg">
           {applications.map((application) => (
-            <li key={application.id} className="card stack">
+            <li key={application.application_id} className="card stack">
               <h3 className="card-title">
-                {application.volunteer_opportunities?.title || 'Opportunity'}
+                {application.opportunity_title || 'Opportunity'}
               </h3>
               <p className="caption">
-                {application.org?.name || 'Organisation'} ·{' '}
-                {application.volunteer_opportunities?.location || 'Location not given'}
+                {application.org_name || 'Organisation'} ·{' '}
+                {application.opportunity_location || 'Location not given'}
               </p>
               <p className="caption">
-                Registered {format(new Date(application.created_at), 'PPP')}
+                Registered {format(new Date(application.registered_at), 'PPP')}
               </p>
+
+              {/* ROLE-1 and ROLE-2. The organisation is never asked to
+                  explain itself and the volunteer is never left guessing why
+                  a role vanished. Removed wins over closed: a removed role is
+                  not coming back, and saying "closed" would invite them to
+                  watch for it. */}
+              {application.opportunity_removed ? (
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                  This role has been removed. Your registration
+                  stays on your record, but there is nothing to hear back about.
+                </p>
+              ) : application.opportunity_status === 'closed' ? (
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                  This role has closed. If they had already been in touch, that
+                  conversation carries on by email.
+                </p>
+              ) : null}
 
               {application.subject?.trim() && (
                 <p className="highlight">{application.subject}</p>
@@ -217,7 +247,7 @@ export default function VolunteerDashboard() {
       <ConfirmDialog
         isOpen={!!withdrawing}
         onClose={() => setWithdrawing(null)}
-        onConfirm={() => withdraw.mutate(withdrawing.id)}
+        onConfirm={() => withdraw.mutate(withdrawing.application_id)}
         title="Withdraw your interest?"
         confirmText="Withdraw"
         confirmStyle="danger"
@@ -227,11 +257,15 @@ export default function VolunteerDashboard() {
               This takes you off the organisation&rsquo;s list of people
               interested in{' '}
               <strong>
-                {withdrawing?.volunteer_opportunities?.title || 'this opportunity'}
+                {withdrawing?.opportunity_title || 'this opportunity'}
               </strong>
               .
             </p>
+            {/* INT-4: the organisation is never told, deliberately —
+                being told invites a chase, and nobody should have to
+                explain themselves. Worth saying out loud. */}
             <p className="mt-2">
+              It simply disappears from their list, and they are not told.
               You can register again later if you change your mind.
             </p>
           </>

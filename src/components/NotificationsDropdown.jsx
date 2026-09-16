@@ -32,14 +32,42 @@ export default function NotificationsDropdown() {
     }
   }, [isOpen, setIsOpen]);
 
-  // No notification type routes anywhere yet. The hours_* types this used to
-  // map to went with Log Hours, and nothing has ever written to `notifications`
-  // (0 rows). Returning null renders the row as plain, unclickable text rather
-  // than a link into the catch-all redirect; add cases here when something
-  // starts writing notifications.
-  const getNotificationLink = () => null;
+  // The six kinds the database can write (notifications_type_valid). Any
+  // other value renders as plain, unclickable text rather than following a
+  // link into the catch-all redirect.
+  const getNotificationLink = ({ type, reference_id: ref }) => {
+    switch (type) {
+      case 'interest_registered':
+        return ref ? `/opportunity/${ref}/applicants` : '/organization-dashboard';
+      case 'role_changed':
+        return ref ? `/opportunities/${ref}` : '/volunteer-dashboard';
+      // ROLE-1. A removed role's detail page is a dead end by design -- the
+      // policy hides it, so this would land on "This role isn't available"
+      // and look like a broken link rather than an explanation. The
+      // volunteer's own page names the role and says who removed it.
+      case 'role_removed':
+        return '/volunteer-dashboard';
+      case 'outreach_received':
+        return '/volunteer-dashboard';
+      case 'org_awaiting_approval':
+      case 'problem_reported':
+        return '/admin';
+      default:
+        return null;
+    }
+  };
 
-  const getNotificationIcon = () => '🔔';
+  const getNotificationIcon = ({ type }) => {
+    switch (type) {
+      case 'outreach_received':     return '✉️';
+      case 'interest_registered':   return '🙋';
+      case 'role_changed':          return '📅';
+      case 'role_removed':          return '🗑️';
+      case 'org_awaiting_approval': return '🏢';
+      case 'problem_reported':      return '⚠️';
+      default:                      return '🔔';
+    }
+  };
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -111,7 +139,7 @@ export default function NotificationsDropdown() {
             ) : (
               <ul>
                 {notifications.map((notification) => {
-                  const link = getNotificationLink();
+                  const link = getNotificationLink(notification);
                   const isUnread = !notification.read_at;
                   
                   const NotificationContent = (
@@ -125,7 +153,7 @@ export default function NotificationsDropdown() {
                     >
                       {/* Icon */}
                       <div className="text-2xl flex-shrink-0">
-                        {getNotificationIcon()}
+                        {getNotificationIcon(notification)}
                       </div>
 
                       {/* Content */}

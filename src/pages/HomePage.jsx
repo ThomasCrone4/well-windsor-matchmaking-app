@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import {
   formatOpportunitySchedule,
   compareByEarliestStart,
+  blocksFromTimeblockRows,
 } from '../utils/schedule';
 
 export default function HomePage() {
@@ -101,7 +102,6 @@ export default function HomePage() {
           description,
           location,
           requires_dbs,
-          when_needed,
           generally_needed,
           volunteers_needed,
           status,
@@ -146,11 +146,43 @@ export default function HomePage() {
     return map;
   }, [orgRows]);
 
+  // ROLE-5. The schedule is in opportunity_timeblocks and nowhere else, so
+  // the three roles on the front page have to read it too — otherwise both
+  // the line under each title and the "earliest start" ordering fall back to
+  // nothing, which is what the dropped `when_needed` column gave them.
+  const oppIds = useMemo(
+    () => (opportunities ?? []).map((o) => o.id).filter(Boolean),
+    [opportunities]
+  );
+
+  const { data: blockRows } = useQuery({
+    queryKey: ['home_timeblocks', oppIds],
+    enabled: oppIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('opportunity_timeblocks')
+        .select('opportunity_id, days, start_time, end_time, start_date, end_date')
+        .in('opportunity_id', oppIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
   // Sort by earliest start using schedule util; then show top 3
   const topThree = useMemo(() => {
     if (!opportunities) return [];
-    return [...opportunities].sort(compareByEarliestStart).slice(0, 3);
-  }, [opportunities]);
+    const byOpp = new Map();
+    for (const row of blocksFromTimeblockRows(blockRows ?? [])) {
+      const list = byOpp.get(row.opportunity_id) ?? [];
+      list.push(row);
+      byOpp.set(row.opportunity_id, list);
+    }
+    return [...opportunities]
+      .map((op) => ({ ...op, timeblocks: byOpp.get(op.id) ?? [] }))
+      .sort(compareByEarliestStart)
+      .slice(0, 3);
+  }, [opportunities, blockRows]);
 
 
   return (

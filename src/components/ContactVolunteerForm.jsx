@@ -7,8 +7,10 @@
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import ConfirmDialog from './ConfirmDialog';
+import { supabase } from '../utils/supabase';
 import {
   sendOutreach,
   cooldownHoursRemaining,
@@ -28,6 +30,38 @@ export default function ContactVolunteerForm({
   const [confirming, setConfirming] = useState(null);
   const [sending, setSending] = useState(false);
 
+  // CON-5. From the applicants page the role is already known and fixed --
+  // they registered for that one. From the volunteers browse there is no
+  // role, so the organisation may attach one of its own live roles, or
+  // none. Only its own, and only live ones: the picker is the thing that
+  // decides what a link in an email under the charity's name points at, and
+  // that link is trusted more than a link on a page. The Edge Function
+  // re-checks it; this list is so the organisation cannot pick a bad one in
+  // the first place.
+  const fixedRole = !!opportunityId;
+
+  const { data: myRoles } = useQuery({
+    queryKey: ['own_live_roles_for_outreach'],
+    enabled: !fixedRole,
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const orgId = session?.session?.user?.id;
+      if (!orgId) return [];
+      const { data, error } = await supabase
+        .from('volunteer_opportunities')
+        .select('id, title')
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const roles = myRoles ?? [];
+
   const {
     register,
     handleSubmit,
@@ -37,19 +71,23 @@ export default function ContactVolunteerForm({
     defaultValues: {
       subject: opportunityTitle ? `About ${opportunityTitle}` : '',
       message: '',
+      role_id: '',
     },
   });
 
   const messageLength = (watch('message') || '').length;
+  const chosenRoleId = watch('role_id');
+  const chosenRole = roles.find((r) => r.id === chosenRoleId) ?? null;
   const hoursLeft = cooldownHoursRemaining(lastSentAt);
   const name = volunteerName || 'this volunteer';
 
-  const send = async ({ subject, message }) => {
+  const send = async ({ subject, message, role_id: roleId }) => {
     setSending(true);
     try {
       await sendOutreach({
         volunteerId,
-        opportunityId,
+        // The fixed role wins; otherwise whatever they picked, or nothing.
+        opportunityId: opportunityId ?? (roleId || null),
         subject: subject.trim(),
         message: message.trim(),
       });
@@ -97,6 +135,29 @@ export default function ContactVolunteerForm({
             same volunteer once every 24 hours.
           </p>
         </div>
+
+        {/* CON-5. Only shown on a cold approach — from the applicants page
+            the role is already fixed and named in the line above. Optional
+            by design: "we wondered whether this might suit you" is a real
+            reason to write, and so is having no particular role in mind. */}
+        {!fixedRole && roles.length > 0 && (
+          <div className="form-row">
+            <label htmlFor="outreach-role" className="label">
+              Mention one of your roles <span className="help-text">(optional)</span>
+            </label>
+            <select id="outreach-role" {...register('role_id')} className="select">
+              <option value="">No particular role</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>{r.title}</option>
+              ))}
+            </select>
+            <p className="help-text">
+              {chosenRole
+                ? `The email will name "${chosenRole.title}" and link to it.`
+                : 'Only your own live roles can be attached.'}
+            </p>
+          </div>
+        )}
 
         <div className="form-row">
           <label htmlFor="outreach-subject" className="label required">

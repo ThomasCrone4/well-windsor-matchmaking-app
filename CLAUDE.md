@@ -5,9 +5,9 @@ Royal Borough of Windsor and Maidenhead. Built for Well Windsor, a UK charity
 (reg. 1207021) funding mental-health provision in Windsor schools.
 
 **This is Windsor, UK — not Windsor, Ontario.** The product is **Windsor
-only** in the UI (`src/utils/towns.js` is `['Windsor']`), while the `town`
-CHECK still admits Maidenhead and Slough, so a town can be added back with a
-one-line change and no migration.
+only** because Windsor is the only *active* row in the `towns` table. Admins
+add and activate towns from the dashboard; there is no list in code and no
+CHECK any more (workflow 7, ADM-6).
 
 **Real users, real data.** The production database holds accounts belonging to
 actual people. Treat destructive operations accordingly.
@@ -51,9 +51,18 @@ volunteer's profile row, and adding one is not the answer. Use a view:
 | `opportunity_applicants` | people who applied to *your* opportunities |
 | `org_outreach_sent` | *your* outreach log, with the volunteer's name |
 | `public_organisations` | every organisation: id, name, home_town, bio |
+| `my_registrations` | *your own* registrations, with the role attached |
 
-All four run with owner rights (`security_invoker = false`) and carry no
-contact columns. `public_volunteers` returns rows only to an **approved
+All five run with owner rights (`security_invoker = false`) and carry no
+contact columns.
+
+`my_registrations` exists because a volunteer reads roles through
+`opportunities: public reads active only`, so the moment a role closes or is
+removed the embedded join returns NULL and their dashboard printed the bare
+word "Opportunity". That was true of every **closed** role since the policy
+was written — it only became visible when ROLE-1 gave people a reason to
+look. `applications.opportunity_title` looks like the fix and is NULL on
+every row, written by nothing. `public_volunteers` returns rows only to an **approved
 organisation** (`is_approved_org(auth.uid())`), not to volunteers or pending
 orgs. `public_organisations` lists approved organisations only and is
 readable by `anon` too. Supabase's linter flags
@@ -76,9 +85,8 @@ resolves it server-side and sets `Reply-To` to the org. The client passes a
 one.
 
 **`town` filters, `location` describes.** `volunteer_opportunities` has
-both. `town` is the filter key, CHECK-constrained to the list in
-`src/utils/towns.js`, and required once `status = 'active'` (a second
-CHECK). `location` is free text for the venue — "St Edward's, Parsonage
+both. `town` is the filter key, a foreign key to `towns(name)`, and
+required once `status = 'active'` (a CHECK). `location` is free text for the venue — "St Edward's, Parsonage
 Lane". Filtering on `location` is the bug this split fixed: it was an exact
 string match that only worked because every seed row happened to say
 exactly "Windsor", and the first org to type a real address vanished from a
@@ -116,12 +124,78 @@ function a way to mail anyone under the charity's name. `user_profiles` now
 grants UPDATE on nine named columns only; `email`, `role` and `approved_at`
 are not among them.
 
-**The schedule lives in two places, and they disagree.** `when_needed`
-(jsonb) is what the forms write for their own editing; the normalised
-`opportunity_timeblocks` is what matching and auto-close read. On the seed
-rows `when_needed` is NULL while a timeblock exists. Read timeblocks when
-you need the truth (the detail page does). `date_needed` is dead: NULL on
-every row, written by nothing.
+**`opportunity_timeblocks` is the schedule — the whole schedule (2026-09-15).**
+`when_needed`, `date_needed` and `contact` are **dropped columns**; writing
+any of them is a `PGRST204`. Every surface reads timeblocks now: the browse
+cards, the home page, the detail page, the org dashboard, the edit form's
+matrix and `match_opportunities_by_availability`.
+
+Two things bite here:
+
+- **Postgres `time` renders as `HH:MM:SS`,** and `toMinutes()` used to accept
+  only `HH:MM`. So every time parsed as null, `consistent` came out false,
+  and every schedule anywhere read **"Times vary"** instead of the hours. It
+  was invisible while only the detail page read timeblocks. `npm run build`
+  and eslint were both clean on it; the Playwright walk found it.
+- **Both forms rewrite timeblocks by deleting every row and re-inserting, on
+  every save,** whether or not anything changed. A trigger on that table
+  would therefore fire on saves that changed nothing. That is what
+  `schedule_revision` is for: the client compares with `sameSchedule()` and
+  bumps the counter only on a real change, giving the parent row something
+  honest for the ROLE-2 notice to notice.
+
+**A registration is withdrawn, never deleted (2026-09-16).** `applications`
+has no `subject` column (INT-2 — registering is a button plus one optional
+note) and gained `withdrawn_at` (INT-4). Withdrawn means invisible to the
+organisation, which is **never told** — enforced on the base table's SELECT
+policy, not only in `opportunity_applicants`, because the dashboard's
+"N people interested" count reads the table directly.
+
+Four things hold it together, and each closes a hole the others leave:
+
+- **The organisation cannot un-withdraw it.** RLS evaluates UPDATE's `USING`
+  against the *existing* row, so a dismiss policy without `withdrawn_at is
+  null` would let an org update a row it is not allowed to read.
+- **Only `withdraw_registration()` sets it.** A column grant would reach the
+  organisation too, via its dismiss policy — letting an org hide a
+  registration from itself in a way that looks exactly like the volunteer
+  withdrawing.
+- **DELETE is revoked and refused by trigger,** scoped to the browser roles
+  so ACC-6's cascade still works.
+- **The unique constraint is partial** (`where withdrawn_at is null`). It
+  used to be a plain `UNIQUE (volunteer_id, opportunity_id)`, which a kept
+  withdrawn row would have turned into a permanent lock-out — while the
+  withdraw dialog promises "you can register again later".
+
+> **A withdrawn registration is not permission to email (trap 4b).**
+> `send-outreach` unlocks contact if the volunteer "applied to one of your
+> roles", and INT-4 keeps those rows for ever. That count therefore filters
+> `withdrawn_at is null`. Without it, withdrawing would remove someone from
+> the organisation's list while leaving them emailable — the exact opposite
+> of what INT-4 is for. Whenever `applications` changes, re-read that count
+> with the change in mind.
+
+**A role is removed, never deleted (2026-09-15).** `deleted_at` non-null
+means gone: hidden from the browse policy, the timeblocks policy, the match
+RPC, the nightly auto-close and registration. Its registrations survive —
+that is the point, and `applications.opportunity_id` is `ON DELETE CASCADE`,
+so a hard DELETE would erase them. `DELETE` is therefore revoked from
+`anon` and `authenticated` **and** refused by trigger. Two consequences that
+have already caught scripts out:
+
+- **Any probe or walk that cleaned up with a `DELETE` now fails silently and
+  leaves a throwaway role live on the public browse.** Five of them did.
+  `PATCH {"deleted_at": "now()"}` is the cleanup now.
+- **Removal is terminal** — clearing `deleted_at` is refused, because a
+  volunteer told "this role was removed" must not have that quietly
+  reversed. A fixture role a test removes cannot be reused; create a fresh
+  one per run. ROLE-4 makes *closed* the reversible state, not removed.
+
+The no-hard-delete trigger is scoped to `current_user in ('authenticated',
+'anon')` so that **ACC-6 still cascades** — `volunteer_opportunities.org_id`
+is `ON DELETE CASCADE` on `user_profiles`, and an unconditional raise would
+break account deletion. Proven by running the real `delete-account` function,
+not by reading the trigger.
 
 **Zod `.optional()` does not accept `null`, and `reset()` feeds it the raw
 database row.** `EditOpportunity` resets the form from `select('*')`, so
@@ -325,6 +399,24 @@ will raise `UnicodeEncodeError` before you see any output.
    already have an unrelated permitting relationship proves nothing —
    the earlier relationship, not the one under test, explains a pass.
    Use a fresh pair with no history for the negative case.
+6b. **A trigger that notifies "every admin" reaches the real admin, even
+   when every id you touched was a throwaway.** Inserting a
+   `problem_reports` row or signing up a throwaway organisation fans out to
+   `admins`, which contains a real person. Six junk `problem_reported`
+   notifications landed in the live admin's feed during workflow 1 before
+   this was noticed — in-app only, and deleted, but not something the
+   throwaway-id rule prevents on its own. Before testing anything that
+   notifies a *class* of user rather than a named one, check who is in that
+   class, and clean up by `type` and timestamp afterwards rather than by
+   `user_id like '7e57%'` — the row belongs to the *admin*, so deleting the
+   throwaway that caused it cascades nothing.
+   **Partly closed since:** `is_test_address()` now stops a `.invalid`
+   account raising either the email or the bell alert on organisation
+   signup. It was added to the email path first and the bell was missed,
+   which put two more junk rows in the live admin's feed an hour later —
+   **when two triggers fire on one event, guard both or neither.** An
+   anonymous problem report has no identity to test, so testing that path
+   still means unscheduling `drain-email-outbox` first.
 6. **Never use a real user's id as a test target — including for a test
    you expect to be REJECTED.** A negative test is only free if the
    expectation holds. On 2026-09-03 a "this org has no relationship,
@@ -366,8 +458,10 @@ next one starts. It carries a verified snapshot of the live database and
 repo as of that date — trust it over the older notes below where they
 disagree.
 
-Working towards a publishable v0. Earlier plan, including what was
-deliberately removed:
+Working towards a publishable v0. The earlier plan (2026-09-03), including
+what was deliberately removed, is **superseded by BUILD-PLAN.md** — its phases
+0–4 are done and phase 5 became workflow 8. Kept on the development machine
+for history only:
 
     C:\Users\thoma\.claude\plans\i-m-picking-up-this-glowing-platypus.md
 
@@ -429,19 +523,405 @@ Before going public, none of which is code:
 
 Known, not yet fixed, lower priority:
 - Signed-in users can read organisations' `email` and `contact_number` from
-  `user_profiles` (the orgs-are-public policy plus table-wide SELECT). The
-  match RPC also still returns `contact` to volunteers.
-- Browse cards read `when_needed`, so the seed roles show no schedule tag.
-- ML and Log Hours residue: `pgvector` in `public`, the `embedding_*`
-  columns, `match_results`, `calculate_match_score`,
-  `match_volunteers_for_opportunity`, the `hours_*` functions,
-  `get_public_counts`, `site_settings`.
+  `user_profiles` (the orgs-are-public policy plus table-wide SELECT).
+  (The match RPC no longer returns `contact` — workflow 5 dropped the column
+  outright, so that half of this is closed.)
 - The `enquiry_attachments` bucket is unused and accepts uploads of any
   size or type from any signed-in user.
-- Admins get no notification when an org signs up; they must check the page.
-- **Admin suspend/remove is unbuilt, not merely unwired.** It needs an
-  enforced `is_active` plus a service-role function setting
-  `auth.users.banned_until`. Org approval is the nearest thing that exists.
+- **Admin suspend/remove is unbuilt.** Out of scope by decision
+  (BUILD-PLAN) — withdrawing an organisation's approval already takes its
+  roles down, and `user_status` has been deleted rather than left as a flag
+  that means nothing. Do not build `is_active`.
+
+**Workflow 1 is done (2026-09-13, branch `wf1-foundations`).** Four
+migrations, all applied and probed from outside:
+
+- **The ML and Log Hours residue is gone.** `match_results`,
+  `volunteer_hours`, `user_status`, `site_settings`, the `embedding_*`
+  columns, `logged_hours`, the `hours_*`/`calculate_match_score`/
+  `match_volunteers_for_opportunity`/`get_public_counts` functions and
+  `pgvector` are all dropped. The old "residue" list here is obsolete.
+- **`audit_logs` is append-only and records system events.** `admin_id` is
+  now `actor_id` + `actor_kind` (`admin`/`system`/`user`), both foreign
+  keys dropped so an account deletion cannot blank the log, and UPDATE and
+  DELETE are refused *even to the table owner* by trigger. The only writer
+  is `record_audit_event()`; the only editor is
+  `redact_user_from_audit_log()` (ADM-4), which workflow 3 calls. EXECUTE
+  on both is revoked from `public`, `anon` and `authenticated`, so neither
+  is reachable from a browser.
+- **`notifications` has six CHECKed types and the client cannot write one.**
+  No INSERT grant to anyone; UPDATE is granted on `read_at` alone. Four
+  triggers are live: interest registered, outreach sent, role closed, and
+  organisation signed up — so admins **are** now told about a new
+  organisation. `problem_reported` is wired. (`role_removed` waited for
+  workflow 5's soft-delete column and is now live — `notify_role_closed` was
+  replaced by `notify_role_state_change`, which covers removed, closed and
+  changed.)
+- **`problem_reports` is the one table `anon` may INSERT into,** on three
+  columns only. Reads are admin-only. That combination means **a reporter
+  cannot read the row back, so `Prefer: return=representation` fails on the
+  RETURNING even though the INSERT is allowed** — post without `.select()`.
+  This produced four false passes in a probe before it was spotted.
+
+Re-runnable: `.scratch/probe_wf1.py` (47 outside-in cases) and
+`.scratch/walk_wf1.py` (16 UI checks).
+
+**Workflow 2 is built (2026-09-13, branch `wf2-email`).** Three migrations
+and two Edge Functions.
+
+- **Email goes through an outbox, never straight out of a trigger.** A
+  trigger that called Brevo over HTTP would make approving an organisation
+  fail whenever Brevo was down. Triggers `INSERT` into `email_outbox`;
+  `drain-email-outbox` (pg_cron, every minute) pings the **`send-email`**
+  Edge Function, which sends and writes the result back. A failed send is a
+  row with an error, not a lost email. Five attempts, then `abandoned`.
+- **`send-email` runs with `verify_jwt = false`** — it is reachable by
+  anyone on the internet. Its only door is a secret in Vault, compared
+  inside the database by `verify_email_hook_secret()`. **Do not make the
+  Edge Function read `vault.decrypted_secrets` itself**: PostgREST only
+  exposes configured schemas, `vault` is not one, and it fails closed with
+  a 401 that looks exactly like a wrong secret.
+- **The digest runs hourly and acts only at 08:00 Europe/London**, because
+  pg_cron schedules in UTC and the two disagree for half the year.
+  `org_digest_state` is the per-organisation watermark; it moves even on a
+  quiet day, so a silent day cannot make tomorrow repeat today.
+- **Charity-facing alerts are redirected to a personal inbox until launch.**
+  `charity_notification_recipients()` reads the `charity_notification_email`
+  Vault secret and falls back to `hello@wellwindsor.org.uk` when it is
+  absent. **Delete the secret at launch** and it reverts on its own; APP-3
+  (workflow 4) replaces the whole function with the editable list.
+
+  This exists because **eleven real "a problem was reported" emails reached
+  `hello@wellwindsor.org.uk` during workflow 2 testing, and three were
+  opened by a person.** `probe_wf1.py` files problem reports, the trigger
+  emails the charity, and the drain was scheduled. A note had been written an
+  hour earlier saying that exact path needed the drain paused first — and
+  the probe was then run several times anyway. **A rule that depends on
+  remembering is not a control; move the address, not the discipline.**
+- **Email really sends, and that is deliberate.** The user tests the app for
+  real, so there is no global hold. `email_delivery_mode` (Vault) is `live`
+  and exists only as a kill switch: set it to `test` and `send-email` holds
+  anything not on `.invalid`, marking the row `held` — kept in full, not
+  sent, not lost. **Claude must not send to a real address unless the user
+  asks.** Volunteer- and organisation-facing mail already goes to `.invalid`
+  throwaways; the charity-facing mail is redirected above; so an ordinary
+  test run reaches nobody real.
+- **A `.invalid` account also raises no alert at all.** `is_test_address()`
+  guards both the signup email and the in-app admin notification, so a
+  throwaway organisation stays invisible to the charity even in live mode.
+- Sending is still from the development Gmail: the domain is
+  unauthenticated, so Brevo rewrites the From to `…@brevosend.com`.
+  `BREVO_SENDER_EMAIL` / `EMAIL_REPLY_TO` / `EMAIL_PRIVACY_URL` /
+  `EMAIL_LOGO_URL` are the switches — set secrets, do not edit code.
+
+Re-runnable: `.scratch/probe_wf2.py` (41 outside-in cases).
+
+**Workflow 3 is built (2026-09-13, branch `wf3-accounts`).** Three migrations
+and two Edge Functions.
+
+- **`ProtectedRoute` renders a page, it does not redirect.** A signed-in
+  person in the wrong area used to be sent to `/auth` with a toast, which
+  reads as "you have been logged out" and invites them to sign in again with
+  the account they are already using. `AdminRoute` did the same to `/` and
+  called `toast.error` from its render body, so it re-fired on every render.
+  Not signed in still redirects — that genuinely is what they need.
+- **Deleting an account cascades further than the plan expected.**
+  `org_outreach` is `ON DELETE CASCADE` on *both* its org and volunteer
+  columns, so deleting a volunteer erases the evidence that an organisation
+  was permitted to write to them — the same thing `INT-4` keeps withdrawn
+  registrations for. `prepare_account_deletion()` therefore writes a dated
+  `outreach_preserved_on_deletion` entry per message (org, role, date,
+  status — never text or names) **before** `auth.admin.deleteUser`, then runs
+  the ADM-4 redaction. `audit_logs` has no foreign keys, which is what lets
+  it outlive the account.
+- **`delete-account` takes no user id.** It deletes `auth.uid()` and nothing
+  else, so there is no parameter to point at someone else, and it requires
+  `{"confirm":"DELETE"}` so a stray request cannot delete an account. It
+  refuses an admin, because there is exactly one admin row.
+- **`auth.users.email` and `user_profiles.email` are kept in step** by a
+  trigger. They could drift, and drift is how `send-outreach` became a way to
+  mail anyone under the charity's name.
+- **A `.invalid` problem report now raises neither the email nor the bell.**
+  `problem_report_is_test()` treats a `.invalid` reply address or reporter as
+  a test — a real visitor never types one. This replaces the old note saying
+  "pause the drain first", which was wrong twice and put junk in the live
+  admin's feed both times. **Every probe must give a `.invalid`
+  `contact_email` when filing a report.**
+
+- **ACC-8's self-service flow cannot be tested with throwaways, and is
+  therefore unproven.** Supabase Auth validates deliverability on the
+  user-facing `PUT /auth/v1/user` and rejects any domain with no MX — both
+  `.invalid` and `example.com`. It reports the **current** address as
+  invalid, so an account on `.invalid` can never change its own email at
+  all. `admin.updateUserById` is *not* validated, which is why ADM-8 is
+  proven end to end and ACC-8 is not. Testing ACC-8 needs a real deliverable
+  address. Whether the old address is also notified depends on Supabase's
+  **"Secure email change"** setting, which cannot be read from here.
+
+Re-runnable: `.scratch/probe_wf3.py` (37 cases — it signs up its own doomed
+account so it can be run more than once, and it covers the ADM-8 happy path,
+not only the denials) and `.scratch/walk_wf3.py` (17 UI checks).
+
+**Prove the feature works, not only that it refuses.** Workflow 3's first
+pass tested every way ADM-8 could fail and never once that it succeeds —
+the same shape as `has_application_with()`, which read correctly in every
+comment and had no status filter in its SQL. A suite of denials can be
+entirely green while the feature does nothing at all.
+
+**Workflow 4 is built (2026-09-14, branch `wf4-approval`).** Three
+migrations and one new admin tab.
+
+- **`notification_recipients` (APP-3)** is who gets emailed when an
+  organisation is waiting. `hello@wellwindsor.org.uk` is the permanent row
+  and **cannot be deleted, paused, demoted or readdressed by anyone,
+  including the table owner** — it is a trigger, not a policy, because
+  "cannot be removed" has to mean cannot, not cannot-from-the-UI. A partial
+  unique index allows only one permanent row. Every change is logged.
+- **The development redirect still wins over the list.**
+  `charity_notification_email` in Vault short-circuits
+  `charity_notification_recipients()`, because hello@ is now unpausable by
+  design and building the list must not undo the fix for the eleven emails
+  that reached the charity. Delete the secret at launch and it falls
+  through to the table.
+- **APP-6:** `list_admins()`, `grant_admin()` and `revoke_admin()`, all
+  admin-only and logged. `admins` cannot carry an `is_admin()` policy —
+  that function reads `admins`, so a policy there recurses (trap 3) — which
+  is why listing every admin is a SECURITY DEFINER function and the only
+  policy on the table is self-read.
+- **Nobody removes their own admin access.** Found by reading `relacl`:
+  `authenticated` held `arwd` on `admins` and the DELETE policy checked only
+  that the caller *is* an admin, never which row was going — with one admin
+  row, a one-click lockout of the whole charity. Direct INSERT/UPDATE/DELETE
+  are revoked and a `BEFORE DELETE` trigger blocks self-removal even if a
+  future migration hands the privilege back.
+
+> **Never `revoke all on public.admins from anon`.** `volunteer_opportunities`,
+> `user_profiles`, `applications` and `towns` each carry a policy scoped to
+> the **PUBLIC** role whose `USING` is `is_admin(auth.uid())`, and
+> `is_admin()` is not SECURITY DEFINER — so it reads `admins` as the caller.
+> Without the grant, **every anonymous read fails with
+> `42501: permission denied for table admins`** and the logged-out browse
+> returns 401. Done for real in workflow 4 and caught only by re-running
+> `probe_security2`. anon needs the privilege to *run* the function; RLS is
+> what stops it seeing any rows.
+
+Re-runnable: `.scratch/probe_wf4.py` (37 cases, including the APP-6 happy
+path) and `.scratch/walk_wf4.py` (17 UI checks).
+
+**Workflow 5 is built (2026-09-15, branch `wf5-roles`).** Eight migrations.
+Items: ROLE-5, ROLE-3, ROLE-2, ROLE-1, ROLE-4, APP-5, BRW-4.
+
+- **One schedule (ROLE-5), no contact column (ROLE-3).** See the convention
+  notes above — including the `HH:MM:SS` bug that had every schedule reading
+  "Times vary", and `schedule_revision`.
+- **Removal is a state, not a deletion (ROLE-1).** See the note above.
+- **Closing or changing tells the registrants (ROLE-2).** One trigger,
+  `notify_role_state_change`, handles all three transitions so their
+  precedence is explicit: removed beats closed beats changed, and an
+  already-removed role says nothing further. A change is noticed on title,
+  description, location, town, flexible-or-not, DBS, and
+  `schedule_revision`.
+- **Reopening happens in the edit form (ROLE-4).** The dashboard's one-click
+  "Mark as Active" is gone: it put a role back on the browse with whatever
+  dates it closed with, usually already past. The form offers it while the
+  organisation is looking at those dates, and only when the dates are ahead.
+- **APP-5 is split on purpose.** Length limits are CHECK constraints
+  (`title` 120, `description` 5000, `location` 200, `skills` 300,
+  `closed_reason` 200, `volunteers_needed` 1-500) because the form is not
+  the only way in; the banned-word list is client-side only, in
+  `src/utils/contentChecks.js`, because a false positive in the database is
+  a 23514 nobody can read. **No SQL-injection or HTML filter** — the user
+  asked, the reasoning against is in the APP-5 thread, and they accepted it.
+- **BRW-4:** the browse searches description, skills and organisation name,
+  not just the title.
+- **The advisor's twelve anon-executable SECURITY DEFINER functions are down
+  to three,** all deliberate: `count_volunteers`, `count_organisations` and
+  `is_approved_org` — the last of which **anon must keep**, because the
+  public browse policy calls it (same shape as the `admins` lesson in
+  workflow 4).
+
+Two regressions this workflow caused and fixed, both worth remembering
+because neither was visible from the code:
+
+- **`org_can_crud_their_posts`'s WITH CHECK is evaluated on the NEW row,** so
+  setting `deleted_at` on an `active` role was refused for any organisation
+  whose approval had been withdrawn. With DELETE revoked, its roles were
+  stuck in the table permanently. Approval now gates publishing only —
+  removal is always permitted.
+- **`set_application_org_id()` and the applications INSERT policy disagreed**
+  about `deleted_at` until they were made to agree. When two things guard one
+  event, guard both or neither.
+
+Re-runnable: `.scratch/probe_wf5.py` (50 cases, self-seeding) and
+`.scratch/walk_wf5.py` (39 UI checks).
+
+**Workflow 6 is built (2026-09-16, branch `wf6-interest`).** One migration
+and a redeploy of `send-outreach`. Items: INT-2, INT-3, INT-4, CON-5, CON-4,
+CON-2.
+
+- **INT-2 and INT-4** — see the note above. The one live registration had a
+  real person's subject *and* message, so the migration folded the subject
+  into the front of the note rather than dropping a third of what they
+  wrote.
+- **CON-5: outreach may name one of the organisation's OWN LIVE roles.**
+  Validated in `send-outreach`, not trusted from the client: another
+  organisation's role, a draft, a removed role and a non-existent id are all
+  refused. The picker only appears on a *cold* approach — from the
+  applicants page the role is already fixed. The email names the role and
+  links to it **only when `APP_URL` is set**; unset, the title still appears
+  without a link, because a link to a guessed host is worse than no link.
+  **`APP_URL` is not yet set** — set it to the Cloudflare Pages origin.
+- **CON-4 needed no code:** there is no unsubscribe link on an
+  organisation's message and that is the decision. What carries the weight
+  is the CON-6 pointer, which appears only on *unprompted* mail — and now
+  correctly appears for a volunteer who withdrew, because `hasApplied`
+  excludes withdrawn rows.
+- **CON-2 was already built** in workflow 1 (`notify_outreach_received`).
+  Verified rather than rebuilt: the volunteer gets the bell notification and
+  the organisation does not get one for its own message.
+- **INT-3 was settled by ROLE-1** and is verified here: a registration
+  survives its role being removed, and the volunteer is still told which
+  role it was, by name, via `my_registrations`.
+
+`opportunity_title` on `applications` is redundant now that
+`my_registrations` joins the title — but unlike `date_needed` it *is*
+written on every insert and two functions read it as a fallback, so it was
+deliberately left alone rather than swept up.
+
+> **Re-seed the throwaways at the start of a session: `.scratch/seed_throwaways.sql`.**
+> Deleting them at the end of a session is right, but it leaves every
+> earlier workflow's probe unable to log in, which looks exactly like the
+> probe being broken. `probe_wf3` and `probe_wf6` sign up their own
+> volunteers instead — **`probe_wf6` has to**, because `send-outreach`
+> enforces a 24-hour cooldown per (organisation, volunteer) pair, so a fixed
+> pair makes every positive send test fail with a 429 on the second run of
+> the day. `walk_wf6` has its own volunteer C for the same reason: the
+> probe's sends make the compose form render its cooldown notice, and the
+> CON-5 picker is then not on screen to find.
+
+Re-runnable: `.scratch/probe_wf6.py` (39 cases, self-seeding) and
+`.scratch/walk_wf6.py` (25 UI checks).
+
+**Workflow 7 is built (2026-09-16, branch `wf7-admin`).** Three migrations.
+Items: ADM-6, ADM-1, ADM-2, ADM-5.
+
+- **`towns` is the list (ADM-6).** The CHECK on `volunteer_opportunities.town`
+  is gone, replaced by a foreign key to `towns(name)`; `user_profiles.home_town`
+  got one too (it had no constraint, and every row was already `Windsor`).
+  A row may only be filed under an **active** town *when its town changes*,
+  so nobody is locked out of saving an unrelated field. A town cannot be
+  deactivated while any non-removed role or any person is filed under it,
+  nor can the last active town go (`towns_guard`). Every change to `towns`
+  is audited. **No `ON UPDATE CASCADE`, on purpose:** renaming a town would
+  rewrite `town` on its roles and fire ROLE-2 "updated" notices at every
+  registrant.
+- **The disappearing picker is one rule in two places.** Client:
+  `useTowns()` in `src/utils/towns.js` returns `showPicker` (more than one
+  active town); every picker reads it — sign-up, both role forms, both
+  profile pages, the browse, the volunteer search, the admin volunteer
+  filter. Database: `sole_active_town()` fills a NULL `town`/`home_town`
+  with the only active town, so a form submitted before the towns query
+  lands is still filed correctly. **A hidden required field fails
+  validation silently** — the profile schemas' `home_town` is optional now
+  and `onSubmit` asks for it only when the picker shows.
+- **Old Windsor, Slough, Maidenhead and `WF7 Probe Town` are inactive rows.**
+  The probe town is reused by `probe_wf7`/`walk_wf7` and cannot be deleted
+  (removed roles reference it). **Both scripts make a second town active on
+  the live site for a few seconds** — pickers appear for real visitors in
+  that window. They restore it in `try/finally`; if either is killed
+  mid-run, check `towns` and deactivate it by hand.
+- **ADM-1: `admin_take_down_role(id, reason)`** removes (ROLE-1, terminal),
+  never closes — the organisation could reopen a closed role from its own
+  form. A reason is required and audited. The ROLE-2 notice now says "taken
+  down by Well Windsor" unless `auth.uid()` is the organisation; the
+  volunteer dashboard copy is neutral ("This role has been removed"). **The
+  organisation is not notified** — the dialog says so.
+- **ADM-2/ADM-5: `admin_switch_account_type(user, role, dob)`** is the only
+  way a role changes. `authenticated` still has no UPDATE on `role` (a
+  client PATCH, an admin's included, is `42501`). `prevent_role_change()` now
+  allows a change only when the transaction-local `app.account_switch` flag
+  is on **and** `current_user` is not a browser role — the same shape as
+  `app.audit_redaction`. Volunteer → organisation: pending approval,
+  registrations **withdrawn** (INT-4, kept), and dob/phone/bio/skills/
+  availability **cleared**, because organisation rows are readable by signed-in
+  users. Organisation → volunteer: 18+ dob required, live roles **closed**
+  (registrants told), drafts left, approval cleared.
+- Noticed, not changed: `notify_role_state_change` notifies every
+  registrant including those who **withdrew**, and `opportunity_applicants`
+  does not check the caller is still an organisation, so an account switched
+  to volunteer can still read who registered for its old roles.
+
+Re-runnable: `.scratch/probe_wf7.py` (74 cases, self-seeding) and
+`.scratch/walk_wf7.py` (47 UI checks). `walk_core_loop` and `walk_wf5` were
+updated: they selected `#town`, which no longer exists with one town.
+
+**Workflow 8 is in progress (2026-09-16, branch `wf8-launch`).** It is the
+launch gate and most of it is not code. **Open decisions live in
+`PENDING-DECISIONS.md` at the repo root** — the user reviews them in batches;
+add to it rather than stopping to ask (destructive or outward-facing actions
+still need an explicit yes).
+
+- **Final security pass (item 6): done.** Every table, view and SECURITY
+  DEFINER function was checked from `relacl`/`proacl`, then write-tested live:
+  `.scratch/probe_wf8_final.py` (100 cases; every refusal aimed at a throwaway
+  row and read back). RLS is on for all 14 tables; anon's only write is the
+  `problem_reports` INSERT; no SECURITY DEFINER function is on the default
+  PUBLIC grant. One fix: `authenticated` held DELETE on `user_profiles` with
+  no policy behind it — revoked (20260916155009). Harmless but noted:
+  `anon`/`authenticated` hold Postgres 17's MAINTAIN (`m`) on several tables
+  by Supabase default, unreachable through PostgREST; and
+  `log_admin_action()`/`create_notification()` are pre-WF1 residue, not
+  callable from a browser.
+- **The email outbox forgot nothing (fixed, 20260916160232).** Addresses,
+  names and full message text stayed for ever, including after account
+  deletion — against ADM-4. `prepare_account_deletion()` now blanks the
+  deleted person's rows, and `expire-email-outbox-content` (pg_cron, 03:20
+  UTC) blanks every sent/abandoned row 30 days after sending. `held` and
+  `failed` rows keep their content. Proven with the real `delete-account`
+  function and a backdated row. **Any new email template that carries personal
+  data is covered by the 30-day job, not by deletion** — deletion only finds
+  rows sent *to* or recorded *against* the account.
+- **Privacy policy (`/privacy`) and `/delete-my-data` are built, not
+  approved** (WF8-5). Every statement was checked against the live system.
+  **If you change what happens to personal data, change `PrivacyPage.jsx` in
+  the same commit.** Linked from the footer and the sign-up form.
+- **Poppins is self-hosted** (`@fontsource/poppins`, imported in `main.jsx`);
+  no page requests Google Fonts. `walk_wf8` checks this.
+- **`useUserProfile().loading` is slow for signed-out visitors:** its session
+  query throws with no session and React Query retries three times. Use
+  `useSession()` from `SessionContext` to decide signed-in-or-not.
+- **Seed data (item 1): script written, NOT run** —
+  `supabase/launch/delete_seed_data.sql`, outside `migrations/` on purpose.
+  Waiting on real organisations (WF8-1) and the junk-account list (WF8-3).
+- Items 3–5 (dashboard toggles, hosting, email confirmation) are the user's;
+  see `PENDING-DECISIONS.md`.
+
+- **Dependencies: `npm audit fix` (2026-09-16), lockfile only.** 0 vulnerabilities
+  after. `@supabase/supabase-js` jumped 2.49.9 → 2.116.0 and `react-router-dom`
+  7.13 → 7.18. All ten walks passed on the new versions.
+- **No walk had ever driven `supabase.functions.invoke`** — the probes call
+  Edge Functions over raw HTTP, bypassing supabase-js. `.scratch/walk_invoke.py`
+  now covers both browser callers (send outreach, delete account), including
+  the refusal path `outreach.js` reads out of `error.context`. When an account
+  is deleted, a 403 from `/auth/v1/logout` and a few 401s are expected and
+  harmless: supabase-js calls logout for any sign-out scope, ignores the
+  error, and clears the session (the walk proves it).
+- **Trap: "same lint findings" checks were vacuous until 2026-09-16.**
+  `eslint -f unix` is no longer bundled; it printed an error, both sides of the
+  diff were empty, and "identical" passed on nothing. The 13/3 *totals* were
+  real throughout; identity of the findings was not proven until
+  `.scratch/lint_list.cjs` (built-in `-f json`, refuses an empty list) showed
+  the same 16 findings at WF6 and after WF8. **A comparison of two empty files
+  is not a comparison — check the count on each side.**
+- **Stop a background dev server by its process tree, not the shell task.**
+  Killing the task left `vite` and `esbuild.exe` running, which locked
+  `node_modules` and made `npm ci` fail with EPERM, then ENOTEMPTY (OneDrive).
+  Find the PID listening on the port and `taskkill //PID <pid> //T //F`.
+
+Re-runnable: `.scratch/probe_wf8_final.py` (100), `.scratch/walk_wf8.py` (21),
+`.scratch/walk_invoke.py` (6, sends one email to a `.invalid` address),
+and `.scratch/probe_wf8_outbox.py` (signs up and approves a throwaway org;
+`--delete` deletes it; verify the outbox with SQL — it has no client grants).
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
@@ -460,3 +940,9 @@ invisible to the volunteer, because silence means no. Everything after the
 introduction happens over the two parties' own email; we are not a mailbox.
 The UI must keep saying so plainly: "you may not hear back from every
 application."
+
+Since workflow 2 the organisation *is* told about new registrations, by the
+8am digest and the bell — but still never by an email per registration, and
+there is still nothing to accept or decline. And since workflow 6 the
+silence runs both ways: withdrawing is invisible to the organisation, which
+is never told, so neither side has to explain itself.

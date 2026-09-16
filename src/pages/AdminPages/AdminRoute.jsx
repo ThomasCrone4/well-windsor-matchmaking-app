@@ -1,8 +1,7 @@
 // src/routes/AdminRoute.jsx
-import { Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
-import { toast } from 'react-hot-toast';
+import AccessDenied from '../../components/AccessDenied';
 
 async function fetchIsAdmin() {
   try {
@@ -27,17 +26,40 @@ async function fetchIsAdmin() {
   }
 }
 
+async function fetchMyRole() {
+  const { data: session } = await supabase.auth.getSession();
+  const uid = session?.session?.user?.id;
+  if (!uid) return null;
+  const { data } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('id', uid)
+    .maybeSingle();
+  return data?.role ?? null;
+}
+
 export default function AdminRoute({ children }) {
-  const { data: isAdmin, isLoading, isError } = useQuery({
+  const { data: isAdmin, isPending, isError } = useQuery({
     queryKey: ['is-admin'],
     queryFn: fetchIsAdmin,
     staleTime: 60_000,
   });
 
-  if (isLoading) return null; // or a spinner
+  // Only for the denial message. Fetched alongside rather than after, so a
+  // denied page does not arrive in two stages.
+  const { data: role } = useQuery({
+    queryKey: ['my-role'],
+    queryFn: fetchMyRole,
+    staleTime: 60_000,
+  });
+
+  if (isPending) return null;
+
+  // ACC-5: was a toast plus a redirect home. The toast fired from the render
+  // body, so it re-fired on every render, and being bounced to the home page
+  // never says why.
   if (isError || !isAdmin) {
-    toast.error('Admins only.');
-    return <Navigate to="/" replace />;
+    return <AccessDenied yourRole={role} area="Well Windsor admins" />;
   }
   return children;
 }
