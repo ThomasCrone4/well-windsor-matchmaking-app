@@ -458,8 +458,10 @@ next one starts. It carries a verified snapshot of the live database and
 repo as of that date — trust it over the older notes below where they
 disagree.
 
-Working towards a publishable v0. Earlier plan, including what was
-deliberately removed:
+Working towards a publishable v0. The earlier plan (2026-09-03), including
+what was deliberately removed, is **superseded by BUILD-PLAN.md** — its phases
+0–4 are done and phase 5 became workflow 8. Kept on the development machine
+for history only:
 
     C:\Users\thoma\.claude\plans\i-m-picking-up-this-glowing-platypus.md
 
