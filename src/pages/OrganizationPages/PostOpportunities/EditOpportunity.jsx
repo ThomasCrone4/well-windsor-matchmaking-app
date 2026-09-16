@@ -20,7 +20,7 @@ import {
   blocksFromTimeblockRows,
   sameSchedule,
 } from '../../../utils/schedule';
-import { TOWNS } from '../../../utils/towns';
+import { useTowns, townOptionsFor } from '../../../utils/towns';
 import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
 import useUserProfile from '../../../hooks/useUserProfile';
 import ApprovalNotice from '../../../components/ApprovalNotice';
@@ -51,7 +51,7 @@ const freeText = (field, { checkWords = false } = {}) =>
       checkFreeText(v, field, ctx, { checkWords });
     });
 
-const getSchema = (isDraft) =>
+const getSchema = (isDraft, towns, showPicker) =>
   z.object({
     title: isDraft
       ? freeText('title', { checkWords: true })
@@ -66,10 +66,11 @@ const getSchema = (isDraft) =>
           (v) => (v ?? '').trim().length >= 2,
           'Location is required'
         ),
-    // See PostOpportunity: draft may be blank, active may not.
-    town: isDraft
+    // See PostOpportunity: draft may be blank, active may not -- unless
+    // there is only one town, which the role is then filed under (ADM-6).
+    town: isDraft || !showPicker
       ? nullableText
-      : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
+      : z.string().refine((v) => towns.includes(v), 'Please choose a town'),
     skills: freeText('skills'),
     // Nullable on the table and null on every row that predates it, so
     // reset() feeds this null -- .optional() alone would reject that and
@@ -112,6 +113,7 @@ export default function EditOpportunity() {
   const [isDraft, setIsDraft] = useState(false);
   const { profile } = useUserProfile();
   const pending = isPendingOrganisation(profile);
+  const { towns, soleTown, showPicker } = useTowns();
 
   const {
     register,
@@ -123,7 +125,7 @@ export default function EditOpportunity() {
     setError,
     formState: { errors, isSubmitting, isDirty },
   } = useForm({
-    resolver: zodResolver(getSchema(isDraft)),
+    resolver: zodResolver(getSchema(isDraft, towns, showPicker)),
     defaultValues: {
       title: '',
       description: '',
@@ -324,7 +326,10 @@ export default function EditOpportunity() {
       title: formData.title ?? '',
       description: formData.description ?? '',
       location: formData.location ?? '',
-      town: formData.town || null,
+      // With the picker hidden the saved town stands; a role that never had
+      // one is filed under the sole town (by the database, if this is still
+      // loading).
+      town: formData.town || soleTown || null,
       skills: formData.skills || null,
       category: formData.category || null,
       volunteers_needed: Number(formData.volunteers_needed ?? 1),
@@ -455,7 +460,9 @@ export default function EditOpportunity() {
                   </p>}
             </div>
 
-            {/* Town — the filter key volunteers browse by */}
+            {/* Town — the filter key volunteers browse by. Only asked for
+                when there is more than one (ADM-6). */}
+            {showPicker && (
             <div className="form-row">
               <label className="label">
                 Town {!isDraft && <span className="required" />}
@@ -466,7 +473,7 @@ export default function EditOpportunity() {
                 aria-invalid={!!errors.town}
               >
                 <option value="">Select a town…</option>
-                {TOWNS.map((t) => (
+                {townOptionsFor(towns, watch('town')).map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
@@ -474,6 +481,7 @@ export default function EditOpportunity() {
                 ? <p className="error-text">{errors.town.message}</p>
                 : <p className="help-text">Volunteers filter the browse by town.</p>}
             </div>
+            )}
 
             {/* Category — picks the photograph on the listing */}
             <div className="form-row">
@@ -511,7 +519,7 @@ export default function EditOpportunity() {
               />
               {errors.location
                 ? <p className="error-text">{errors.location.message}</p>
-                : <p className="help-text">The venue or address. Free text — the town above does the filtering.</p>}
+                : <p className="help-text">The venue or address.{showPicker && ' Free text — the town above does the filtering.'}</p>}
             </div>
 
             {/* ROLE-3. The required "Contact Email" field is gone — see the
@@ -624,7 +632,7 @@ export default function EditOpportunity() {
                   disabled={pending || isSubmitting || mutation.isPending}
                   title={pending ? 'Available once Well Windsor approves your organisation' : undefined}
                   onClick={handleSubmit((data) => {
-                    const requiredSchema = getSchema(false); // strict validation
+                    const requiredSchema = getSchema(false, towns, showPicker); // strict validation
                     const result = requiredSchema.safeParse(data);
 
                     if (!result.success) {

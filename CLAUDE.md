@@ -5,9 +5,9 @@ Royal Borough of Windsor and Maidenhead. Built for Well Windsor, a UK charity
 (reg. 1207021) funding mental-health provision in Windsor schools.
 
 **This is Windsor, UK — not Windsor, Ontario.** The product is **Windsor
-only** in the UI (`src/utils/towns.js` is `['Windsor']`), while the `town`
-CHECK still admits Maidenhead and Slough, so a town can be added back with a
-one-line change and no migration.
+only** because Windsor is the only *active* row in the `towns` table. Admins
+add and activate towns from the dashboard; there is no list in code and no
+CHECK any more (workflow 7, ADM-6).
 
 **Real users, real data.** The production database holds accounts belonging to
 actual people. Treat destructive operations accordingly.
@@ -85,9 +85,8 @@ resolves it server-side and sets `Reply-To` to the org. The client passes a
 one.
 
 **`town` filters, `location` describes.** `volunteer_opportunities` has
-both. `town` is the filter key, CHECK-constrained to the list in
-`src/utils/towns.js`, and required once `status = 'active'` (a second
-CHECK). `location` is free text for the venue — "St Edward's, Parsonage
+both. `town` is the filter key, a foreign key to `towns(name)`, and
+required once `status = 'active'` (a CHECK). `location` is free text for the venue — "St Edward's, Parsonage
 Lane". Filtering on `location` is the bug this split fixed: it was an exact
 string match that only worked because every seed row happened to say
 exactly "Windsor", and the first org to type a real address vanished from a
@@ -800,6 +799,59 @@ deliberately left alone rather than swept up.
 
 Re-runnable: `.scratch/probe_wf6.py` (39 cases, self-seeding) and
 `.scratch/walk_wf6.py` (25 UI checks).
+
+**Workflow 7 is built (2026-09-16, branch `wf7-admin`).** Three migrations.
+Items: ADM-6, ADM-1, ADM-2, ADM-5.
+
+- **`towns` is the list (ADM-6).** The CHECK on `volunteer_opportunities.town`
+  is gone, replaced by a foreign key to `towns(name)`; `user_profiles.home_town`
+  got one too (it had no constraint, and every row was already `Windsor`).
+  A row may only be filed under an **active** town *when its town changes*,
+  so nobody is locked out of saving an unrelated field. A town cannot be
+  deactivated while any non-removed role or any person is filed under it,
+  nor can the last active town go (`towns_guard`). Every change to `towns`
+  is audited. **No `ON UPDATE CASCADE`, on purpose:** renaming a town would
+  rewrite `town` on its roles and fire ROLE-2 "updated" notices at every
+  registrant.
+- **The disappearing picker is one rule in two places.** Client:
+  `useTowns()` in `src/utils/towns.js` returns `showPicker` (more than one
+  active town); every picker reads it — sign-up, both role forms, both
+  profile pages, the browse, the volunteer search, the admin volunteer
+  filter. Database: `sole_active_town()` fills a NULL `town`/`home_town`
+  with the only active town, so a form submitted before the towns query
+  lands is still filed correctly. **A hidden required field fails
+  validation silently** — the profile schemas' `home_town` is optional now
+  and `onSubmit` asks for it only when the picker shows.
+- **Old Windsor, Slough, Maidenhead and `WF7 Probe Town` are inactive rows.**
+  The probe town is reused by `probe_wf7`/`walk_wf7` and cannot be deleted
+  (removed roles reference it). **Both scripts make a second town active on
+  the live site for a few seconds** — pickers appear for real visitors in
+  that window. They restore it in `try/finally`; if either is killed
+  mid-run, check `towns` and deactivate it by hand.
+- **ADM-1: `admin_take_down_role(id, reason)`** removes (ROLE-1, terminal),
+  never closes — the organisation could reopen a closed role from its own
+  form. A reason is required and audited. The ROLE-2 notice now says "taken
+  down by Well Windsor" unless `auth.uid()` is the organisation; the
+  volunteer dashboard copy is neutral ("This role has been removed"). **The
+  organisation is not notified** — the dialog says so.
+- **ADM-2/ADM-5: `admin_switch_account_type(user, role, dob)`** is the only
+  way a role changes. `authenticated` still has no UPDATE on `role` (a
+  client PATCH, an admin's included, is `42501`). `prevent_role_change()` now
+  allows a change only when the transaction-local `app.account_switch` flag
+  is on **and** `current_user` is not a browser role — the same shape as
+  `app.audit_redaction`. Volunteer → organisation: pending approval,
+  registrations **withdrawn** (INT-4, kept), and dob/phone/bio/skills/
+  availability **cleared**, because organisation rows are readable by signed-in
+  users. Organisation → volunteer: 18+ dob required, live roles **closed**
+  (registrants told), drafts left, approval cleared.
+- Noticed, not changed: `notify_role_state_change` notifies every
+  registrant including those who **withdrew**, and `opportunity_applicants`
+  does not check the caller is still an organisation, so an account switched
+  to volunteer can still read who registered for its old roles.
+
+Re-runnable: `.scratch/probe_wf7.py` (74 cases, self-seeding) and
+`.scratch/walk_wf7.py` (47 UI checks). `walk_core_loop` and `walk_wf5` were
+updated: they selected `#town`, which no longer exists with one town.
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured

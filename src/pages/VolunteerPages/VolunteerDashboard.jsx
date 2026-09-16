@@ -176,7 +176,7 @@ export default function VolunteerDashboard() {
                   watch for it. */}
               {application.opportunity_removed ? (
                 <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                  This role was removed by the organisation. Your registration
+                  This role has been removed. Your registration
                   stays on your record, but there is nothing to hear back about.
                 </p>
               ) : application.opportunity_status === 'closed' ? (

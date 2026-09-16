@@ -7,13 +7,16 @@ import { supabase } from '../../utils/supabase';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
 import FormSkeleton from '../../components/skeletons/FormSkeleton';
-import { townOptionsFor } from '../../utils/towns';
+import { useTowns, townOptionsFor } from '../../utils/towns';
 import DeleteAccountSection from '../../components/DeleteAccountSection';
 import ChangeEmailSection from '../../components/ChangeEmailSection';
 
 const orgSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  home_town: z.string().min(1, 'Select a town'),
+  // Not required here: with one town there is no picker (ADM-6), and a
+  // hidden field that fails validation fails silently. onSubmit asks for
+  // it when the picker is showing.
+  home_town: z.string().nullable().optional(),
   contact_number: z.string().optional(),
 });
 
@@ -48,6 +51,7 @@ export default function OrganisationProfilePage() {
 
   // small normalizer
   const trimOrNull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const { towns, soleTown, showPicker } = useTowns();
 
   const mutation = useMutation({
     mutationFn: async (formData) => {
@@ -55,7 +59,7 @@ export default function OrganisationProfilePage() {
 
       const update = {
         name: trimOrNull(formData.name),
-        home_town: trimOrNull(formData.home_town),
+        home_town: trimOrNull(formData.home_town) ?? soleTown,
         contact_number: trimOrNull(formData.contact_number),
         // No `email`. It is not client-writable any more (the audit found
         // send-outreach trusted it), and replies to your messages go to
@@ -90,7 +94,13 @@ export default function OrganisationProfilePage() {
     onError: (err) => toast.error(err?.message || 'Failed to update profile.'),
   });
 
-  const onSubmit = (data) => mutation.mutate(data);
+  const onSubmit = (data) => {
+    if (showPicker && !trimOrNull(data.home_town)) {
+      toast.error('Please select your town.');
+      return;
+    }
+    mutation.mutate(data);
+  };
 
   const handleDiscard = () => {
     if (profile) {
@@ -136,7 +146,8 @@ export default function OrganisationProfilePage() {
           {errors.name && <p className="error-text">{errors.name.message}</p>}
         </div>
 
-        {/* Town */}
+        {/* Town — only when there is more than one (ADM-6) */}
+        {showPicker && (
         <div className="form-row">
           <label className="label">
             Town <span className="required" />
@@ -147,12 +158,13 @@ export default function OrganisationProfilePage() {
             aria-invalid={!!errors.home_town}
           >
             <option value="">Select your town</option>
-            {townOptionsFor(watch('home_town')).map((t) => (
+            {townOptionsFor(towns, watch('home_town')).map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
           {errors.home_town && <p className="error-text">{errors.home_town.message}</p>}
         </div>
+        )}
 
         {/* Contact Number */}
         <div className="form-row">

@@ -8,6 +8,7 @@ import { isThisWeek, isThisMonth } from 'date-fns';
 import { formatOpportunitySchedule, blocksFromTimeblockRows } from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
 import OpportunityPhoto from '../components/OpportunityPhoto';
+import { useTowns } from '../utils/towns';
 
 /**
  * The availability badge shown to a signed-in volunteer.
@@ -53,17 +54,11 @@ const MATCH_BADGES = {
 const MATCHING_KINDS = new Set(['FULL', 'PARTIAL', 'FLEXIBLE']);
 
 export default function OpportunitiesPage() {
-  // `town` is still here with no control bound to it, on purpose.
-  //
-  // Every live opportunity is in Windsor and the copy says so, so a Town
-  // select offering Maidenhead and Slough named two places the service does
-  // not serve. The select is gone; the column, the CHECK constraint,
-  // src/utils/towns.js and the filtering below are all untouched. Adding a
-  // town back is then a one-line change to towns.js plus restoring the
-  // select -- not a migration, and not a re-plumb of the filter.
-  //
-  // It stays 'All', which matches everything.
+  // The Town filter exists only while more than one town is active (ADM-6,
+  // src/utils/towns.js). With one town there is nothing to filter by, and
+  // `town` stays 'All', which matches everything.
   const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
+  const { towns, showPicker: showTownFilter } = useTowns();
   const [matchedOnly, setMatchedOnly] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -295,7 +290,10 @@ export default function OpportunitiesPage() {
     return items.filter((op) => {
       // town, not location. location is free text ("St Edward's, Windsor")
       // and comparing it to a town name dropped real listings silently.
-      const matchesTown = filters.town === 'All' || op.town === filters.town;
+      // Ignored once the filter is hidden, so a town picked while two were
+      // active cannot keep filtering after the second is deactivated.
+      const matchesTown =
+        !showTownFilter || filters.town === 'All' || op.town === filters.town;
 
       const start = getEarliestStart(op);
       const matchesStart =
@@ -398,10 +396,8 @@ export default function OpportunitiesPage() {
 
       {/* Filters */}
       <div className="card mb-6">
-        {/* Three columns, not four. The Town select used to sit between
-            Search and When; see the note on `filters.town` above for why
-            the filtering behind it is still here. */}
-        <div className="form-grid md:grid-cols-3">
+        {/* Three columns, or four when there is a town to choose. */}
+        <div className={`form-grid ${showTownFilter ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
           {/* Search */}
           <div className="form-row">
             <label htmlFor="search" className="label">Search</label>
@@ -414,6 +410,24 @@ export default function OpportunitiesPage() {
               className="input"
             />
           </div>
+
+          {/* Town */}
+          {showTownFilter && (
+            <div className="form-row">
+              <label htmlFor="town" className="label">Town</label>
+              <select
+                id="town"
+                value={filters.town}
+                onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
+                className="select"
+              >
+                <option value="All">All towns</option>
+                {towns.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* When */}
           <div className="form-row">

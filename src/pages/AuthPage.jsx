@@ -4,7 +4,7 @@ import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
 import AvailabilityMatrix from '../components/AvailabilityMatrix';
 import { useNavigate } from 'react-router-dom';
-import { TOWNS } from '../utils/towns';
+import { useTowns } from '../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../utils/age';
 
 export default function AuthPage() {
@@ -27,6 +27,7 @@ export default function AuthPage() {
 
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [errors, setErrors] = useState({});
+  const { towns, soleTown, showPicker } = useTowns();
   const navigate = useNavigate();
 
   const validateFields = () => {
@@ -43,8 +44,9 @@ export default function AuthPage() {
       }
 
       // Both roles need a town: volunteers to be matched locally,
-      // organisations so their listings can be filtered by area.
-      if (!homeTown) newErrors.homeTown = 'Town is required';
+      // organisations so their listings can be filtered by area. With one
+      // town there is nothing to ask (ADM-6) -- see src/utils/towns.js.
+      if (showPicker && !homeTown) newErrors.homeTown = 'Town is required';
 
       if (role === 'volunteer') {
         if (!dob) {
@@ -100,7 +102,9 @@ export default function AuthPage() {
         data: {
           role,
           name: name.trim(),
-          home_town: homeTown,
+          // null while the towns query is still loading; the database then
+          // files the account under the sole active town itself.
+          home_town: showPicker ? homeTown : soleTown,
           ...(role === 'volunteer' && {
             dob,
             contact_number: contactNumber?.trim() || null,
@@ -307,9 +311,11 @@ export default function AuthPage() {
               {errors.name && <p className="error-text">{errors.name}</p>}
             </div>
 
-            {/* Town — both roles. Organisations previously had a free-text
-                postcode field that was written to a column which does not
-                exist, so organisation signup always failed. */}
+            {/* Town — both roles, and only when there is a choice to make
+                (ADM-6). Organisations previously had a free-text postcode
+                field that was written to a column which does not exist, so
+                organisation signup always failed. */}
+            {showPicker && (
             <div className="form-row">
               <label className="label">
                 {role === 'organization' ? 'Town' : 'Home Town'}{' '}
@@ -324,12 +330,13 @@ export default function AuthPage() {
                 <option value="">
                   {role === 'organization' ? 'Select your town' : 'Select your home town'}
                 </option>
-                {TOWNS.map((town) => (
+                {towns.map((town) => (
                   <option key={town} value={town}>{town}</option>
                 ))}
               </select>
               {errors.homeTown && <p className="error-text">{errors.homeTown}</p>}
             </div>
+            )}
 
             {/* Volunteer-only fields */}
             {role === 'volunteer' && (

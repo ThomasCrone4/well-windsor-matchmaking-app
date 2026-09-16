@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 
 // 🔁 use your schedule.js
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
-import { TOWNS } from '../../../utils/towns';
+import { useTowns } from '../../../utils/towns';
 import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
 import useUserProfile from '../../../hooks/useUserProfile';
 import ApprovalNotice from '../../../components/ApprovalNotice';
@@ -33,7 +33,7 @@ const freeText = (field, { checkWords = false, min = 0, minMessage } = {}) => {
   return base.superRefine((v, ctx) => checkFreeText(v, field, ctx, { checkWords }));
 };
 
-const getOpportunitySchema = (isDraft) =>
+const getOpportunitySchema = (isDraft, towns, showPicker) =>
   z.object({
     title: isDraft
       ? freeText('title', { checkWords: true }).optional()
@@ -45,10 +45,11 @@ const getOpportunitySchema = (isDraft) =>
     // The filter key volunteers browse by. A draft may leave it blank; a
     // published opportunity may not (there is a CHECK constraint saying so),
     // because an active listing with no town is unreachable from a filtered
-    // browse.
-    town: isDraft
+    // browse. With one town there is no picker and nothing to validate: the
+    // role is filed under that town (ADM-6, src/utils/towns.js).
+    town: isDraft || !showPicker
       ? z.string().optional()
-      : z.string().refine((v) => TOWNS.includes(v), 'Please choose a town'),
+      : z.string().refine((v) => towns.includes(v), 'Please choose a town'),
     // The skills input has been on this form all along and every value
     // typed into it was discarded: zod strips keys the schema does not
     // name, so `data.skills` never reached submitOpportunity -- and
@@ -84,8 +85,12 @@ export default function PostOpportunity() {
   // Publishing waits for approval (RLS refuses it otherwise); drafts do not.
   const pending = isPendingOrganisation(profile);
   const [isDraft, setIsDraft] = useState(false);
+  const { towns, soleTown, showPicker } = useTowns();
 
-  const schema = useMemo(() => getOpportunitySchema(isDraft), [isDraft]);
+  const schema = useMemo(
+    () => getOpportunitySchema(isDraft, towns, showPicker),
+    [isDraft, towns, showPicker]
+  );
 
   const {
     register,
@@ -236,9 +241,11 @@ export default function PostOpportunity() {
       title: data.title || '',
       description: data.description || '',
       location: data.location || '',
-      // null rather than '' -- the CHECK only accepts a real town or NULL,
-      // and a draft is allowed to have neither yet.
-      town: data.town || null,
+      // null rather than '' -- the foreign key accepts a real town or NULL,
+      // and a draft is allowed to have neither yet. With the picker hidden
+      // this is the sole town, or null while the towns query is still
+      // loading, in which case the database files it under that town itself.
+      town: (showPicker ? data.town : soleTown) || null,
       skills: data.skills?.trim() || null,
       // null rather than '': the CHECK accepts the three values or NULL,
       // and '' would be rejected outright.
@@ -337,7 +344,9 @@ export default function PostOpportunity() {
                 </p>}
           </div>
 
-          {/* Town — the filter key volunteers browse by */}
+          {/* Town — the filter key volunteers browse by. Only asked for when
+              there is more than one (ADM-6). */}
+          {showPicker && (
           <div className="form-row">
             <label htmlFor="town" className="label required">Town</label>
             <select
@@ -347,7 +356,7 @@ export default function PostOpportunity() {
               aria-invalid={!!errors.town}
             >
               <option value="">Select a town…</option>
-              {TOWNS.map((t) => (
+              {towns.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
@@ -355,6 +364,7 @@ export default function PostOpportunity() {
               ? <p className="error-text">{errors.town.message}</p>
               : <p className="help-text">Volunteers filter the browse by town.</p>}
           </div>
+          )}
 
           {/* Category — picks the photograph on the listing. Optional:
               without one the card gets a neutral Windsor image rather than
@@ -394,7 +404,7 @@ export default function PostOpportunity() {
             />
             {errors.location
               ? <p className="error-text">{errors.location.message}</p>
-              : <p className="help-text">The venue or address. Free text — the town above does the filtering.</p>}
+              : <p className="help-text">The venue or address.{showPicker && ' Free text — the town above does the filtering.'}</p>}
           </div>
 
           {/* ROLE-3. The required "Contact Email" field that stood here is

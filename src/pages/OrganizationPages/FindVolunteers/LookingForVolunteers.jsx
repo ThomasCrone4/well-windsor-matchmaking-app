@@ -8,6 +8,7 @@ import { summariseOutreach, cooldownHoursRemaining } from '../../../utils/outrea
 import useUserProfile from '../../../hooks/useUserProfile';
 import ApprovalNotice from '../../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../../utils/approval';
+import { useTowns } from '../../../utils/towns';
 
 export default function LookingForVolunteersPage() {
   const [filters, setFilters] = useState({ town: 'All'});
@@ -63,22 +64,17 @@ export default function LookingForVolunteersPage() {
 
   const outreachByVolunteer = useMemo(() => summariseOutreach(outreachRows), [outreachRows]);
 
-  // Derived from the volunteers actually listed, not from a hardcoded
-  // ['Windsor','Maidenhead','Slough'] as it was before. This filter is
-  // about where the PEOPLE are, which is not the same question as which
-  // towns the service posts roles in -- home_town has no CHECK constraint
-  // and there is a real volunteer in London. A fixed list both named towns
-  // nobody lives in and hid the one town somebody does.
-  const townOptions = useMemo(() => {
-    const towns = new Set(
-      (data ?? []).map((v) => (v.home_town ?? '').trim()).filter(Boolean)
-    );
-    return ['All', ...Array.from(towns).sort()];
-  }, [data]);
+  // The active towns. This used to be derived from the volunteers listed,
+  // because home_town was free text and a real volunteer was in London. It
+  // is a foreign key to `towns` now, and a town cannot be deactivated while
+  // anyone lives in it, so every volunteer is in one of these. And with only
+  // one, there is no filter at all (ADM-6, src/utils/towns.js).
+  const { towns, showPicker: showTownFilter } = useTowns();
 
   const filterVolunteers = (vols) =>
     vols.filter((v) => {
-      const matchesTown = filters.town === 'All' || v.home_town === filters.town;
+      const matchesTown =
+        !showTownFilter || filters.town === 'All' || v.home_town === filters.town;
       const q = searchTerm.toLowerCase();
       const matchesSearch =
         (v.name || '').toLowerCase().includes(q) ||
@@ -186,7 +182,7 @@ export default function LookingForVolunteersPage() {
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="form-grid md:grid-cols-3">
+        <div className={`form-grid ${showTownFilter ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           {/* Search */}
           <div className="form-row">
             <label htmlFor="search" className="label">Search</label>
@@ -200,20 +196,22 @@ export default function LookingForVolunteersPage() {
             />
           </div>
 
-          {/* Town */}
-          <div className="form-row">
-            <label htmlFor="town" className="label">Town</label>
-            <select
-              id="town"
-              value={filters.town}
-              onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
-              className="select"
-            >
-              {townOptions.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
+          {/* Town — only when there is more than one (ADM-6) */}
+          {showTownFilter && (
+            <div className="form-row">
+              <label htmlFor="town" className="label">Town</label>
+              <select
+                id="town"
+                value={filters.town}
+                onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
+                className="select"
+              >
+                {['All', ...towns].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          )}
    
 
           {/* Clear */}
