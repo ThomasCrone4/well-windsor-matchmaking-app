@@ -136,7 +136,7 @@ export default function AuthPage() {
     // so now, rather than letting the first "Post" fail.
     if (role === 'organization') {
       toast.success(
-        'Account created. Well Windsor will review your organisation before you can publish roles — you can start drafting now.',
+        'Account created. Well Windsor will review your organisation before you can publish roles. You can start drafting now.',
         { duration: 9000 }
       );
       navigate('/organization-dashboard');

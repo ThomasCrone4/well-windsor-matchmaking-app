@@ -119,7 +119,7 @@ export default function VolunteerDashboard() {
         <p className="page-description">
           Roles you have registered interest in, and organisations that have been in touch.
           Organisations get in touch by email with the people they would like to hear more
-          from, so check your inbox — and don&rsquo;t worry if you don&rsquo;t hear back
+          from, so check your inbox, and don&rsquo;t worry if you don&rsquo;t hear back
           about every one. That is normal, and it isn&rsquo;t a reflection on you.
         </p>
 
@@ -235,8 +235,8 @@ export default function VolunteerDashboard() {
                   Reply to them at{' '}
                   <a href={`mailto:${approach.org.email}`} className="underline">
                     {approach.org.email}
-                  </a>{' '}
-                  — or just reply to their email.
+                  </a>,{' '}
+                  or just reply to their email.
                 </p>
               )}
             </li>

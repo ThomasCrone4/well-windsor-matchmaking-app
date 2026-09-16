@@ -42,7 +42,7 @@ export const OPPORTUNITY_CATEGORIES = [
   {
     value: 'one_off',
     label: 'A one-off event',
-    hint: 'A single day or evening — sports days, fun runs, fetes.',
+    hint: 'A single day or evening, like sports days, fun runs and fetes.',
   },
 ];
 

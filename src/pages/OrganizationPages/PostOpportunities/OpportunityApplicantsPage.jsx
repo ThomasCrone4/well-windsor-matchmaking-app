@@ -159,7 +159,7 @@ export default function OpportunityApplicantsPage() {
               disabled={hoursLeft > 0}
               title={
                 hoursLeft > 0
-                  ? `You contacted this volunteer recently — you can write again in ${hoursLeft} hour${
+                  ? `You contacted this volunteer recently. You can write again in ${hoursLeft} hour${
                       hoursLeft === 1 ? '' : 's'
                     }`
                   : 'Write to this volunteer'
@@ -203,7 +203,7 @@ export default function OpportunityApplicantsPage() {
 
       <p className="page-description">
         People who registered interest in <strong>{opportunityTitle}</strong>. Write to anyone
-        you would like to hear more from — we send the email for you, and their reply comes
+        you would like to hear more from. We send the email for you, and their reply comes
         straight to your inbox. Dismissing someone only tidies this list; they are
         never told either way.
       </p>
@@ -217,7 +217,7 @@ export default function OpportunityApplicantsPage() {
         </div>
       ) : (applicants ?? []).length === 0 ? (
         <p className="muted italic mt-6">
-          No one has registered interest yet. People appear here as they arrive — we do not
+          No one has registered interest yet. People appear here as they arrive. We do not
           email you about them.
         </p>
       ) : (

@@ -84,7 +84,7 @@ export default function SentEnquiriesOrgPage() {
               {message.status !== 'sent' && (
                 <p className="error-text">
                   This one did not reach them. Nothing was delivered, and it does not count
-                  against your daily limit — you can write to them again.
+                  against your daily limit, so you can write to them again.
                 </p>
               )}
             </li>

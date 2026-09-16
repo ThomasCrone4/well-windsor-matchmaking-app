@@ -39,7 +39,7 @@ export default function AccessDenied({ yourRole, allowedRoles = [], area }) {
         </h1>
 
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          You are still signed in — this part of Well Windsor just is not for
+          You are still signed in. This part of Well Windsor just is not for
           your kind of account.
           {yourRole === 'volunteer' && ' Yours is a volunteer account.'}
           {yourRole === 'organization' && ' Yours is an organisation account.'}

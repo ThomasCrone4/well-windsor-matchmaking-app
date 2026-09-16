@@ -78,7 +78,7 @@ export default function ReportProblemDialog({ isOpen, onClose }) {
 
       if (error) throw error;
 
-      toast.success('Thank you — your report has been sent.');
+      toast.success('Thank you. Your report has been sent.');
       reset();
       onClose();
     } catch (error) {

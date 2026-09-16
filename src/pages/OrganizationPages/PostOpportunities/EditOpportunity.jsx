@@ -84,7 +84,7 @@ const getSchema = (isDraft, towns, showPicker) =>
       : z.coerce
           .number()
           .min(1, 'Must be at least 1')
-          .max(LIMITS.volunteers_needed, `That is more than ${LIMITS.volunteers_needed} — please check.`),
+          .max(LIMITS.volunteers_needed, `That is more than ${LIMITS.volunteers_needed}. Please check.`),
     when_needed: z
       .array(
         z.object({
@@ -372,8 +372,8 @@ export default function EditOpportunity() {
     console.warn('EditOpportunity validation failed:', formErrors);
     toast.error(
       fields.length
-        ? `Could not save — please check: ${fields.join(', ')}`
-        : 'Could not save — please check the form.'
+        ? `Could not save. Please check: ${fields.join(', ')}`
+        : 'Could not save. Please check the form.'
     );
   };
 
@@ -493,7 +493,7 @@ export default function EditOpportunity() {
                 className={`select ${errors.category ? 'input-invalid' : ''}`}
                 aria-invalid={!!errors.category}
               >
-                <option value="">No preference — use a general photo</option>
+                <option value="">No preference (use a general photo)</option>
                 {OPPORTUNITY_CATEGORIES.map((c) => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
@@ -519,7 +519,7 @@ export default function EditOpportunity() {
               />
               {errors.location
                 ? <p className="error-text">{errors.location.message}</p>
-                : <p className="help-text">The venue or address.{showPicker && ' Free text — the town above does the filtering.'}</p>}
+                : <p className="help-text">The venue or address.{showPicker && ' Free text. The town above does the filtering.'}</p>}
             </div>
 
             {/* ROLE-3. The required "Contact Email" field is gone — see the
@@ -650,7 +650,7 @@ export default function EditOpportunity() {
                   }, onInvalid)}
                   className="btn btn-primary"
                 >
-                  {pending ? 'Post opportunity — after approval' : 'Post opportunity'}
+                  {pending ? 'Post opportunity (after approval)' : 'Post opportunity'}
                 </button>
               )}
 

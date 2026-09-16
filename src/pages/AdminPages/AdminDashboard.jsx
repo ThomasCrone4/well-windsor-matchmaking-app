@@ -750,7 +750,7 @@ export default function AdminDashboard() {
                       <tr key={v.id} className="hover:opacity-90">
                         <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-primary)' }}>{v.name}</td>
                         <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{v.email}</td>
-                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-primary)' }}>{v.home_town || '—'}</td>
+                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-primary)' }}>{v.home_town || 'Not given'}</td>
                         <td className="px-4 py-3">
                           {v.dbs_checked ? (
                             <span className="flex items-center gap-1 text-green-700 text-sm">
@@ -804,8 +804,8 @@ export default function AdminDashboard() {
           <h2 className="section-title mb-2">Manage Towns</h2>
           <p className="text-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
             While only one town is active, nobody is asked to choose a town
-            anywhere on the site &mdash; sign-up, profiles, posting a role, the
-            browse &mdash; and everything is filed under that town. Activate a
+            anywhere on the site (sign-up, profiles, posting a role, the
+            browse), and everything is filed under that town. Activate a
             second town and every one of those choices appears at once. A town
             cannot be deactivated while any role or person is filed under it.
           </p>

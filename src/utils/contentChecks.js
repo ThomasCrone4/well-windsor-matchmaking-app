@@ -88,7 +88,7 @@ export function checkFreeText(value, field, ctx, { checkWords = false } = {}) {
   if (limit && text.length > limit) {
     ctx.addIssue({
       code: 'custom',
-      message: `Please keep this to ${limit.toLocaleString()} characters — it is currently ${text.length.toLocaleString()}.`,
+      message: `Please keep this to ${limit.toLocaleString()} characters. It is currently ${text.length.toLocaleString()}.`,
     });
     return;
   }
@@ -100,8 +100,8 @@ export function checkFreeText(value, field, ctx, { checkWords = false } = {}) {
         code: 'custom',
         message:
           bad.length === 1
-            ? `Please reword this — “${bad[0]}” is not something we can publish.`
-            : `Please reword this — ${bad.map((w) => `“${w}”`).join(', ')} are not something we can publish.`,
+            ? `Please reword this: “${bad[0]}” is not something we can publish.`
+            : `Please reword this: ${bad.map((w) => `“${w}”`).join(', ')} are not something we can publish.`,
       });
     }
   }

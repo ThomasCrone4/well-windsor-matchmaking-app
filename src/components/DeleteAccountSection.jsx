@@ -68,31 +68,31 @@ export default function DeleteAccountSection() {
           <>
             <Line>
               <strong>{s.roles_posted ?? 0}</strong>{' '}
-              {s.roles_posted === 1 ? 'role you posted' : 'roles you posted'} — taken
+              {s.roles_posted === 1 ? 'role you posted' : 'roles you posted'}: taken
               off the site
             </Line>
             <Line>
               <strong>{s.registrations_received ?? 0}</strong>{' '}
               {s.registrations_received === 1 ? 'registration' : 'registrations'}{' '}
-              volunteers made to those roles — removed, and they are not told
+              volunteers made to those roles: removed, and they are not told
             </Line>
             <Line>
               <strong>{s.messages_sent ?? 0}</strong>{' '}
               {s.messages_sent === 1 ? 'message' : 'messages'} you sent to
-              volunteers — removed from your records
+              volunteers: removed from your records
             </Line>
           </>
         ) : (
           <>
             <Line>
               <strong>{s.registrations_made ?? 0}</strong>{' '}
-              {s.registrations_made === 1 ? 'role you registered for' : 'roles you registered for'} —
+              {s.registrations_made === 1 ? 'role you registered for' : 'roles you registered for'}:
               the organisations stop seeing you
             </Line>
             <Line>
               <strong>{s.messages_received ?? 0}</strong>{' '}
               {s.messages_received === 1 ? 'message' : 'messages'} organisations
-              sent you — removed from our records
+              sent you: removed from our records
             </Line>
             <Line>Your availability and your notifications</Line>
           </>
@@ -100,7 +100,7 @@ export default function DeleteAccountSection() {
       </ul>
       <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
         Emails already sent cannot be recalled, and we keep a dated record that
-        they were sent — with your name, address and the text removed.
+        they were sent, with your name, address and the text removed.
       </p>
     </div>
   );

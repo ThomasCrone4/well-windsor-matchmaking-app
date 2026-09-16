@@ -154,7 +154,7 @@ export default function Navbar() {
         }}
       >
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
-          <Link to="/" className="flex-none" aria-label="Well Windsor — home">
+          <Link to="/" className="flex-none" aria-label="Well Windsor home page">
             <picture>
               <source srcSet="/WellWindsorLogo.webp" type="image/webp" />
               {/* 50px was the mockup's size and it read as small once the

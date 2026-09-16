@@ -237,7 +237,7 @@ export default function ContactVolunteerForm({
               and you will not be able to write to them again for 24 hours.
             </p>
             <p className="mt-2">
-              Well Windsor does not vet or DBS-check volunteers &mdash; any checks the role
+              Well Windsor does not vet or DBS-check volunteers. Any checks the role
               needs are yours to carry out.
             </p>
           </>

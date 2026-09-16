@@ -73,7 +73,7 @@ export default function ChangeEmailSection({ currentEmail }) {
       <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
         You currently sign in as{' '}
         <strong style={{ color: 'var(--color-text-primary)' }}>
-          {currentEmail ?? '—'}
+          {currentEmail ?? 'an unknown address'}
         </strong>
         .
       </p>

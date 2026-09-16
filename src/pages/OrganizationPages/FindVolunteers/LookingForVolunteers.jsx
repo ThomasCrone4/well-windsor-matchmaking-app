@@ -167,7 +167,7 @@ export default function LookingForVolunteersPage() {
         <h1 className="title">Find volunteers</h1>
         <p className="page-description">
           Volunteers who have chosen to be listed here. Write to anyone who looks like a fit
-          and we will email them on your behalf — their reply comes straight to your inbox.
+          and we will email them on your behalf. Their reply comes straight to your inbox.
           You can write to the same volunteer once every 24 hours.
         </p>
 
@@ -264,13 +264,13 @@ export default function LookingForVolunteersPage() {
                   <div>
                     <span className="text-[10px] font-semibold uppercase tracking-[0.1em] block" style={{ color: 'var(--color-text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>Home town</span>
                     <dd className="mt-0.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                      {vol.home_town || '—'}
+                      {vol.home_town || 'Not given'}
                     </dd>
                   </div>
                   <div>
                     <span className="text-[10px] font-semibold uppercase tracking-[0.1em] block" style={{ color: 'var(--color-text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>Skills</span>
                     <dd className="mt-0.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                      {vol.skills?.trim() || '—'}
+                      {vol.skills?.trim() || 'None listed'}
                     </dd>
                   </div>
                   <div>
@@ -288,7 +288,7 @@ export default function LookingForVolunteersPage() {
                     onClick={() => handleEnquire(vol.id)}
                     title={
                       hoursLeft > 0
-                        ? `You contacted this volunteer recently — you can write again in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`
+                        ? `You contacted this volunteer recently. You can write again in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`
                         : 'Contact volunteer'
                     }
                   >

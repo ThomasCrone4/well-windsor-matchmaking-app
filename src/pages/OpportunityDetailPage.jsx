@@ -171,7 +171,7 @@ export default function OpportunityDetailPage() {
   const blocks = blocksFromTimeblockRows(timeblocks ?? []);
 
   const schedule = op.generally_needed
-    ? 'Flexible — the organisation has no fixed times for this role'
+    ? 'Flexible: the organisation has no fixed times for this role'
     : formatOpportunitySchedule({ ...op, timeblocks: blocks });
 
   // Facts the database actually holds. The mockup's panel also has a
@@ -193,7 +193,7 @@ export default function OpportunityDetailPage() {
     {
       term: 'DBS check',
       value: op.requires_dbs
-        ? 'Required — arranged by the organisation, not by Well Windsor'
+        ? 'Required, and arranged by the organisation, not by Well Windsor'
         : 'Not required for this role',
     },
     {
@@ -312,8 +312,8 @@ export default function OpportunityDetailPage() {
                 product and the copy must not imply one. */}
             <p className="mt-3 max-w-[56ch] text-sm" style={{ color: 'var(--color-text-muted)' }}>
               {orgName} will email you directly if they would like to take it
-              further. You may not hear back from every role you register for —
-              that is normal, and it is not a reflection on you.
+              further. You may not hear back from every role you register for.
+              That is normal, and it is not a reflection on you.
             </p>
           </div>
 

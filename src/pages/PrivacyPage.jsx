@@ -63,7 +63,7 @@ export default function PrivacyPage() {
             <li>your name and home town;</li>
             <li>your date of birth, because volunteers must be 18 or over;</li>
             <li>if you give them: a phone number, a short bio, your skills and when you are available;</li>
-            <li>whether you are <em>discoverable</em> — whether approved organisations may find you and contact you;</li>
+            <li>whether you are <em>discoverable</em>, meaning approved organisations may find you and contact you;</li>
             <li>the roles you register interest in, and any note you add.</li>
           </List>
           <p><strong>Organisations:</strong> your organisation&rsquo;s name, town and bio, an optional phone number,
@@ -102,7 +102,7 @@ export default function PrivacyPage() {
           <p>
             To run the service you signed up for: matching volunteers with local roles, letting
             organisations contact the people who are interested, and sending the emails and
-            notices that go with that. We also use it to keep the site safe — checking organisations
+            notices that go with that. We also use it to keep the site safe: checking organisations
             before they can post, confirming volunteers are adults, and investigating problems.
           </p>
         </Section>
@@ -124,7 +124,7 @@ export default function PrivacyPage() {
         <Section id="how-long" title="How long we keep it">
           <List>
             <li>Your account information, until you delete your account.</li>
-            <li>The content of emails the site sends — address, name and text — for 30 days after
+            <li>The content of emails the site sends (address, name and text), for 30 days after
               sending. After that only the date and whether it was delivered are kept.</li>
             <li>Problem reports, until they are no longer needed to fix the problem.</li>
             <li>The record of administrative actions is kept permanently, but names, email addresses
@@ -134,7 +134,7 @@ export default function PrivacyPage() {
 
         <Section id="delete" title="Deleting your account">
           <p>
-            You can delete your account yourself — see{' '}
+            You can delete your account yourself. See{' '}
             <Link to="/delete-my-data" style={{ color: 'var(--color-brand-ink)' }} className="underline">
               delete my data
             </Link>. It happens immediately and cannot be undone.

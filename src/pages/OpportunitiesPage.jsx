@@ -117,7 +117,7 @@ export default function OpportunitiesPage() {
 
         if (rpcError) {
           console.error('RPC match_opportunities_for_volunteer failed:', rpcError);
-          toast.error('Matching unavailable — showing all active opportunities');
+          toast.error('Matching unavailable. Showing all active opportunities.');
           const { data: plain, error: plainErr } = await supabase
             .from('volunteer_opportunities')
             .select(`

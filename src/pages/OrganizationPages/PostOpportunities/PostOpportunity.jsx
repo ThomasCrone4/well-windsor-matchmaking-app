@@ -75,7 +75,7 @@ const getOpportunitySchema = (isDraft, towns, showPicker) =>
     volunteers_needed: z.coerce
       .number()
       .min(1, 'Must be at least 1 volunteer')
-      .max(LIMITS.volunteers_needed, `That is more than ${LIMITS.volunteers_needed} — please check.`),
+      .max(LIMITS.volunteers_needed, `That is more than ${LIMITS.volunteers_needed}. Please check.`),
   });
 
 export default function PostOpportunity() {
@@ -216,8 +216,8 @@ export default function PostOpportunity() {
     const first = fields.map((f) => formErrors[f]?.message).find(Boolean);
     toast.error(
       first || (fields.length
-        ? `Could not post — please check: ${fields.join(', ')}`
-        : 'Could not post — please check the form.')
+        ? `Could not post. Please check: ${fields.join(', ')}`
+        : 'Could not post. Please check the form.')
     );
   };
 
@@ -379,7 +379,7 @@ export default function PostOpportunity() {
               className={`select ${errors.category ? 'input-invalid' : ''}`}
               aria-invalid={!!errors.category}
             >
-              <option value="">No preference — use a general photo</option>
+              <option value="">No preference (use a general photo)</option>
               {OPPORTUNITY_CATEGORIES.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
@@ -404,7 +404,7 @@ export default function PostOpportunity() {
             />
             {errors.location
               ? <p className="error-text">{errors.location.message}</p>
-              : <p className="help-text">The venue or address.{showPicker && ' Free text — the town above does the filtering.'}</p>}
+              : <p className="help-text">The venue or address.{showPicker && ' Free text. The town above does the filtering.'}</p>}
           </div>
 
           {/* ROLE-3. The required "Contact Email" field that stood here is
@@ -462,7 +462,7 @@ export default function PostOpportunity() {
             </label>
             <p className="help-text">
               Shown on the listing. Well Windsor does not vet or DBS-check
-              volunteers — arranging and verifying the check is yours to do.
+              volunteers. Arranging and verifying the check is yours to do.
             </p>
           </div>
 
@@ -496,7 +496,7 @@ export default function PostOpportunity() {
             disabled={pending}
             title={pending ? 'Available once Well Windsor approves your organisation' : undefined}
           >
-            {pending ? 'Post opportunity — after approval' : 'Post opportunity'}
+            {pending ? 'Post opportunity (after approval)' : 'Post opportunity'}
           </button>
 
           <button

@@ -106,7 +106,7 @@ export default function EnquireOpportunitiesPage() {
 
       <p className="muted mb-2">
         You&rsquo;re registering interest in <strong>{opportunity.title || 'this role'}</strong>
-        {opportunity.location ? ` – ${opportunity.location}` : ''}
+        {opportunity.location ? ` · ${opportunity.location}` : ''}
       </p>
 
       {opportunity.requires_dbs && (
@@ -119,7 +119,7 @@ export default function EnquireOpportunitiesPage() {
           email you directly if they would like to hear more.
         </p>
         <p className="caption">
-          You may not hear back from every role you register for — organisations only contact the
+          You may not hear back from every role you register for. Organisations only contact the
           people they want to take further, and silence is not a rejection you need to read
           anything into. Well Windsor does not vet or DBS-check organisations, and is not
           party to any arrangement you make with them.

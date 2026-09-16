@@ -419,7 +419,7 @@ export default function VolunteerProfilePage() {
               >
                 {publicProfile
                   ? 'Organisations Well Windsor has approved can see your name, town, skills and bio, and can write to you through us. They never see your email address unless you reply.'
-                  : 'You are not listed. Organisations cannot find you or write to you out of the blue — but one whose role you register for can still reply to you.'}
+                  : 'You are not listed. Organisations cannot find you or write to you out of the blue, but one whose role you register for can still reply to you.'}
               </span>
             </span>
           </label>

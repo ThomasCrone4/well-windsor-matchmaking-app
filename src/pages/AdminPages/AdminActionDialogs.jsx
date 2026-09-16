@@ -87,7 +87,7 @@ export function TakeDownRoleDialog({ role, orgName, isPending, onClose, onConfir
     >
       <p>
         <strong style={{ color: 'var(--color-text-primary)' }}>{role.title}</strong>
-        {orgName ? ` — ${orgName}` : ''}
+        {orgName ? ` · ${orgName}` : ''}
       </p>
       <p>
         It comes off the site straight away and <strong>cannot be put back</strong>.
@@ -164,8 +164,8 @@ export function SwitchAccountDialog({ account, toRole, isPending, onClose, onCon
           <li>Their registrations are <strong>withdrawn</strong>: kept on record, hidden from the organisations, who are not told.</li>
           <li>
             Their date of birth, phone number, bio, skills and availability are
-            <strong> cleared</strong> — organisation profiles are visible to other
-            people, and their name will be too.
+            <strong> cleared</strong>, because organisation profiles are visible to
+            other people. Their name will be visible too.
           </li>
           <li>Messages they sent and received stay in the logs.</li>
         </ul>

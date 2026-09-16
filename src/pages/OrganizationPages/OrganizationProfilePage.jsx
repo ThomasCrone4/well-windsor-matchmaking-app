@@ -184,7 +184,7 @@ export default function OrganisationProfilePage() {
         <div className="form-row">
           <span className="label">Replies go to</span>
           <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>
-            {user?.email ?? '—'}
+            {user?.email ?? 'your sign-in email address'}
           </p>
           <p className="help-text">
             When you write to a volunteer, their reply comes to the email you

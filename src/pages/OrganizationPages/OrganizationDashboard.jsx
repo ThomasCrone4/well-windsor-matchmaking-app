@@ -344,7 +344,7 @@ export default function OrganizationDashboard() {
         <h1 className="title">Your opportunities</h1>
         <p className="page-description">
           Post what you need and see who has registered interest. People who
-          register appear on each post — you email the ones you want, and
+          register appear on each post. You email the ones you want, and
           dismissing someone is never shown to them.
         </p>
 
@@ -403,12 +403,12 @@ export default function OrganizationDashboard() {
               {(applicationsCount[removing?.id] ?? 0) > 0
                 ? `The ${applicationsCount[removing?.id]} ${
                     applicationsCount[removing?.id] === 1 ? 'person' : 'people'
-                  } who registered will stay on your records — nothing about them is deleted.`
+                  } who registered will stay on your records. Nothing about them is deleted.`
                 : 'Nobody has registered interest in it yet.'}
             </p>
             <p className="mt-2">
               This cannot be undone. If you might offer it again, close it
-              instead — a closed role can be reopened.
+              instead: a closed role can be reopened.
             </p>
           </>
         }

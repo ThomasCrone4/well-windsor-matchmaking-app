@@ -165,7 +165,7 @@ function render(row: Row): [string, string] {
         .map((it) => {
           const note = String(it.note ?? '').trim();
           return `<li style="margin:0 0 12px">
-<strong>${esc(it.volunteer_name)}</strong> &mdash; ${esc(it.role_title)}
+<strong>${esc(it.volunteer_name)}</strong> &middot; ${esc(it.role_title)}
 ${note ? `<div style="color:#4b5563;margin-top:2px">&ldquo;${esc(note)}&rdquo;</div>` : ''}
 </li>`;
         })
@@ -181,7 +181,7 @@ ${note ? `<div style="color:#4b5563;margin-top:2px">&ldquo;${esc(note)}&rdquo;</
         items
           .map((it) => {
             const note = String(it.note ?? '').trim();
-            return `- ${it.volunteer_name} — ${it.role_title}${note ? `\n  "${note}"` : ''}`;
+            return `- ${it.volunteer_name} · ${it.role_title}${note ? `\n  "${note}"` : ''}`;
           })
           .join('\n') +
         `\n\nSign in to read their profiles and write to the ones you would like ` +

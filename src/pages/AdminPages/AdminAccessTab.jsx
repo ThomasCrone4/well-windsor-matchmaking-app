@@ -160,7 +160,7 @@ export default function AdminAccessTab({ currentUserId }) {
 
                 {r.is_permanent ? (
                   <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                    Always on the list — cannot be removed or paused
+                    Always on the list. Cannot be removed or paused
                   </span>
                 ) : (
                   <div className="flex gap-2">
@@ -220,7 +220,7 @@ export default function AdminAccessTab({ currentUserId }) {
         </h2>
         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           An admin sees and can change <strong>every</strong> account on Well
-          Windsor — including approving organisations, reading problem reports
+          Windsor, including approving organisations, reading problem reports
           and changing someone&rsquo;s sign-in email. Add people you would trust
           with all of it.
         </p>
@@ -248,7 +248,7 @@ export default function AdminAccessTab({ currentUserId }) {
                     )}
                   </p>
                   <p className="text-sm break-all" style={{ color: 'var(--color-text-secondary)' }}>
-                    {a.email ?? '—'}
+                    {a.email ?? 'No email address'}
                   </p>
                 </div>
                 {isSelf ? (

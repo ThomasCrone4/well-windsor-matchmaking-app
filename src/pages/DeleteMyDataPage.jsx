@@ -56,7 +56,7 @@ export default function DeleteMyDataPage() {
         ) : (
           <>
             <p style={{ color: 'var(--color-text-secondary)' }}>
-              Sign in first, then go to your profile page — the <strong>Delete account</strong> section
+              Sign in first, then go to your profile page. The <strong>Delete account</strong> section
               is at the bottom.
             </p>
             <div>
