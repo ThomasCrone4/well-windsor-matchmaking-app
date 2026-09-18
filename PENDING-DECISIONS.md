@@ -136,6 +136,30 @@ would have had to declare. **Provisionally: built** — Poppins now comes from
 
 ---
 
+## From Workflow 9 (browse, admin, accounts) — 2026-09-18
+
+### WF9-9 · What an organisation is told when its own role is not public
+Batch 9.1. An organisation and an administrator can open a role's page that no
+volunteer can see: a draft, a closed role, a removed one, or any role at all
+while the organisation is still waiting for approval. Until now that page
+looked exactly like a live one, register button and all.
+**Provisionally: built** — a notice at the top saying "Not visible to
+volunteers", with the reason, and no register button. The wording differs by
+case; the one worth your eye is the approval case, which now tells a pending
+organisation that its roles are not listed **because it has not been
+approved yet**. That is true, and it is the first place the site says it
+out loud. Options: leave it; soften it; or say nothing and let the
+organisation find out from the dashboard.
+
+### WF9-10 · The front page's role count can now go down
+Same batch. The count and the three cards read the same list as the browse, so
+they no longer include removed roles or roles from unapproved organisations.
+Nobody was ever meant to see those numbers, but **an admin looking at the
+front page will see a smaller number than they did yesterday** — that is the
+fix, not a regression. Flagged only so it is not mistaken for one.
+
+---
+
 ## Carried over from earlier workflows
 
 ### LOGIC-MAP · Republish the logic map marking items built
@@ -146,6 +170,16 @@ APP-2 · WF3 ACC-4 ACC-5 ACC-6 CON-6 ADM-8 (ACC-8 built, unproven) · WF4 APP-1
 APP-3 APP-6 · WF5 ROLE-1 ROLE-2 ROLE-3 ROLE-4 ROLE-5 APP-5 BRW-4 · WF6 INT-2
 INT-3 INT-4 CON-2 CON-4 CON-5 · WF7 ADM-1 ADM-2 ADM-5 ADM-6.
 **Needs:** your go-ahead to republish.
+
+Workflow 9 has no item codes of its own on the map — it is a pass over what is
+already there. What it changes on the map, batch by batch, so the republish
+does not have to reconstruct it:
+- **9.1** — nothing to add. BRW-1's "active roles" now means one thing rather
+  than three; worth a note in its wording if you are editing it anyway.
+- **9.2** — reverses "availability-overlap matching is being kept and
+  finished". Mark it removed, with the reason (a static grid goes stale the
+  week after sign-up) and the replacement idea (WF9-2, a date in the outreach
+  email).
 
 ### APP-4 · What does a human check before approving an organisation?
 Still open on the logic map. Blocks nothing — approval works without it.

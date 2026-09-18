@@ -52,8 +52,9 @@ volunteer's profile row, and adding one is not the answer. Use a view:
 | `org_outreach_sent` | *your* outreach log, with the volunteer's name |
 | `public_organisations` | every organisation: id, name, home_town, bio |
 | `my_registrations` | *your own* registrations, with the role attached |
+| `public_opportunities` | every publicly visible role, with its organisation's name |
 
-All five run with owner rights (`security_invoker = false`) and carry no
+All six run with owner rights (`security_invoker = false`) and carry no
 contact columns.
 
 `my_registrations` exists because a volunteer reads roles through
@@ -922,6 +923,42 @@ Re-runnable: `.scratch/probe_wf8_final.py` (100), `.scratch/walk_wf8.py` (21),
 `.scratch/walk_invoke.py` (6, sends one email to a `.invalid` address),
 and `.scratch/probe_wf8_outbox.py` (signs up and approves a throwaway org;
 `--delete` deletes it; verify the outbox with SQL — it has no client grants).
+
+**Workflow 9 batch 9.1 is built (2026-09-18, branch `wf9-1-public-view`).**
+One migration. See BUILD-PLAN for the remaining batches, 9.2 to 9.7.
+
+- **`public_opportunities` is the one definition of a publicly visible role:**
+  active, `deleted_at is null`, and an approved organisation, with that
+  organisation's name joined on. The browse, the home list and the home
+  page's role count all read it.
+- **The bug it closes: "status = 'active'" is not the same question as "is
+  this public", and RLS answers it differently for everyone.** A removed role
+  keeps `status = 'active'`, and RLS deliberately lets an admin read every
+  role and an organisation read its own — so with two fixture rows in place
+  the same browse query returned **16 rows to an admin, 15 to the
+  organisation that owned the removed one, and 14 to anon**. Owner rights on
+  the view is what makes those three identical; a policy could not, because
+  the whole point is that the caller's policies differ.
+- **Approval is checked by joining `public_organisations`, not by a second
+  copy of the rule.** That view already defines an approved organisation, and
+  the inner join both filters and names in one step.
+- **The match RPC was corrected rather than left for 9.2.** It carried its own
+  status/`deleted_at` filter and **no approval check at all**, so an admin
+  whose own account is a volunteer took a third path to a third list. Same
+  signature, `CREATE OR REPLACE`, so the ACL survives (trap 1c).
+- **The detail page still reads the table** — an organisation previewing its
+  own draft needs that — and asks the view a second question: is this public?
+  If not, it says so plainly and drops the register button and the "they will
+  email you" promise, which would otherwise be describing something that
+  cannot happen.
+- **A view with a join refuses writes with `55000`, not `42501`.** Postgres
+  rejects it as not auto-updatable before it looks at privileges, so that
+  denial is not evidence the revoke landed. `pg_class.relacl` is
+  (`anon=r`, `authenticated=r`); read the ACL, do not infer it from an error
+  code.
+
+Re-runnable: `.scratch/probe_wf9_1.py` (40 cases) and `.scratch/walk_wf9_1.py`
+(25 UI checks). Both need the two fixtures in `seed_throwaways.sql`.
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured

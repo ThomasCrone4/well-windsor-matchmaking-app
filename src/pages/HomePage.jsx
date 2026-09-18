@@ -73,10 +73,13 @@ export default function HomePage() {
       const { data: volunteerCount } = await supabase.rpc('count_volunteers');
       const { data: organisationCount } = await supabase.rpc('count_organisations');
 
+      // WF9-1. public_opportunities, not the table. This counted
+      // `status = 'active'` under the caller's RLS, so the number on the front
+      // page was different depending on who was reading it: an admin was
+      // counting removed roles too, and an organisation was counting its own.
       const { count: opportunityCount } = await supabase
-        .from('volunteer_opportunities')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'active');
+        .from('public_opportunities')
+        .select('id', { count: 'exact', head: true });
 
       setStats({
         organisations: organisationCount ?? 0,
@@ -91,11 +94,14 @@ export default function HomePage() {
    * Fetch opportunities for the "Upcoming" list on Home
    * (includes org_id for name lookup)
    */
+  // WF9-1. public_opportunities is the one definition of a publicly visible
+  // role, and it carries the organisation's name, so the second query this
+  // page ran against public_organisations to label the three cards is gone.
   const { data: opportunities, isLoading } = useQuery({
     queryKey: ['upcoming_opportunities_home'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('volunteer_opportunities')
+        .from('public_opportunities')
         .select(`
           id,
           title,
@@ -106,45 +112,15 @@ export default function HomePage() {
           volunteers_needed,
           status,
           created_at,
-          org_id
+          org_id,
+          org_name
         `)
-        .eq('status', 'active')
         .order('created_at', { ascending: false }); // show newest first
       if (error) throw error;
       return data ?? [];
     },
     staleTime: 30_000,
   });
-
-  // 🔎 Build a distinct list of org_ids and fetch org names in one query
-  const orgIds = useMemo(() => {
-    const ids = new Set((opportunities ?? []).map((o) => o.org_id).filter(Boolean));
-    return Array.from(ids);
-  }, [opportunities]);
-
-  const { data: orgRows } = useQuery({
-    queryKey: ['org_names_home', orgIds],
-    enabled: orgIds.length > 0,
-    queryFn: async () => {
-      // public_organisations, not user_profiles. This page is mostly read
-      // by logged-out visitors, and the view is a fixed column list that
-      // cannot start returning an email or phone number the way a profile
-      // row can.
-      const { data, error } = await supabase
-        .from('public_organisations')
-        .select('id, name')
-        .in('id', orgIds);
-      if (error) throw error;
-      return data ?? [];
-    },
-    staleTime: 60_000,
-  });
-
-  const orgNameById = useMemo(() => {
-    const map = new Map();
-    (orgRows ?? []).forEach((r) => map.set(r.id, r.name));
-    return map;
-  }, [orgRows]);
 
   // ROLE-5. The schedule is in opportunity_timeblocks and nowhere else, so
   // the three roles on the front page have to read it too — otherwise both
@@ -358,7 +334,7 @@ export default function HomePage() {
           ) : topThree.length > 0 ? (
             <ul className="grid gap-4 md:grid-cols-3">
               {topThree.map((op) => {
-                const orgName = orgNameById.get(op.org_id) ?? 'Organisation';
+                const orgName = op.org_name || 'Organisation';
                 return (
                   <li key={op.id}>
                     {/* The detail page exists now. This used to link to

@@ -103,23 +103,36 @@ export default function OpportunitiesPage() {
     [myApps]
   );
 
-  // Fetch opportunities (volunteers use RPC to get match_kind etc.)
+  // WF9-1. Both paths read public_opportunities, which is the single
+  // definition of a publicly visible role: active, not removed, and posted by
+  // an approved organisation.
+  //
+  // This page used to ask the table for `status = 'active'` and trust RLS for
+  // the rest -- but RLS lets an admin read every role and an organisation read
+  // its own, and a REMOVED role keeps `status = 'active'`. So the same browse
+  // showed an admin 16 roles, an organisation with one removed role 15, and a
+  // logged-out visitor 14. The view has owner rights, so the caller's RLS can
+  // neither widen nor narrow it and all three now see the same list.
+  //
+  // The view also carries org_name, so the separate public_organisations
+  // lookup this page used to run for the non-volunteer path is gone: both
+  // paths now hand every card its organisation's name in the row itself.
   const {
     data: opps,
     error,
     isLoading,
   } = useQuery({
-    queryKey: ['volunteer_opportunities', userProfile?.id, userProfile?.role],
+    queryKey: ['public_opportunities', userProfile?.id, userProfile?.role],
     queryFn: async () => {
       if (userProfile?.role === 'volunteer') {
         const { data: rpcData, error: rpcError } = await supabase
           .rpc('match_opportunities_by_availability', { p_volunteer_id: userProfile.id });
 
         if (rpcError) {
-          console.error('RPC match_opportunities_for_volunteer failed:', rpcError);
+          console.error('RPC match_opportunities_by_availability failed:', rpcError);
           toast.error('Matching unavailable. Showing all active opportunities.');
           const { data: plain, error: plainErr } = await supabase
-            .from('volunteer_opportunities')
+            .from('public_opportunities')
             .select(`
               id,
               title,
@@ -132,10 +145,10 @@ export default function OpportunitiesPage() {
               volunteers_needed,
               status,
               org_id,
+              org_name,
               category,
               created_at
             `)
-            .eq('status', 'active')
             .order('created_at', { ascending: false });
           if (plainErr) throw plainErr;
           return plain ?? [];
@@ -143,9 +156,9 @@ export default function OpportunitiesPage() {
         return rpcData ?? [];
       }
 
-      // non-volunteer path (logged-out visitors and organisations)
+      // non-volunteer path (logged-out visitors, organisations and admins)
       const { data, error } = await supabase
-        .from('volunteer_opportunities')
+        .from('public_opportunities')
         .select(`
           id,
           title,
@@ -158,44 +171,15 @@ export default function OpportunitiesPage() {
           volunteers_needed,
           status,
           org_id,
+          org_name,
           category,
           created_at
         `)
-        .eq('status', 'active')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
   });
-
-  // org names for non-volunteer path (RPC already includes org_name)
-  const nonVolunteer = userProfile?.role !== 'volunteer';
-  const orgIds = useMemo(() => {
-    if (!nonVolunteer) return [];
-    return Array.from(new Set((opps ?? []).map((o) => o.org_id).filter(Boolean)));
-  }, [opps, nonVolunteer]);
-
-  const { data: orgRows } = useQuery({
-    queryKey: ['org_names_by_id', orgIds],
-    enabled: nonVolunteer && orgIds.length > 0,
-    queryFn: async () => {
-      // public_organisations, not user_profiles: a fixed, contact-free
-      // column list rather than a read of the profile row itself.
-      const { data, error } = await supabase
-        .from('public_organisations')
-        .select('id,name')
-        .in('id', orgIds);
-      if (error) throw error;
-      return data ?? [];
-    },
-    staleTime: 60_000,
-  });
-
-  const orgNameById = useMemo(() => {
-    const map = new Map();
-    (orgRows ?? []).forEach((r) => map.set(r.id, r.name));
-    return map;
-  }, [orgRows]);
 
   // ROLE-5. The schedule lives in opportunity_timeblocks and nowhere else now.
   // This list used to read the `when_needed` jsonb, which was NULL on every
@@ -312,12 +296,7 @@ export default function OpportunitiesPage() {
       // the word in the title, and searching for a school by name found
       // nothing at all. Description, skills and the organisation's name are
       // all on the card already — this searches what the reader can see.
-      const haystack = [
-        op.title,
-        op.description,
-        op.skills,
-        op.org_name ?? orgNameById.get(op.org_id),
-      ]
+      const haystack = [op.title, op.description, op.skills, op.org_name]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
@@ -488,7 +467,7 @@ export default function OpportunitiesPage() {
         <ul className="grid gap-5 lg:grid-cols-2">
           {finalList.map((op) => {
             const alreadyEnquired = !!userProfile?.id && appliedSet.has(op.id);
-            const orgName = (op.org_name ?? orgNameById.get(op.org_id)) || 'Organisation';
+            const orgName = op.org_name || 'Organisation';
             const blocks = blocksByOpp.get(op.id) ?? [];
 
             // Availability badge, volunteers only -- it is a statement about

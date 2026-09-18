@@ -10,6 +10,12 @@
 // read the whole thing and is asked to sign in only at the point of
 // registering interest. A draft or closed role returns nothing here, which
 // is the not-found branch.
+//
+// WF9-1: the two people RLS does NOT hide a non-public role from are the
+// organisation that posted it and an administrator, and for them the page
+// used to look exactly like the live one, register button and all. It now
+// checks public_opportunities -- the single definition of publicly visible --
+// and says plainly that nobody else can see this.
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase';
@@ -64,6 +70,7 @@ export default function OpportunityDetailPage() {
           volunteers_needed,
           skills,
           status,
+          deleted_at,
           org_id,
           category,
           created_at
@@ -75,6 +82,31 @@ export default function OpportunityDetailPage() {
       return data;
     },
   });
+
+  // WF9-1. This page deliberately still reads the TABLE above, because an
+  // organisation previewing its own draft has to be able to see it. That is
+  // also why it cannot tell, from the row alone, whether anyone else can:
+  // a removed role keeps `status = 'active'`, and a role whose organisation
+  // has not been approved looks perfectly ordinary from here.
+  //
+  // So ask public_opportunities, which is the one definition of publicly
+  // visible, rather than re-deriving the rule from three columns and getting
+  // a fourth answer. A row back means a volunteer would see this page; no row
+  // means the notice below, and no register button.
+  const { data: publicRow, isPending: publicPending } = useQuery({
+    queryKey: ['opportunity_is_public', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('public_opportunities')
+        .select('id')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      return data ?? null;
+    },
+  });
+
+  const isPubliclyVisible = !!publicRow;
 
   const { data: org } = useQuery({
     queryKey: ['opportunity_detail_org', op?.org_id],
@@ -138,7 +170,9 @@ export default function OpportunityDetailPage() {
 
   const alreadyRegistered = (existingApplications ?? []).length > 0;
 
-  if (isPending) {
+  // Both queries are gated together so the notice and the register button
+  // cannot flash the wrong state for a frame while the second one lands.
+  if (isPending || publicPending) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-10" id="main-content">
         <div className="skeleton h-56 w-full rounded-2xl" />
@@ -167,6 +201,21 @@ export default function OpportunityDetailPage() {
   }
 
   const orgName = org?.name ?? 'Organisation';
+
+  // Why this role is not public, in the order that matters: removal is
+  // terminal and beats everything, then the role's own status, and only then
+  // the organisation's approval. Anyone reading this is the organisation that
+  // owns the role or an administrator -- a volunteer or a logged-out visitor
+  // cannot read the row at all, and gets the not-found branch above.
+  const notPublicReason = isPubliclyVisible
+    ? null
+    : op.deleted_at
+      ? 'This role has been removed, so volunteers can no longer see it or register for it. Removal is permanent.'
+      : op.status === 'draft'
+        ? 'This is a draft. Only you can see it. Publish it from your dashboard when it is ready.'
+        : op.status === 'closed'
+          ? 'This role is closed, so it is not on the public list. You can reopen it from the edit form while its dates are still ahead.'
+          : 'This role is not on the public list yet, because the organisation that posted it is still waiting to be approved.';
 
   const blocks = blocksFromTimeblockRows(timeblocks ?? []);
 
@@ -218,6 +267,23 @@ export default function OpportunityDetailPage() {
           &larr; Back
         </button>
 
+        {notPublicReason && (
+          <div
+            className="mb-6 rounded-xl px-4 py-3 text-sm"
+            role="status"
+            style={{
+              backgroundColor: 'var(--color-background-secondary)',
+              color: 'var(--color-text-secondary)',
+              borderLeft: '3px solid var(--color-brand)',
+            }}
+          >
+            <strong style={{ color: 'var(--color-text-primary)' }}>
+              Not visible to volunteers.
+            </strong>{' '}
+            {notPublicReason}
+          </div>
+        )}
+
         <div className="grid gap-8 md:grid-cols-[1.5fr_1fr] md:gap-10">
           {/* ---------------- main column ---------------- */}
           <div>
@@ -266,7 +332,12 @@ export default function OpportunityDetailPage() {
 
             {/* ---------------- the action ---------------- */}
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              {!profile ? (
+              {!isPubliclyVisible ? (
+                // No register button on a role nobody can register for. The
+                // reason is already on screen in the notice above, so this
+                // says nothing further.
+                null
+              ) : !profile ? (
                 <Link to="/auth" className="btn-primary px-6 py-3 text-base">
                   Sign in to register interest
                 </Link>
@@ -309,12 +380,17 @@ export default function OpportunityDetailPage() {
             )}
 
             {/* The honest line. There is no accept or decline in this
-                product and the copy must not imply one. */}
-            <p className="mt-3 max-w-[56ch] text-sm" style={{ color: 'var(--color-text-muted)' }}>
-              {orgName} will email you directly if they would like to take it
-              further. You may not hear back from every role you register for.
-              That is normal, and it is not a reflection on you.
-            </p>
+                product and the copy must not imply one. It is a promise about
+                what happens after registering, so it goes with the register
+                button: on a role nobody can register for it would be describing
+                something that cannot happen. */}
+            {isPubliclyVisible && (
+              <p className="mt-3 max-w-[56ch] text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                {orgName} will email you directly if they would like to take it
+                further. You may not hear back from every role you register for.
+                That is normal, and it is not a reflection on you.
+              </p>
+            )}
           </div>
 
           {/* ---------------- facts panel ---------------- */}
