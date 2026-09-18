@@ -178,6 +178,60 @@ Not decisions, but nothing in code can do them. Listed so they are not lost.
 
 ---
 
+---
+
 ## Decided
 
-_Nothing yet._
+### 2026-09-18 · Workflow 9, from the live walk-through
+
+Planned in `BUILD-PLAN.md` under "Workflow 9". None of it is built yet.
+
+**WF9-1 · Availability matching is removed, and volunteer availability with
+it.** A static weekly grid promises more than it can deliver: real
+availability changes week to week and day to day, so a grid filled in at
+sign-up is stale almost immediately. Making it genuinely useful needs a design
+pass nobody has budget for in v0. So the match badge, "Show matches only", the
+grid on sign-up and the profile, the availability shown to organisations, the
+`volunteer_availability` table, the two `user_profiles` columns and
+`match_opportunities_by_availability` all go, archived on a branch. Role
+schedules (`opportunity_timeblocks`) stay — they are what the new ordering
+reads. **Reverses an earlier logic-map decision;** mark it there.
+
+**WF9-2 · The idea that may replace it, later.** When an organisation writes
+to a volunteer, let it name when the role is and attach a calendar invite, so
+the date arrives in the message. The date is known then, by the person who
+knows it, instead of asking every volunteer to maintain a grid for ever. Out
+of scope for v0; recorded in BUILD-PLAN under "Later, not now".
+
+**WF9-3 · The browse loses the "When" filter and gains an organisation
+filter**, listing only organisations that have a live role. Ordering (not
+filtering) is soonest next date first, "any time" roles after the dated ones,
+and the home page's "Upcoming" uses the same rule.
+
+**WF9-4 · Pagination.** 10 per page on the browse and on Find Volunteers;
+**50** on the admin lists, which carry no images and so can afford a longer
+page.
+
+**WF9-5 · A closed role gets three buttons:** Save and reopen, Save and keep
+closed, Discard changes. Save-and-reopen returns to the organisation
+dashboard.
+
+**WF9-6 · An admin can decline an organisation**, quietly: it leaves the
+waiting queue with a reason in the audit log, and the organisation is not
+told. Otherwise the queue never empties and its count means nothing.
+
+**WF9-7 · The email log shows message text behind a "Show message" control,**
+so an admin investigating a complaint can read one without the page
+displaying private correspondence to anyone who glances at it. The privacy
+policy gains a line saying admins can see messages sent through the site.
+
+**WF9-8 · The admin account page can delete an account**, running the same
+preparation as self-deletion (preserved outreach record, audit-log redaction,
+email-outbox redaction), logged with the admin who did it. This closes WF8-6;
+deleting from the Supabase dashboard skips all of that.
+
+**WF7-7 / WF8-3 · All test accounts were deleted from production**
+(2026-09-18): every `.invalid` account and everything cascading from them.
+Re-run `.scratch/seed_throwaways.sql` before the probes. Audit-log entries
+naming them survive by design — the table refuses UPDATE and DELETE even to
+its owner.

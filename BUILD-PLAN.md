@@ -743,3 +743,157 @@ above. Put it in workflow 5, after `ROLE-5` — it is the same read paths.
 - **Verify claims before reporting them.** "The build passed" is not evidence
   that a feature works. Say plainly when something is broken, unverified, or
   worse than expected.
+
+---
+
+# Workflow 9 — Browse, admin and account management
+
+**Written 2026-09-18, after the first deploy to
+`well-windsor-matchmaking-app.pages.dev` and a walk-through of the live site.**
+Every decision below was taken by the user that day; the reasoning is in
+`PENDING-DECISIONS.md` under "Decided".
+
+**One branch per batch, off `main`, in this order.** Each batch ends with the
+usual four: Playwright walk, outside-in probe where data access changed, build
+and lint at baseline (16 eslint findings — compare with
+`.scratch/lint_list.cjs`, never by counting; `eslint -f unix` is gone and its
+empty output once made three "identical" checks pass on nothing), and the
+logic map noted for update. The user merges; Claude never pushes.
+
+## The order, and why
+
+9.1 fixes what the site shows. 9.2 removes a whole feature, and with it the
+second, different query the browse used for volunteers — so the browse rebuild
+in 9.3 has one query to work with instead of two. Admin work comes last
+because the account page (9.7) hangs off the restructured admin (9.6).
+
+## 9.1 — One definition of "publicly visible"
+
+**The bug:** the browse, the home page and the home page's role count all ask
+for `status = 'active'` and trust RLS for the rest. RLS deliberately lets an
+admin read every role, and a removed role keeps `status = 'active'` — so an
+admin browsing the site saw 91 removed test roles. An organisation sees its
+own removed roles the same way.
+
+- New view `public_opportunities`: live, `deleted_at is null`,
+  `is_approved_org(org_id)`, joined to the organisation name. Owner rights
+  (`security_invoker = false`), `revoke all ... from anon, authenticated` then
+  `grant select` — trap 1b.
+- Browse, home list and home count all read it. The role detail page keeps
+  reading the table (an organisation previewing its own draft needs that) but
+  shows a plain notice when the role is not publicly visible, and hides the
+  register button.
+- **Done when:** a probe signs in as an admin, as an organisation with a
+  removed role, and as anon, and all three get identical lists.
+
+## 9.2 — Remove availability matching, and volunteer availability with it
+
+**Decided:** a static weekly grid promises more than it can deliver, because
+real availability changes week to week. It goes entirely rather than sitting
+there unused. See "Later, not now" for what may replace it.
+
+- **Client:** the match badge and "Show matches only" on the browse; the
+  availability grid on sign-up (`AuthPage`) and on the volunteer profile; the
+  availability shown on the volunteer search and the applicants page.
+  **`AvailabilityMatrix.jsx` stays** — the post and edit forms use it for a
+  ROLE's schedule (`opportunity_timeblocks`), which is not going anywhere and
+  is what 9.3's ordering reads.
+- **Database:** drop `match_opportunities_by_availability`,
+  `volunteer_availability`, `user_profiles.available_anytime` and
+  `availability_matrix`, and `day_labels_to_indices` if nothing else calls it.
+  `handle_new_user()` stops writing them. `public_volunteers` must be dropped
+  and recreated without the two columns — **recreate the grants in the same
+  migration** (trap 1b), and re-probe that anon still gets nothing. Dropping a
+  column a view depends on fails with 2BP01, so drop the view first rather
+  than reaching for CASCADE.
+- Archive the removed code on `archive/availability-matching` first, as was
+  done for Log Hours and ML matching.
+- `.scratch/seed_throwaways.sql` and several probes and walks pass
+  availability metadata and assert on `match_kind`; update them in the same
+  batch or they will fail for the right reason and look like a break.
+- **This reverses a logic-map decision** ("availability-overlap matching is
+  being kept and finished"). Mark it there.
+
+## 9.3 — The opportunities page
+
+- **Remove the "When" filter.** Search plus an organisation filter is all that
+  stays. The town filter still appears by itself if a second town is ever
+  activated (ADM-6).
+- **The organisation filter lists only organisations that have a live role,**
+  built from the rows already fetched, so no choice can lead to an empty page.
+- **Ordering, not filtering: soonest next date first** — the next date from
+  today onwards, with "any time" roles after the dated ones. The home page's
+  "Upcoming" uses the same rule. Today both sort on a role's FIRST date, so
+  something that started last month outranks something starting tomorrow, and
+  "any time" roles count as starting today and always float to the top.
+- **10 per page**, Previous/Next, page number in the query string so Back
+  works, reset to page 1 when a filter changes. Paginating in the browser is
+  deliberate at this scale: it keeps search across description, skills and
+  organisation name working. Revisit past ~500 live roles.
+
+## 9.4 — Find Volunteers: 10 per page
+
+The same pagination component. The list already reads `public_volunteers`.
+
+## 9.5 — Reopening a closed role
+
+Today "Reopen this role" and "Save Changes" look identical and do different
+things. Three explicit buttons instead: **Save and reopen** (publishes, then
+returns to the organisation dashboard), **Save and keep closed**, and
+**Discard changes**. Save-and-reopen stays disabled, with the reason on
+screen, while the role's dates are in the past — ROLE-4's rule, unchanged.
+
+## 9.6 — The admin dashboard becomes three pages
+
+The tabs overlap on narrow screens and mix unrelated jobs. A shared admin nav
+over three routes:
+
+- **`/admin` — Access** (the landing page): organisations waiting for approval
+  first, then admin accounts and who gets alert emails (APP-3, APP-6, moved
+  from the Access tab).
+  **New: decline an organisation** — clears it from the queue with a reason in
+  the audit log, and the organisation is not told. Without it the queue never
+  empties and its count stops meaning anything.
+- **`/admin/manage` — Site management:** Opportunities, Organisations,
+  Volunteers, Towns.
+- **`/admin/logs` — Logs and reports:** problem reports (ADM-7, as now), plus
+  **the email log ADM-3 never got a screen for**:
+  - messages organisations sent volunteers (`org_outreach`): who sent it, the
+    volunteer they chose, the address it actually went to, status, date;
+  - automatic emails (`email_outbox`): template, recipient, sent or failed,
+    and the error. **`email_outbox` has no client grants at all**, so this
+    needs a new admin-only `SECURITY DEFINER` function, not a policy.
+  - Message text sits behind a "Show message" control, so scanning the list
+    does not display private correspondence. **Add a line to
+    `PrivacyPage.jsx` saying admins can see messages sent through the site.**
+    Automatic email content is blanked after 30 days (WF8); outreach text is
+    kept until the account is deleted.
+- **Admin lists paginate at 50** — they carry no images, so a longer page is
+  cheap and means less clicking.
+
+## 9.7 — An admin account page
+
+`/admin/accounts/:id`, linked from every admin list and from the logs.
+**Today the "View" button on a volunteer links to `/volunteers/<id>`, a route
+that does not exist, so the catch-all sends the admin to the home page.**
+
+- Shows the profile, their roles or registrations, their messages, and their
+  audit-log history.
+- Gathers the per-person actions: approve or withdraw approval, switch account
+  type (moved off the list screens), take a role down, and **change login
+  email — ADM-8's function has existed and been tested since workflow 3 and
+  has never had a screen.**
+- **Delete an account, properly (closes WF8-6).** Deleting from the Supabase
+  dashboard skips `prepare_account_deletion()`, so the preserved outreach
+  record, the audit-log redaction and the email-outbox redaction never run —
+  quietly breaking what the privacy policy promises. An admin-only function
+  runs the same preparation as self-deletion, logged with who did it.
+
+## Later, not now
+
+- **A date in the outreach email.** Instead of matching schedules up front, an
+  organisation writing to a volunteer could name when the role is and attach a
+  calendar invite, so the volunteer sees it in the message. That puts the date
+  where it is actually known, rather than asking every volunteer to keep a
+  grid up to date for ever. Needs its own design pass; out of scope for v0.
+- **Server-side pagination** if the browse ever passes ~500 live roles.
