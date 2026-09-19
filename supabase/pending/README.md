@@ -25,14 +25,12 @@ charity's go-ahead rather than a deploy.
 
 ## Currently held
 
-- **`wf9_2_drop_availability.sql`** — workflow 9 batch 9.2. Drops
-  `volunteer_availability`, `user_profiles.available_anytime` and
-  `availability_matrix`, `match_opportunities_by_availability` and
-  `day_labels_to_indices`; rebuilds `public_volunteers` and
-  `opportunity_applicants` without the two columns; stops
-  `handle_new_user()` and `admin_switch_account_type()` writing them.
-  **Waiting on:** 9.2's client commit being merged and deployed, and an
-  explicit go-ahead — it destroys real volunteers' data (5
-  `volunteer_availability` rows across 3 real people as of 2026-09-18), which
-  the archive branch does not preserve because that branch keeps the code, not
-  the data.
+Nothing.
+
+## Applied from here
+
+- **`wf9_2_drop_availability.sql`** — applied 2026-09-19 as
+  `20260919194219_wf9_drop_availability_matching`, once 9.2's client was
+  merged and live. The deploy was verified by fetching the published bundle
+  and finding zero references to any availability column, table or RPC —
+  not by assuming the merge had built.
