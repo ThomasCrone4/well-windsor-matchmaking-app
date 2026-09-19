@@ -31,6 +31,33 @@
 begin;
 
 -- ---------------------------------------------------------------------------
+-- 0. Guard rails.
+--
+-- The instruction was to remove data from these specific fields and nothing
+-- else, so that is asserted rather than promised. Counts of every table that
+-- holds people's data are taken here and checked again at the bottom, inside
+-- the same transaction: if this migration has deleted a single account,
+-- registration, role, message, notification or outbox row, the check raises
+-- and the whole thing rolls back with nothing changed.
+--
+-- It cannot catch what it does not count, so the list is every table with
+-- user data in it, not a sample.
+-- ---------------------------------------------------------------------------
+create temp table _wf92_before on commit drop as
+select 'user_profiles' as t, count(*) as n from public.user_profiles
+union all select 'auth_users',             count(*) from auth.users
+union all select 'applications',           count(*) from public.applications
+union all select 'volunteer_opportunities',count(*) from public.volunteer_opportunities
+union all select 'opportunity_timeblocks', count(*) from public.opportunity_timeblocks
+union all select 'org_outreach',           count(*) from public.org_outreach
+union all select 'notifications',          count(*) from public.notifications
+union all select 'email_outbox',           count(*) from public.email_outbox
+union all select 'audit_logs',             count(*) from public.audit_logs
+union all select 'problem_reports',        count(*) from public.problem_reports
+union all select 'towns',                  count(*) from public.towns
+union all select 'admins',                 count(*) from public.admins;
+
+-- ---------------------------------------------------------------------------
 -- 1. The two views that name the columns.
 --
 -- Dropping a column a view depends on fails with 2BP01, and CASCADE would take
@@ -270,5 +297,44 @@ drop function if exists public.day_labels_to_indices(jsonb);
 alter table public.user_profiles
   drop column if exists available_anytime,
   drop column if exists availability_matrix;
+
+-- ---------------------------------------------------------------------------
+-- 4. Prove nothing else was touched, before committing.
+-- ---------------------------------------------------------------------------
+do $guard$
+declare
+  r record;
+  msg text := '';
+begin
+  for r in
+    select b.t, b.n as before_n, a.n as after_n
+    from _wf92_before b
+    join (
+      select 'user_profiles' as t, count(*) as n from public.user_profiles
+      union all select 'auth_users',             count(*) from auth.users
+      union all select 'applications',           count(*) from public.applications
+      union all select 'volunteer_opportunities',count(*) from public.volunteer_opportunities
+      union all select 'opportunity_timeblocks', count(*) from public.opportunity_timeblocks
+      union all select 'org_outreach',           count(*) from public.org_outreach
+      union all select 'notifications',          count(*) from public.notifications
+      union all select 'email_outbox',           count(*) from public.email_outbox
+      union all select 'audit_logs',             count(*) from public.audit_logs
+      union all select 'problem_reports',        count(*) from public.problem_reports
+      union all select 'towns',                  count(*) from public.towns
+      union all select 'admins',                 count(*) from public.admins
+    ) a on a.t = b.t
+    where a.n <> b.n
+  loop
+    msg := msg || format('%s: %s -> %s; ', r.t, r.before_n, r.after_n);
+  end loop;
+
+  if msg <> '' then
+    raise exception
+      'WF9-2 aborted: this migration must drop two columns and one table and '
+      'change no rows anywhere, but row counts moved -- %', msg
+      using errcode = 'data_exception';
+  end if;
+end
+$guard$;
 
 commit;

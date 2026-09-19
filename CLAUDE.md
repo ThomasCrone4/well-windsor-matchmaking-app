@@ -1004,6 +1004,82 @@ Re-runnable now: `.scratch/walk_wf9_2.py` (22 UI checks).
 **After the drop only:** `.scratch/probe_wf9_2.py` — it fails for the right
 reason beforehand and looks like a break.
 
+**Workflow 9 batch 9.3 is built (2026-09-19, branch `wf9-3-browse`).** No
+migration: this batch is all client.
+
+- **The "When" filter is gone; an Organisation filter replaces it.** The org
+  list is built from the roles already fetched, not from
+  `public_organisations`, so it offers only organisations with a live role and
+  no choice can lead to an empty page.
+- **Ordering is the soonest NEXT date, which is not the earliest start.** A
+  role running 1 Sep to 25 Dec offers *today*, not 1 September — the old rule
+  sorted it above a role starting tomorrow. And a flexible role was given
+  `new Date()` as its start, the earliest date possible, so every "any time"
+  role floated to the top of a list meant to answer "what is happening soon".
+  Three buckets now: has a future date (ascending), then no dates given
+  (flexible or no schedule), then finished. The home page's "Upcoming" uses
+  the same comparator — `getStartDateForSort`/`compareByEarliestStart` are
+  deleted, so there is one rule and not two.
+- **10 a page**, `?page=` in the query string so Back works, clamped so
+  `?page=99` shows the last page rather than an empty one that reads as "no
+  results", and changing a filter returns to page 1. `src/components/Pagination.jsx`
+  is shared with 9.4 and 9.6.
+- **A UI walk cannot test an ordering rule.** The live roles' dates are
+  whatever they are today, so the cases that matter — running-since-last-month,
+  finished-yesterday, starting-tomorrow — may simply not exist when it runs.
+  `.scratch/test_order_wf9_3.mjs` imports `schedule.js` directly and constructs
+  them. The walk only proves the rule is wired to the page.
+- **Never compare a local-midnight `Date` with `toISOString()`.** `toDate()`
+  uses date-fns `parseISO`, which yields LOCAL midnight, and `startOfToday()`
+  matches it — so the module is consistent. The first draft of the unit test
+  built its expected dates with `toISOString()`, which converts to UTC and
+  lands a day earlier in British Summer Time: four tests failed against
+  correct code.
+- **`walk_wf5` was leaking a live role onto the public browse on every crash.**
+  It creates its fixtures over REST at module level, before the browser
+  launches, and its cleanup sits after `browser.close()` with no `finally` —
+  so the two runs that died on a refused connection left "Walk Doomed Role"
+  active on the real site. Now swept by `atexit`, registered as soon as the
+  fixtures exist. **Any walk that posts an active role needs that, not a
+  cleanup at the bottom.**
+
+Re-runnable: `.scratch/test_order_wf9_3.mjs` (22 cases, no database) and
+`.scratch/walk_wf9_3.py` (25 UI checks, read-only — it creates nothing).
+
+**Workflow 9 batch 9.4 is built (2026-09-19, branch `wf9-4-volunteers-paging`).**
+Find Volunteers pages at 10, with the same component. No migration.
+
+- **Paginating a list with no `ORDER BY` is a bug, and an invisible one.**
+  `public_volunteers` was unordered, and Postgres promises nothing about the
+  order of an unordered SELECT — harmless while the whole list rendered at
+  once, but once it is sliced into pages the same volunteer can appear on
+  page 1 and page 2, or on neither. The query now orders by `name` then `id`.
+  The walk loads the list twice and compares both pages to catch a regression.
+- **`Pagination` took a `perPage` prop.** It hardcoded 10 in its
+  "Showing 1–10 of N" line, which would have printed the wrong range above
+  the admin lists' fifty rows in 9.6 — wrong in a way that reads as a data
+  bug rather than a formatting one.
+- **Testing it needed 11+ discoverable volunteers and there were 7.** Eight
+  `wf94-vol-NN@wellwindsor-test.invalid` fixtures were inserted and deleted in
+  the same session. Discoverable volunteers are visible only to an **approved
+  organisation** (`public_volunteers` gates on `is_approved_org`), never on
+  the public browse, so these are far less exposed than a throwaway role —
+  but they are visible to the real organisations, so they do not outlive the
+  run. The walk says it cannot test paging rather than passing quietly when
+  the list is too short.
+- **Address a pagination button by its label, not by where you are.** The
+  walk clicked "Go to page 2" from a page that was already page 2, where that
+  button does not exist — Next is labelled "Go to page 3" and disabled.
+- **A cold `npm run dev` needs more than 30s for the first navigation.**
+  `with_server` reports ready when the port accepts connections, but vite is
+  still optimising dependencies, so the default 30s navigation timeout
+  expires against a server that is merely busy. First goto gets 120s, and
+  sign-in waits for the URL to change rather than a fixed 3s — a short wait
+  there left the walk on `/auth` and reported a missing `#search`.
+
+Re-runnable: `.scratch/walk_wf9_4.py` (19 UI checks; needs 11+ discoverable
+volunteers, and says so if not).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception

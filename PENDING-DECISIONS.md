@@ -167,6 +167,16 @@ Options: apply it after the merge; or export the rows to a file first, which
 means keeping a copy of personal data outside the database and is arguably
 worse than losing it.
 
+### WF9-13 · Where a finished role sorts, and what "any time" means in a list
+Batch 9.3. Ordering is soonest-next-date first, which needed two calls you did
+not specify. **Provisionally built:** (a) a role whose dates have all passed
+sorts **last**, below the flexible ones, rather than being treated as undated —
+it is only ever on screen for the few hours between its last date and the
+00:05 auto-close, and it should not push a live role down the page; (b) a role
+with **no schedule at all** (not flexible, just no times given) sorts with the
+flexible ones, since there is no date to place it by. Alternatives: hide
+finished roles outright, or sort undated roles first as "always available".
+
 ### WF9-12 · A volunteer had already written their availability into their bio
 Noticed while walking 9.2, not changed. One real volunteer's bio ends "I have
 flexible availability on weekends and some weekday evenings." That is the
