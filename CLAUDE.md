@@ -957,8 +957,52 @@ One migration. See BUILD-PLAN for the remaining batches, 9.2 to 9.7.
   (`anon=r`, `authenticated=r`); read the ACL, do not infer it from an error
   code.
 
-Re-runnable: `.scratch/probe_wf9_1.py` (40 cases) and `.scratch/walk_wf9_1.py`
-(25 UI checks). Both need the two fixtures in `seed_throwaways.sql`.
+Re-runnable: `.scratch/probe_wf9_1.py` (36 cases, down from 40 once 9.2 removed
+its match-RPC section) and `.scratch/walk_wf9_1.py` (25 UI checks). Both need
+the two fixtures in `seed_throwaways.sql`.
+
+**Workflow 9 batch 9.2 is HALF applied (2026-09-18, branch
+`wf9-2-remove-availability`).** The client is done; **the drop migration is
+written and deliberately NOT applied** — `supabase/pending/wf9_2_drop_availability.sql`.
+Code archived at `archive/availability-matching` (a pointer at 6ddf94b, the
+same convention as `archive/log-hours`).
+
+- **One database, two deploys, and that is the whole reason for the split.** A
+  migration lands when it is applied; the client lands when `main` is merged
+  and Cloudflare rebuilds. The drops remove columns the *currently deployed*
+  site still reads and writes, so applying them first breaks the volunteer
+  profile page, Find Volunteers and sign-up for real users, for however long
+  the merge takes. **Merge and deploy the client, then apply.**
+  `supabase/pending/README.md` has the procedure; a file in `migrations/`
+  that has not been applied breaks the files-equal-ledger check, which is why
+  it is not kept there.
+- **The removal reaches further than BUILD-PLAN listed.** Four functions
+  referenced the columns, not two: `handle_new_user`,
+  `match_opportunities_by_availability`, `day_labels_to_indices` **and
+  `admin_switch_account_type`** (WF7-2 cleared availability on a switch).
+  And **two** views carry the columns, not one — `opportunity_applicants`
+  joins `user_profiles` as well, so it fails with the same 2BP01. Both are
+  dropped and recreated with grants in the same migration (trap 1b).
+  `handle_new_user` is the dangerous one: it is a SECURITY DEFINER trigger on
+  `auth.users`, so if it still named a dropped table **every** sign-up would
+  fail, not just a volunteer's. `probe_wf9_2.py` signs up to prove it does not.
+- **`AvailabilityMatrix.jsx` stays.** The post and edit forms use it for a
+  ROLE's schedule (`opportunity_timeblocks`), which is a different thing and
+  is what 9.3's ordering reads. The walk checks the grid is still on the
+  post-a-role form, because the component is shared and this is the easy
+  thing to break by accident.
+- **`schedule.js` had a whole second matcher nobody called** — five exported
+  overlap helpers, client-side, duplicating what the RPC did in SQL. No
+  importer outside the file. Deleted with the rest.
+- **`innerText` applies CSS `text-transform`.** The volunteer card's labels are
+  in an `uppercase` class, so a walk checking `"Availability" not in text`
+  passed against a card printing `AVAILABILITY`. It also found the word in a
+  real volunteer's **bio** ("I have flexible availability on weekends"), which
+  is free text and not the UI. Assert on the label elements, not the page text.
+
+Re-runnable now: `.scratch/walk_wf9_2.py` (22 UI checks).
+**After the drop only:** `.scratch/probe_wf9_2.py` — it fails for the right
+reason beforehand and looks like a break.
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured

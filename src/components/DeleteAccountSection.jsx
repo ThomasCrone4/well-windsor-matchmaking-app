@@ -94,7 +94,7 @@ export default function DeleteAccountSection() {
               {s.messages_received === 1 ? 'message' : 'messages'} organisations
               sent you: removed from our records
             </Line>
-            <Line>Your availability and your notifications</Line>
+            <Line>Your notifications</Line>
           </>
         )}
       </ul>
@@ -122,7 +122,7 @@ export default function DeleteAccountSection() {
       <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
         {isOrg
           ? 'Removes your organisation, your roles and the registrations made to them. This cannot be undone.'
-          : 'Removes your profile, your registrations and your availability. This cannot be undone.'}
+          : 'Removes your profile, your registrations and your notifications. This cannot be undone.'}
       </p>
 
       <button
