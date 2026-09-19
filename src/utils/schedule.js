@@ -339,18 +339,100 @@ export function formatOpportunitySchedule(op, {
 // -----------------------------------------------------------------------------
 // Sorting helpers (earliest start wins)
 // -----------------------------------------------------------------------------
-export function getStartDateForSort(op) {
-  if (op?.generally_needed) return new Date(); // treat as available now
-  // Derived from the timeblocks the caller attached. This used to prefer an
-  // `earliest_start` the match RPC computed in the database; with WF9-2 that
-  // RPC is gone and the timeblocks are the only source, which is what every
-  // logged-out reader was using all along.
-  const { start } = deriveDateRangeFromBlocks(op?.timeblocks);
-  return start || new Date(8640000000000000); // far-future sentinel
+// WF9-3. getStartDateForSort() and compareByEarliestStart() stood here and
+// are gone with their last caller. They sorted on a role's FIRST date and gave
+// a flexible role `new Date()`, which is why "Upcoming" could lead with
+// something that began in August and why every "any time" role floated to the
+// top. compareByNextDate() below replaces both, and is the only ordering rule
+// for the browse and the home page -- one rule, like public_opportunities is
+// one definition of visible.
+
+// -----------------------------------------------------------------------------
+// WF9-3. Soonest NEXT date, which is not the same as earliest start.
+//
+// The browse and the home page both sorted on a role's FIRST date, so a role
+// that began last month and runs until Christmas outranked one starting
+// tomorrow -- it had the earlier start, and the sort had no notion of "today".
+// And a flexible role was given `new Date()` as its start, which is the
+// earliest date any role can have, so every "any time" role floated to the top
+// of a list meant to answer "what is happening soon".
+//
+// What a reader wants is the next date they could actually turn up: for a role
+// running 1 Sep to 25 Dec, that is today, not 1 September.
+// -----------------------------------------------------------------------------
+
+/** Midnight this morning, local time. */
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-export function compareByEarliestStart(a, b) {
-  return getStartDateForSort(a).getTime() - getStartDateForSort(b).getTime();
+/**
+ * The soonest date from today onwards on which this role still runs, or null
+ * if there is no such date -- either because the organisation gave no dates
+ * (flexible, or no schedule at all) or because every date it has is past.
+ * `hasDates` tells those two apart, which is what keeps a finished role from
+ * being sorted in among the ones with no dates on purpose.
+ */
+export function getNextDateFromToday(op) {
+  const today = startOfToday();
+  const blocks = Array.isArray(op?.timeblocks) ? op.timeblocks : [];
+
+  let next = null;
+  let hasDates = false;
+
+  for (const b of blocks) {
+    const s = toDate(b?.start_date);
+    const e = toDate(b?.end_date) || s;
+    if (!s && !e) continue;
+    hasDates = true;
+
+    // A block that has already finished offers no next date. One that is
+    // running now offers today; one still ahead offers its start.
+    const last = e || s;
+    if (last < today) continue;
+    const candidate = s && s > today ? s : today;
+    if (!next || candidate < next) next = candidate;
+  }
+
+  return { next, hasDates };
+}
+
+/**
+ * Sort key: 0 = happening today or later, 1 = no dates given (flexible, or the
+ * organisation gave no schedule), 2 = every date is in the past.
+ *
+ * Flexible roles sit after the dated ones rather than being interleaved,
+ * because there is no date to interleave them ON. Finished roles sort last:
+ * the nightly auto-close takes them down the day after they end, so this
+ * bucket is only ever the few hours in between, but it should not push a live
+ * role down the page while it lasts.
+ */
+export function browseSortBucket(op) {
+  if (op?.generally_needed) return 1;
+  const { next, hasDates } = getNextDateFromToday(op);
+  if (next) return 0;
+  return hasDates ? 2 : 1;
+}
+
+export function compareByNextDate(a, b) {
+  const ba = browseSortBucket(a);
+  const bb = browseSortBucket(b);
+  if (ba !== bb) return ba - bb;
+
+  if (ba === 0) {
+    const da = getNextDateFromToday(a).next.getTime();
+    const db = getNextDateFromToday(b).next.getTime();
+    if (da !== db) return da - db;
+  }
+
+  // Within a bucket, newest first -- what the list did before this batch, so
+  // an undated role's position does not shuffle between renders.
+  const ca = toDate(a?.created_at);
+  const cb = toDate(b?.created_at);
+  if (ca && cb && ca.getTime() !== cb.getTime()) return cb.getTime() - ca.getTime();
+  return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
 }
 
 // -----------------------------------------------------------------------------

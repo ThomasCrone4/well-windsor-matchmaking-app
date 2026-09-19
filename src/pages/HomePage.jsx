@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
 // 🧠 Reusable schedule helpers (works with AvailabilityMatrix block shape)
 import {
   formatOpportunitySchedule,
-  compareByEarliestStart,
+  compareByNextDate,
   blocksFromTimeblockRows,
 } from '../utils/schedule';
 
@@ -156,7 +156,12 @@ export default function HomePage() {
     }
     return [...opportunities]
       .map((op) => ({ ...op, timeblocks: byOpp.get(op.id) ?? [] }))
-      .sort(compareByEarliestStart)
+      // WF9-3: the same rule as the browse -- soonest NEXT date from today,
+      // "any time" roles after the dated ones. This used to sort on a role's
+      // FIRST date, so "Upcoming" could lead with something that started in
+      // August, and every flexible role counted as starting today and took
+      // the three slots.
+      .sort(compareByNextDate)
       .slice(0, 3);
   }, [opportunities, blockRows]);
 

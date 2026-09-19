@@ -4,11 +4,15 @@ import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { isThisWeek, isThisMonth } from 'date-fns';
-import { formatOpportunitySchedule, blocksFromTimeblockRows } from '../utils/schedule';
+import {
+  formatOpportunitySchedule,
+  blocksFromTimeblockRows,
+  compareByNextDate,
+} from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
 import OpportunityPhoto from '../components/OpportunityPhoto';
 import { useTowns } from '../utils/towns';
+import Pagination from '../components/Pagination';
 
 // WF9-2. The availability badge ("Full availability match" and its four
 // siblings) and the "Show Matches Only" toggle were here. Both are gone with
@@ -22,13 +26,30 @@ export default function OpportunitiesPage() {
   // The Town filter exists only while more than one town is active (ADM-6,
   // src/utils/towns.js). With one town there is nothing to filter by, and
   // `town` stays 'All', which matches everything.
-  const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
+  // WF9-3. The "When" filter is gone. It offered This Week / This Month over
+  // a role's FIRST date, which is a different question from "is it on this
+  // week", and the answer is now in the ordering instead: soonest next date
+  // first. What replaces it is an organisation filter, which is the thing
+  // people actually asked for -- "what does my child's school need?"
+  const [filters, setFilters] = useState({ town: 'All', org: 'All' });
   const { towns, showPicker: showTownFilter } = useTowns();
   const [userProfile, setUserProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const onlyId = searchParams.get('opId');
+
+  // The page number lives in the query string so Back works: open a role from
+  // page 3, press Back, and you are on page 3 rather than at the top.
+  const pageParam = parseInt(searchParams.get('page') ?? '1', 10);
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+  const setPage = (n) => {
+    const next = new URLSearchParams(searchParams);
+    if (n <= 1) next.delete('page');
+    else next.set('page', String(n));
+    setSearchParams(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -181,17 +202,27 @@ export default function OpportunitiesPage() {
     navigate(`/opportunities/${opportunityId}/enquire`);
   };
 
-  // Earliest start for filtering, derived from the timeblocks fetched above.
-  // This used to prefer an `earliest_start` column the match RPC computed in
-  // the database and fall back to the timeblocks; with the RPC gone there is
-  // one source, which is the one the logged-out path always used.
-  const getEarliestStart = (op) => {
-    const blocks = blocksByOpp.get(op?.id) ?? [];
-    const validDates = blocks
-      .map((b) => (b?.start_date ? new Date(b.start_date) : null))
-      .filter((d) => d instanceof Date && !isNaN(d.valueOf()));
-    if (validDates.length === 0) return null;
-    return new Date(Math.min(...validDates.map((d) => d.valueOf())));
+  // Only organisations that have a live role, so no option can lead to an
+  // empty page. Built from the rows already fetched rather than from
+  // public_organisations, which lists every approved organisation including
+  // those with nothing posted.
+  const orgOptions = useMemo(() => {
+    const byId = new Map();
+    for (const op of opps ?? []) {
+      if (op.org_id && op.org_name && !byId.has(op.org_id)) {
+        byId.set(op.org_id, { id: op.org_id, name: op.org_name });
+      }
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [opps]);
+
+  // Changing a filter returns to page 1. Without this, filtering while on
+  // page 3 of an unfiltered list lands on page 3 of a two-page result, which
+  // renders as "no opportunities match these filters" -- the filter looks
+  // broken when it merely worked.
+  const changeFilter = (patch) => {
+    setFilters((f) => ({ ...f, ...patch }));
+    if (page !== 1) setPage(1);
   };
 
   const filterOpportunities = (items) => {
@@ -203,11 +234,7 @@ export default function OpportunitiesPage() {
       const matchesTown =
         !showTownFilter || filters.town === 'All' || op.town === filters.town;
 
-      const start = getEarliestStart(op);
-      const matchesStart =
-        filters.start === 'Any' ||
-        (filters.start === 'This Week' && start && isThisWeek(start)) ||
-        (filters.start === 'This Month' && start && isThisMonth(start));
+      const matchesOrg = filters.org === 'All' || op.org_id === filters.org;
 
       // BRW-4. Title alone missed the obvious searches: someone looking for
       // "reading" or "first aid" found nothing unless an organisation had put
@@ -220,7 +247,7 @@ export default function OpportunitiesPage() {
         .toLowerCase();
       const matchesSearch = haystack.includes(searchTerm.trim().toLowerCase());
 
-      return matchesTown && matchesStart && matchesSearch;
+      return matchesTown && matchesOrg && matchesSearch;
     });
   };
 
@@ -242,12 +269,34 @@ export default function OpportunitiesPage() {
       </div>
     );
 
-  const filtered = filterOpportunities(opps || []);
-  // Newest first, as the query returns them. WF9-3 replaces this with
-  // soonest-next-date ordering.
+  // Every card needs its timeblocks attached before sorting: the ordering key
+  // is the role's next date, and that lives in opportunity_timeblocks.
+  const withBlocks = (opps ?? []).map((op) => ({
+    ...op,
+    timeblocks: blocksByOpp.get(op.id) ?? [],
+  }));
+
+  const filtered = filterOpportunities(withBlocks);
+
+  // WF9-3. Soonest next date first, "any time" roles after the dated ones.
+  // The old order was newest-posted first, which told a reader which
+  // organisation had typed most recently and nothing about when they could
+  // turn up.
+  const sorted = [...filtered].sort(compareByNextDate);
+
   const finalList = onlyId
-    ? filtered.filter((op) => String(op.id) === String(onlyId))
-    : filtered;
+    ? sorted.filter((op) => String(op.id) === String(onlyId))
+    : sorted;
+
+  // 10 a page. `?opId=` is a single-role deep link, so it is never paginated.
+  const PER_PAGE = 10;
+  const pageCount = Math.max(1, Math.ceil(finalList.length / PER_PAGE));
+  // Clamp rather than trust the query string: ?page=99 or ?page=abc should
+  // show the last page, not an empty one that looks like "no results".
+  const safePage = Math.min(page, pageCount);
+  const visible = onlyId
+    ? finalList
+    : finalList.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8" id="main-content">
@@ -303,7 +352,10 @@ export default function OpportunitiesPage() {
               type="text"
               placeholder="Search roles, skills or organisations…"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                if (page !== 1) setPage(1);
+              }}
               className="input"
             />
           </div>
@@ -315,7 +367,7 @@ export default function OpportunitiesPage() {
               <select
                 id="town"
                 value={filters.town}
-                onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
+                onChange={(e) => changeFilter({ town: e.target.value })}
                 className="select"
               >
                 <option value="All">All towns</option>
@@ -326,18 +378,21 @@ export default function OpportunitiesPage() {
             </div>
           )}
 
-          {/* When */}
+          {/* Organisation. Built from the roles actually on screen, so every
+              option leads somewhere: an organisation with nothing live is not
+              offered, and no choice can produce an empty page. */}
           <div className="form-row">
-            <label htmlFor="when" className="label">When</label>
+            <label htmlFor="org" className="label">Organisation</label>
             <select
-              id="when"
-              value={filters.start}
-              onChange={(e) => setFilters((f) => ({ ...f, start: e.target.value }))}
+              id="org"
+              value={filters.org}
+              onChange={(e) => changeFilter({ org: e.target.value })}
               className="select"
             >
-              <option value="Any">Any</option>
-              <option value="This Week">This Week</option>
-              <option value="This Month">This Month</option>
+              <option value="All">All organisations</option>
+              {orgOptions.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
             </select>
           </div>
 
@@ -346,7 +401,7 @@ export default function OpportunitiesPage() {
             <button
               type="button"
               onClick={() => {
-                setFilters({ town: 'All', start: 'Any' });
+                setFilters({ town: 'All', org: 'All' });
                 setSearchTerm('');
                 navigate('/opportunities');
               }}
@@ -368,7 +423,7 @@ export default function OpportunitiesPage() {
         </p>
       ) : (
         <ul className="grid gap-5 lg:grid-cols-2">
-          {finalList.map((op) => {
+          {visible.map((op) => {
             const alreadyEnquired = !!userProfile?.id && appliedSet.has(op.id);
             const orgName = op.org_name || 'Organisation';
             const blocks = blocksByOpp.get(op.id) ?? [];
@@ -486,6 +541,16 @@ export default function OpportunitiesPage() {
             );
           })}
         </ul>
+      )}
+
+      {!onlyId && (
+        <Pagination
+          page={safePage}
+          pageCount={pageCount}
+          onChange={setPage}
+          total={finalList.length}
+          noun="role"
+        />
       )}
     </div>
   );

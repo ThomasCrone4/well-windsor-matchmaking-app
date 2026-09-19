@@ -1004,6 +1004,48 @@ Re-runnable now: `.scratch/walk_wf9_2.py` (22 UI checks).
 **After the drop only:** `.scratch/probe_wf9_2.py` — it fails for the right
 reason beforehand and looks like a break.
 
+**Workflow 9 batch 9.3 is built (2026-09-19, branch `wf9-3-browse`).** No
+migration: this batch is all client.
+
+- **The "When" filter is gone; an Organisation filter replaces it.** The org
+  list is built from the roles already fetched, not from
+  `public_organisations`, so it offers only organisations with a live role and
+  no choice can lead to an empty page.
+- **Ordering is the soonest NEXT date, which is not the earliest start.** A
+  role running 1 Sep to 25 Dec offers *today*, not 1 September — the old rule
+  sorted it above a role starting tomorrow. And a flexible role was given
+  `new Date()` as its start, the earliest date possible, so every "any time"
+  role floated to the top of a list meant to answer "what is happening soon".
+  Three buckets now: has a future date (ascending), then no dates given
+  (flexible or no schedule), then finished. The home page's "Upcoming" uses
+  the same comparator — `getStartDateForSort`/`compareByEarliestStart` are
+  deleted, so there is one rule and not two.
+- **10 a page**, `?page=` in the query string so Back works, clamped so
+  `?page=99` shows the last page rather than an empty one that reads as "no
+  results", and changing a filter returns to page 1. `src/components/Pagination.jsx`
+  is shared with 9.4 and 9.6.
+- **A UI walk cannot test an ordering rule.** The live roles' dates are
+  whatever they are today, so the cases that matter — running-since-last-month,
+  finished-yesterday, starting-tomorrow — may simply not exist when it runs.
+  `.scratch/test_order_wf9_3.mjs` imports `schedule.js` directly and constructs
+  them. The walk only proves the rule is wired to the page.
+- **Never compare a local-midnight `Date` with `toISOString()`.** `toDate()`
+  uses date-fns `parseISO`, which yields LOCAL midnight, and `startOfToday()`
+  matches it — so the module is consistent. The first draft of the unit test
+  built its expected dates with `toISOString()`, which converts to UTC and
+  lands a day earlier in British Summer Time: four tests failed against
+  correct code.
+- **`walk_wf5` was leaking a live role onto the public browse on every crash.**
+  It creates its fixtures over REST at module level, before the browser
+  launches, and its cleanup sits after `browser.close()` with no `finally` —
+  so the two runs that died on a refused connection left "Walk Doomed Role"
+  active on the real site. Now swept by `atexit`, registered as soon as the
+  fixtures exist. **Any walk that posts an active role needs that, not a
+  cleanup at the bottom.**
+
+Re-runnable: `.scratch/test_order_wf9_3.mjs` (22 cases, no database) and
+`.scratch/walk_wf9_3.py` (25 UI checks, read-only — it creates nothing).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception
