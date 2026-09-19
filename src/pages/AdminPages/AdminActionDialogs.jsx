@@ -163,7 +163,7 @@ export function SwitchAccountDialog({ account, toRole, isPending, onClose, onCon
           <li>It starts <strong>waiting for approval</strong>, like any new organisation.</li>
           <li>Their registrations are <strong>withdrawn</strong>: kept on record, hidden from the organisations, who are not told.</li>
           <li>
-            Their date of birth, phone number, bio, skills and availability are
+            Their date of birth, phone number, bio and skills are
             <strong> cleared</strong>, because organisation profiles are visible to
             other people. Their name will be visible too.
           </li>

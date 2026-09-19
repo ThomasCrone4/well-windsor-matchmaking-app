@@ -1,17 +1,14 @@
 // src/pages/volunteer/VolunteerProfilePage.jsx
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { supabase } from '../../utils/supabase';
-import AvailabilityMatrix from '../../components/AvailabilityMatrix';
 import toast from 'react-hot-toast';
 import useUserProfile from '../../hooks/useUserProfile';
 import FormSkeleton from '../../components/skeletons/FormSkeleton';
 
-// ✅ import the schedule helpers you already have
-import { toDate, toMinutes, normalizeDays, DAYS } from '../../utils/schedule';
 import { useTowns, townOptionsFor } from '../../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../../utils/age';
 import DeleteAccountSection from '../../components/DeleteAccountSection';
@@ -36,8 +33,6 @@ const profileSchema = z
       .refine(isOldEnough, `Volunteers must be ${MIN_VOLUNTEER_AGE} or over`),
     bio: z.string().optional(),
     skills: z.string().optional(),
-    available_anytime: z.boolean(),
-    availability_matrix: z.any(),
     public_profile: z.boolean(),
   })
   .refine((d) => !d.public_profile || !!d.bio?.trim(), {
@@ -57,7 +52,6 @@ export default function VolunteerProfilePage() {
   const {
     register,
     handleSubmit,
-    control,
     watch,
     reset,
     formState: { errors, isDirty },
@@ -68,7 +62,6 @@ export default function VolunteerProfilePage() {
     defaultValues: {},
   });
 
-  const availableAnytime = watch('available_anytime');
   const publicProfile = watch('public_profile');
   const { towns, soleTown, showPicker } = useTowns();
 
@@ -81,8 +74,6 @@ export default function VolunteerProfilePage() {
         dob: profile?.dob ?? '',
         bio: profile?.bio ?? '',
         skills: profile?.skills ?? '',
-        available_anytime: profile?.available_anytime ?? true,
-        availability_matrix: profile?.available_anytime ? [] : profile?.availability_matrix ?? [],
         public_profile: !!profile?.public_profile,
       });
       setHydrated(true);
@@ -105,96 +96,18 @@ export default function VolunteerProfilePage() {
     dob: emptyToNull(formData.dob),
 
     // booleans
-    available_anytime: !!formData.available_anytime,
     public_profile: !!formData.public_profile,
-
-    // jsonb (keep for editing UI)
-    availability_matrix: formData.available_anytime
-      ? null
-      : Array.isArray(formData.availability_matrix)
-      ? formData.availability_matrix
-      : [],
   });
 
-  /** Format Date -> 'YYYY-MM-DD' using schedule.toDate */
-  const toISO = (d) => {
-    const dt = toDate(d);
-    if (!dt) return null;
-    const yyyy = String(dt.getFullYear());
-    const mm = String(dt.getMonth() + 1).padStart(2, '0');
-    const dd = String(dt.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  /** Minutes -> 'HH:MM' */
-  const minutesToHHMM = (mins) => {
-    if (mins == null) return null;
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  };
-
-  /** Day labels -> numeric indices (0..6) using DAYS order */
-  const dayLabelsToIndices = (labels) => {
-    // normalizeDays returns full labels ('Monday'..'Sunday'), sorted & deduped
-    const normalizedLabels = normalizeDays(labels);
-    return normalizedLabels
-      .map((label) => DAYS.indexOf(label))
-      .filter((i) => i >= 0 && i <= 6);
-  };
-
-  /**
-   * Convert AvailabilityMatrix blocks -> rows for volunteer_availability table.
-   * Uses schedule.js to normalize dates/times/days so everything is comparable.
-   */
-  const matrixToRows = (blocks, uid) =>
-    (blocks ?? [])
-      .map((b) => {
-        const daysIdx = dayLabelsToIndices(b?.days);
-        const startM = toMinutes(b?.start_time);
-        const endM = toMinutes(b?.end_time ?? b?.start_time);
-
-        return {
-          volunteer_id: uid,
-          start_date: toISO(b?.start_date),            // 'YYYY-MM-DD' or null
-          end_date: toISO(b?.end_date),                // 'YYYY-MM-DD' or null
-          days: daysIdx,                               // int[] 0..6 (same order as DAYS)
-          start_time: minutesToHHMM(startM),           // 'HH:MM'
-          end_time: minutesToHHMM(endM),               // 'HH:MM'
-        };
-      })
-      // must have at least one day and valid times
-      .filter(
-        (r) =>
-          Array.isArray(r.days) &&
-          r.days.length > 0 &&
-          r.start_time &&
-          r.end_time
-      );
-
-  /**
-   * Mirror availability to volunteer_availability table.
-   * Strategy: delete all then insert current (simple & RLS-friendly).
-   */
-  const mirrorAvailability = async (uid, available_anytime_flag, matrixBlocks) => {
-    // Always clear existing rows first
-    const { error: delErr } = await supabase
-      .from('volunteer_availability')
-      .delete()
-      .eq('volunteer_id', uid);
-    if (delErr) throw delErr;
-
-    if (available_anytime_flag) {
-      // nothing to insert
-      return;
-    }
-
-    const rows = matrixToRows(matrixBlocks, uid);
-    if (!rows.length) return; // no blocks to insert
-
-    const { error: insErr } = await supabase.from('volunteer_availability').insert(rows);
-    if (insErr) throw insErr;
-  };
+  // WF9-2. Five helpers stood here -- toISO, minutesToHHMM, dayLabelsToIndices,
+  // matrixToRows and mirrorAvailability -- whose whole job was to translate the
+  // availability grid into rows of `volunteer_availability` and rewrite that
+  // table on every save. The table is going, so they go with it. Note what they
+  // cost while they existed: a save wrote the same availability twice, once as
+  // jsonb on the profile and once as normalised rows, and the second write was
+  // wrapped in a try/catch that only told the volunteer "Saved profile, but
+  // failed to save detailed availability" -- two sources of truth that could
+  // silently disagree.
 
   const mutation = useMutation({
     mutationFn: async (formData) => {
@@ -209,14 +122,6 @@ export default function VolunteerProfilePage() {
         .eq('id', userId);
 
       if (error) throw error;
-
-      // 2) Mirror to volunteer_availability using schedule.js normalization
-      try {
-        await mirrorAvailability(userId, update.available_anytime, update.availability_matrix ?? []);
-      } catch (e) {
-        console.error('Mirror availability failed:', e);
-        toast.error('Saved profile, but failed to save detailed availability. Please retry.');
-      }
 
       return update;
     },
@@ -242,10 +147,6 @@ export default function VolunteerProfilePage() {
       toast.error('Please select your home town.');
       return;
     }
-    if (!data.available_anytime && (!data.availability_matrix || data.availability_matrix.length === 0)) {
-      toast.error('Please add at least one availability block.');
-      return;
-    }
     mutation.mutate(data);
   };
 
@@ -258,8 +159,6 @@ export default function VolunteerProfilePage() {
         dob: profile?.dob ?? '',
         bio: profile?.bio ?? '',
         skills: profile?.skills ?? '',
-        available_anytime: profile?.available_anytime ?? true,
-        availability_matrix: profile?.available_anytime ? [] : profile?.availability_matrix ?? [],
         public_profile: !!profile?.public_profile,
       });
       toast.success('Changes discarded');
@@ -280,7 +179,7 @@ export default function VolunteerProfilePage() {
       <div className="mb-8">
         <h1 className="title">Your profile</h1>
         <p className="page-description">
-          Update your profile, skills, and availability for organisations to discover you. Make your profile public to appear in volunteer searches.
+          Update your profile and skills so organisations can find you. Make your profile public to appear in volunteer searches.
         </p>
       </div>
 
@@ -377,17 +276,10 @@ export default function VolunteerProfilePage() {
           {errors.public_profile_skills && <p className="error-text">{errors.public_profile_skills.message}</p>}
         </div>
 
-        <div className="check-row">
-          {/* Flexible Availability */}
-          <label className="check-label">
-            <input type="checkbox" {...register('available_anytime')} className="check" />
-            Flexible Availability
-          </label>
-        </div>
-
         {/*
-          CON-6. This was a checkbox sitting beside "Flexible Availability",
-          which is not a control anyone would find when they wanted it. ACC-4
+          CON-6. This was a checkbox sitting beside "Flexible Availability" --
+          a control WF9-2 has now removed outright, along with the availability
+          grid below it -- which is not somewhere anyone would find it. ACC-4
           only holds — discoverable staying ON by default — because turning it
           off is easy, so the switch has to be findable, say plainly what it
           does, and say what stays true when it is off. Every unprompted
@@ -434,16 +326,11 @@ export default function VolunteerProfilePage() {
           )}
         </div>
 
-        {/* Availability Matrix */}
-        {!availableAnytime && (
-          <Controller
-            name="availability_matrix"
-            control={control}
-            render={({ field }) => (
-              <AvailabilityMatrix value={field.value} onChange={field.onChange} />
-            )}
-          />
-        )}
+        {/* WF9-2: the weekly availability grid stood here. A volunteer filled
+            it in once and it was stale a fortnight later, so everything built
+            on it -- the match badge, "Show matches only", the availability an
+            organisation saw on a profile -- was quietly making claims out of
+            data nobody had a reason to keep up to date. */}
 
         {/* Actions */}
         <div className="flex gap-4 pt-2">

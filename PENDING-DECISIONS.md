@@ -151,6 +151,30 @@ approved yet**. That is true, and it is the first place the site says it
 out loud. Options: leave it; soften it; or say nothing and let the
 organisation find out from the dashboard.
 
+### WF9-11 · The availability drop destroys real people's data, and is waiting on your yes
+Batch 9.2. The client no longer reads or writes availability anywhere, but the
+columns and the table are still there: the drop migration is written and
+**not applied**, at `supabase/pending/wf9_2_drop_availability.sql`.
+**Two reasons it is held.** First, sequencing: it removes columns the deployed
+site still uses, so it has to follow the merge, not precede it. Second, it
+destroys data belonging to real people — as of 2026-09-18, **5
+`volunteer_availability` rows across 3 real volunteers**, plus the
+`availability_matrix` values on the real profiles. The `archive/availability-matching`
+branch preserves the **code**, not the data; nothing preserves the data.
+**Provisionally: written, not run.** You signed off the removal (WF9-1); this
+is only flagging that the last step is irreversible and needs a separate word.
+Options: apply it after the merge; or export the rows to a file first, which
+means keeping a copy of personal data outside the database and is arguably
+worse than losing it.
+
+### WF9-12 · A volunteer had already written their availability into their bio
+Noticed while walking 9.2, not changed. One real volunteer's bio ends "I have
+flexible availability on weekends and some weekday evenings." That is the
+argument for WF9-1 arriving on its own: people put their availability where it
+is current, in prose, next to everything else they want an organisation to
+know. **Provisionally: nothing done.** It is worth remembering when the
+replacement idea (WF9-2, a date in the outreach email) gets its design pass.
+
 ### WF9-10 · The front page's role count can now go down
 Same batch. The count and the three cards read the same list as the browse, so
 they no longer include removed roles or roles from unapproved organisations.

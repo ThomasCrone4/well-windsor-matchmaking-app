@@ -62,7 +62,7 @@ export default function PrivacyPage() {
           <List>
             <li>your name and home town;</li>
             <li>your date of birth, because volunteers must be 18 or over;</li>
-            <li>if you give them: a phone number, a short bio, your skills and when you are available;</li>
+            <li>if you give them: a phone number, a short bio and your skills;</li>
             <li>whether you are <em>discoverable</em>, meaning approved organisations may find you and contact you;</li>
             <li>the roles you register interest in, and any note you add.</li>
           </List>
@@ -85,7 +85,7 @@ export default function PrivacyPage() {
               goes straight to the organisation and continues outside the site.
             </li>
             <li>
-              An organisation sees your name, home town, bio, skills and availability if you register
+              An organisation sees your name, home town, bio and skills if you register
               interest in one of its roles, or if you are discoverable and it has been approved by Well
               Windsor.
             </li>
@@ -140,7 +140,7 @@ export default function PrivacyPage() {
             </Link>. It happens immediately and cannot be undone.
           </p>
           <List>
-            <li>Your profile, availability, registrations and notifications are deleted.</li>
+            <li>Your profile, registrations and notifications are deleted.</li>
             <li>An organisation&rsquo;s roles are deleted, and so are the registrations on them.</li>
             <li>Messages between you and organisations are deleted. We keep a dated note that a message
               was sent, without its text or anyone&rsquo;s name, so we can answer questions about how the

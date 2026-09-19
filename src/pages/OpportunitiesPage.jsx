@@ -10,48 +10,13 @@ import CardSkeleton from '../components/skeletons/CardSkeleton';
 import OpportunityPhoto from '../components/OpportunityPhoto';
 import { useTowns } from '../utils/towns';
 
-/**
- * The availability badge shown to a signed-in volunteer.
- *
- * match_kind comes from the match_opportunities_by_availability RPC and is
- * deliberately NOT derived from match_rank -- rank is an ordering key, and
- * collapsing these five cases into three buckets is what previously put
- * "Full availability match" on every flexible role.
- */
-const MATCH_BADGES = {
-  FULL: {
-    label: 'Full availability match',
-    classes: 'badge-success',
-    title: 'Your availability covers all of the times this role needs',
-  },
-  PARTIAL: {
-    label: 'Partial availability overlap',
-    classes: 'badge-warning',
-    title: 'Some of your availability overlaps the times this role needs',
-  },
-  FLEXIBLE: {
-    label: 'Flexible timing',
-    classes: 'badge-info',
-    title: 'This role can be done at flexible times, so any availability works',
-  },
-  UNSPECIFIED: {
-    label: 'Schedule not specified',
-    classes: 'badge-neutral',
-    title: 'This organisation has not given specific times, so we cannot compare',
-  },
-  NONE: {
-    label: 'No availability overlap',
-    classes: 'badge-neutral',
-    title: 'None of your availability overlaps the times this role needs',
-  },
-};
-
-/**
- * What "Show Matches Only" keeps. UNSPECIFIED is excluded on purpose: with
- * no schedule on the opportunity there is nothing to match against, and
- * calling that a match would be the same overclaim the badge just fixed.
- */
-const MATCHING_KINDS = new Set(['FULL', 'PARTIAL', 'FLEXIBLE']);
+// WF9-2. The availability badge ("Full availability match" and its four
+// siblings) and the "Show Matches Only" toggle were here. Both are gone with
+// availability matching itself: a weekly grid filled in at sign-up goes stale
+// within a week or two, so a badge built on it was making a confident claim
+// out of data nobody had reason to keep current. AvailabilityMatrix.jsx stays
+// -- the post and edit forms use it for a ROLE's schedule, which an
+// organisation does keep current because it is the role's actual times.
 
 export default function OpportunitiesPage() {
   // The Town filter exists only while more than one town is active (ADM-6,
@@ -59,7 +24,6 @@ export default function OpportunitiesPage() {
   // `town` stays 'All', which matches everything.
   const [filters, setFilters] = useState({ town: 'All', start: 'Any' });
   const { towns, showPicker: showTownFilter } = useTowns();
-  const [matchedOnly, setMatchedOnly] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
@@ -103,60 +67,23 @@ export default function OpportunitiesPage() {
     [myApps]
   );
 
-  // WF9-1. Both paths read public_opportunities, which is the single
-  // definition of a publicly visible role: active, not removed, and posted by
-  // an approved organisation.
+  // public_opportunities is the single definition of a publicly visible role:
+  // active, not removed, and posted by an approved organisation (WF9-1). It
+  // has owner rights, so the caller's RLS can neither widen nor narrow it --
+  // an admin, an organisation and a logged-out visitor read the same list.
   //
-  // This page used to ask the table for `status = 'active'` and trust RLS for
-  // the rest -- but RLS lets an admin read every role and an organisation read
-  // its own, and a REMOVED role keeps `status = 'active'`. So the same browse
-  // showed an admin 16 roles, an organisation with one removed role 15, and a
-  // logged-out visitor 14. The view has owner rights, so the caller's RLS can
-  // neither widen nor narrow it and all three now see the same list.
-  //
-  // The view also carries org_name, so the separate public_organisations
-  // lookup this page used to run for the non-volunteer path is gone: both
-  // paths now hand every card its organisation's name in the row itself.
+  // WF9-2: there is one query here now, not two. A volunteer used to take a
+  // different path entirely -- the match_opportunities_by_availability RPC --
+  // so the page had two queries returning slightly different shapes, and a
+  // fallback for when the RPC failed. Availability matching is gone, so every
+  // reader takes the same path.
   const {
     data: opps,
     error,
     isLoading,
   } = useQuery({
-    queryKey: ['public_opportunities', userProfile?.id, userProfile?.role],
+    queryKey: ['public_opportunities'],
     queryFn: async () => {
-      if (userProfile?.role === 'volunteer') {
-        const { data: rpcData, error: rpcError } = await supabase
-          .rpc('match_opportunities_by_availability', { p_volunteer_id: userProfile.id });
-
-        if (rpcError) {
-          console.error('RPC match_opportunities_by_availability failed:', rpcError);
-          toast.error('Matching unavailable. Showing all active opportunities.');
-          const { data: plain, error: plainErr } = await supabase
-            .from('public_opportunities')
-            .select(`
-              id,
-              title,
-              description,
-              location,
-              town,
-              skills,
-              requires_dbs,
-              generally_needed,
-              volunteers_needed,
-              status,
-              org_id,
-              org_name,
-              category,
-              created_at
-            `)
-            .order('created_at', { ascending: false });
-          if (plainErr) throw plainErr;
-          return plain ?? [];
-        }
-        return rpcData ?? [];
-      }
-
-      // non-volunteer path (logged-out visitors, organisations and admins)
       const { data, error } = await supabase
         .from('public_opportunities')
         .select(`
@@ -254,14 +181,11 @@ export default function OpportunitiesPage() {
     navigate(`/opportunities/${opportunityId}/enquire`);
   };
 
-  // Earliest start for filtering. The match RPC hands volunteers an
-  // earliest_start computed in the database; the logged-out path derives the
-  // same thing from the timeblocks fetched above.
+  // Earliest start for filtering, derived from the timeblocks fetched above.
+  // This used to prefer an `earliest_start` column the match RPC computed in
+  // the database and fall back to the timeblocks; with the RPC gone there is
+  // one source, which is the one the logged-out path always used.
   const getEarliestStart = (op) => {
-    if (op?.earliest_start) {
-      const d = new Date(op.earliest_start);
-      return isNaN(d.valueOf()) ? null : d;
-    }
     const blocks = blocksByOpp.get(op?.id) ?? [];
     const validDates = blocks
       .map((b) => (b?.start_date ? new Date(b.start_date) : null))
@@ -285,12 +209,6 @@ export default function OpportunitiesPage() {
         (filters.start === 'This Week' && start && isThisWeek(start)) ||
         (filters.start === 'This Month' && start && isThisMonth(start));
 
-      // Previously read userProfile.home_town_only -- a column that has
-      // never existed, so !undefined was always true and this toggle did
-      // nothing at all. It filters on the availability match now, which is
-      // what its label has always promised.
-      const matched = !matchedOnly || MATCHING_KINDS.has(op.match_kind);
-
       // BRW-4. Title alone missed the obvious searches: someone looking for
       // "reading" or "first aid" found nothing unless an organisation had put
       // the word in the title, and searching for a school by name found
@@ -302,7 +220,7 @@ export default function OpportunitiesPage() {
         .toLowerCase();
       const matchesSearch = haystack.includes(searchTerm.trim().toLowerCase());
 
-      return matchesTown && matchesStart && matched && matchesSearch;
+      return matchesTown && matchesStart && matchesSearch;
     });
   };
 
@@ -325,8 +243,8 @@ export default function OpportunitiesPage() {
     );
 
   const filtered = filterOpportunities(opps || []);
-  // The RPC already returns the volunteer's list ordered by match_rank,
-  // then newest first. Nothing to re-sort client-side.
+  // Newest first, as the query returns them. WF9-3 replaces this with
+  // soonest-next-date ordering.
   const finalList = onlyId
     ? filtered.filter((op) => String(op.id) === String(onlyId))
     : filtered;
@@ -423,28 +341,13 @@ export default function OpportunitiesPage() {
             </select>
           </div>
 
-          {/* Clear / Match toggle */}
+          {/* WF9-2: "Show Matches Only" stood here, next to Clear Filters. */}
           <div className="form-row">
-            {userProfile?.role === 'volunteer' ? (
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={matchedOnly}
-                  onChange={() => setMatchedOnly(!matchedOnly)}
-                  className="check"
-                />
-                Show Matches Only
-              </label>
-            ) : (
-              <span className="label">&nbsp;</span>
-            )}
-
             <button
               type="button"
               onClick={() => {
                 setFilters({ town: 'All', start: 'Any' });
                 setSearchTerm('');
-                setMatchedOnly(false);
                 navigate('/opportunities');
               }}
               className="btn-secondary mt-1"
@@ -469,11 +372,6 @@ export default function OpportunitiesPage() {
             const alreadyEnquired = !!userProfile?.id && appliedSet.has(op.id);
             const orgName = op.org_name || 'Organisation';
             const blocks = blocksByOpp.get(op.id) ?? [];
-
-            // Availability badge, volunteers only -- it is a statement about
-            // *your* schedule, so it means nothing to a logged-out visitor.
-            const badge =
-              userProfile?.role === 'volunteer' ? MATCH_BADGES[op.match_kind] : null;
 
             return (
               <li key={op.id} className="card !p-0 flex flex-col overflow-hidden">
@@ -501,18 +399,11 @@ export default function OpportunitiesPage() {
                     {orgName}
                   </p>
 
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h2 className="text-lg font-semibold leading-snug">
-                      <Link to={`/opportunities/${op.id}`} className="hover:underline">
-                        {op.title}
-                      </Link>
-                    </h2>
-                    {badge && (
-                      <span className={badge.classes} title={badge.title}>
-                        {badge.label}
-                      </span>
-                    )}
-                  </div>
+                  <h2 className="text-lg font-semibold leading-snug">
+                    <Link to={`/opportunities/${op.id}`} className="hover:underline">
+                      {op.title}
+                    </Link>
+                  </h2>
 
                   <p
                     className="text-sm line-3"

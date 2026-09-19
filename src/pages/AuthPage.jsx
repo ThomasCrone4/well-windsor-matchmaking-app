@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { toast } from 'react-hot-toast';
-import AvailabilityMatrix from '../components/AvailabilityMatrix';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTowns } from '../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../utils/age';
@@ -21,8 +20,6 @@ export default function AuthPage() {
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [homeTown, setHomeTown] = useState('');
-  const [availableAnytime, setAvailableAnytime] = useState(true);
-  const [availabilityMatrix, setAvailabilityMatrix] = useState([]);
   const [publicProfile, setPublicProfile] = useState(true);
 
   const [isSigningUp, setIsSigningUp] = useState(false);
@@ -61,9 +58,6 @@ export default function AuthPage() {
         if (publicProfile) {
           if (!bio?.trim()) newErrors.bio = 'Bio is required when profile is visible to organisations';
           if (!skills?.trim()) newErrors.skills = 'Skills are required when profile is visible to organisations';
-        }
-        if (!availableAnytime && (!availabilityMatrix || availabilityMatrix.length === 0)) {
-          newErrors.availabilityMatrix = 'Please add at least one availability slot or mark "Flexible Availability".';
         }
       }
     }
@@ -110,8 +104,6 @@ export default function AuthPage() {
             contact_number: contactNumber?.trim() || null,
             bio: bio?.trim() || null,
             skills: skills?.trim() || null,
-            available_anytime: availableAnytime,
-            availability_matrix: availableAnytime ? null : availabilityMatrix,
             public_profile: publicProfile,
           }),
         },
@@ -401,18 +393,12 @@ export default function AuthPage() {
                   {errors.skills && <p className="error-text">{errors.skills}</p>}
                 </div>
 
-                {/* Visibility & Availability */}
+                {/* WF9-2: a "Flexible Availability" checkbox and a weekly
+                    availability grid stood here, and signing up meant filling
+                    one of them in. Both are gone: the grid was stale within a
+                    week or two of sign-up, and asking for it made the form
+                    longer in exchange for data nothing could honestly use. */}
                 <div className="check-row">
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={availableAnytime}
-                      onChange={(e) => setAvailableAnytime(e.target.checked)}
-                      className="check"
-                    />
-                    Flexible Availability
-                  </label>
-
                   <label className="check-label">
                     <input
                       type="checkbox"
@@ -423,18 +409,6 @@ export default function AuthPage() {
                     Allow organisations to view my profile and contact me
                   </label>
                 </div>
-
-                {!availableAnytime && (
-                  <>
-                    <AvailabilityMatrix
-                      value={availabilityMatrix}
-                      onChange={setAvailabilityMatrix}
-                    />
-                    {errors.availabilityMatrix && (
-                      <p className="error-text">{errors.availabilityMatrix}</p>
-                    )}
-                  </>
-                )}
               </>
             )}
           </>

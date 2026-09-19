@@ -341,12 +341,10 @@ export function formatOpportunitySchedule(op, {
 // -----------------------------------------------------------------------------
 export function getStartDateForSort(op) {
   if (op?.generally_needed) return new Date(); // treat as available now
-  // earliest_start when the match RPC supplied it, otherwise derive it from
-  // the timeblocks the caller attached.
-  if (op?.earliest_start) {
-    const d = toDate(op.earliest_start);
-    if (d) return d;
-  }
+  // Derived from the timeblocks the caller attached. This used to prefer an
+  // `earliest_start` the match RPC computed in the database; with WF9-2 that
+  // RPC is gone and the timeblocks are the only source, which is what every
+  // logged-out reader was using all along.
   const { start } = deriveDateRangeFromBlocks(op?.timeblocks);
   return start || new Date(8640000000000000); // far-future sentinel
 }
@@ -356,46 +354,10 @@ export function compareByEarliestStart(a, b) {
 }
 
 // -----------------------------------------------------------------------------
-// Overlap helpers (for matching)
+// WF9-2. An "Overlap helpers (for matching)" section stood here -- five
+// exported functions comparing a volunteer's blocks with a role's on day, time
+// and date. Nothing outside this file imported any of them: the matching that
+// shipped was done in the database by match_opportunities_by_availability, and
+// this was a second, parallel implementation of the same idea that no page
+// ever called. It goes with the feature rather than being left to rot.
 // -----------------------------------------------------------------------------
-export function dateRangesOverlap(aStart, aEnd, bStart, bEnd) {
-  if (!aStart || !aEnd || !bStart || !bEnd) return false;
-  return aStart <= bEnd && bStart <= aEnd;
-}
-
-export function timeRangesOverlap(aStartM, aEndM, bStartM, bEndM) {
-  if (aStartM == null || aEndM == null || bStartM == null || bEndM == null) return false;
-  return aStartM <= bEndM && bStartM <= aEndM;
-}
-
-export function daysOverlap(aDays, bDays) {
-  const A = new Set(normalizeDayIndices(aDays));
-  return normalizeDayIndices(bDays).some((idx) => A.has(idx));
-}
-
-// Block-vs-block overlap on all three axes (date, time, day)
-export function blocksOverlap(a, b) {
-  const aS = toDate(a?.start_date);
-  const aE = toDate(a?.end_date ?? a?.start_date);
-  const bS = toDate(b?.start_date);
-  const bE = toDate(b?.end_date ?? b?.start_date);
-
-  const datesOK = dateRangesOverlap(aS, aE, bS, bE);
-
-  const aSM = toMinutes(a?.start_time);
-  const aEM = toMinutes(a?.end_time ?? a?.start_time);
-  const bSM = toMinutes(b?.start_time);
-  const bEM = toMinutes(b?.end_time ?? b?.start_time);
-
-  const timesOK = timeRangesOverlap(aSM, aEM, bSM, bEM);
-  const daysOK = daysOverlap(a?.days, b?.days);
-  return datesOK && timesOK && daysOK;
-}
-
-// Any overlap between arrays of blocks
-export function anyBlocksOverlap(blocksA, blocksB) {
-  const A = Array.isArray(blocksA) ? blocksA : [];
-  const B = Array.isArray(blocksB) ? blocksB : [];
-  for (const a of A) for (const b of B) if (blocksOverlap(a, b)) return true;
-  return false;
-}

@@ -281,8 +281,8 @@ export default function HomePage() {
               className="space-y-2 mb-5"
               style={{ color: 'var(--color-text-secondary)' }}
             >
-              <li>Browse roles by skills and by when you are free</li>
-              <li>See at a glance which ones fit your availability</li>
+              <li>Browse roles by skills, by place and by when they run</li>
+              <li>See each role's times before you decide</li>
               <li>Register your interest in a couple of clicks</li>
             </ul>
             <Link to="/opportunities" className="btn-primary">
