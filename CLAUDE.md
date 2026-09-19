@@ -1046,6 +1046,40 @@ migration: this batch is all client.
 Re-runnable: `.scratch/test_order_wf9_3.mjs` (22 cases, no database) and
 `.scratch/walk_wf9_3.py` (25 UI checks, read-only — it creates nothing).
 
+**Workflow 9 batch 9.4 is built (2026-09-19, branch `wf9-4-volunteers-paging`).**
+Find Volunteers pages at 10, with the same component. No migration.
+
+- **Paginating a list with no `ORDER BY` is a bug, and an invisible one.**
+  `public_volunteers` was unordered, and Postgres promises nothing about the
+  order of an unordered SELECT — harmless while the whole list rendered at
+  once, but once it is sliced into pages the same volunteer can appear on
+  page 1 and page 2, or on neither. The query now orders by `name` then `id`.
+  The walk loads the list twice and compares both pages to catch a regression.
+- **`Pagination` took a `perPage` prop.** It hardcoded 10 in its
+  "Showing 1–10 of N" line, which would have printed the wrong range above
+  the admin lists' fifty rows in 9.6 — wrong in a way that reads as a data
+  bug rather than a formatting one.
+- **Testing it needed 11+ discoverable volunteers and there were 7.** Eight
+  `wf94-vol-NN@wellwindsor-test.invalid` fixtures were inserted and deleted in
+  the same session. Discoverable volunteers are visible only to an **approved
+  organisation** (`public_volunteers` gates on `is_approved_org`), never on
+  the public browse, so these are far less exposed than a throwaway role —
+  but they are visible to the real organisations, so they do not outlive the
+  run. The walk says it cannot test paging rather than passing quietly when
+  the list is too short.
+- **Address a pagination button by its label, not by where you are.** The
+  walk clicked "Go to page 2" from a page that was already page 2, where that
+  button does not exist — Next is labelled "Go to page 3" and disabled.
+- **A cold `npm run dev` needs more than 30s for the first navigation.**
+  `with_server` reports ready when the port accepts connections, but vite is
+  still optimising dependencies, so the default 30s navigation timeout
+  expires against a server that is merely busy. First goto gets 120s, and
+  sign-in waits for the URL to change rather than a fixed 3s — a short wait
+  there left the walk on `/auth` and reported a missing `#search`.
+
+Re-runnable: `.scratch/walk_wf9_4.py` (19 UI checks; needs 11+ discoverable
+volunteers, and says so if not).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception

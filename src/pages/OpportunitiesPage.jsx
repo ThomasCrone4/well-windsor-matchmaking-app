@@ -549,6 +549,7 @@ export default function OpportunitiesPage() {
           pageCount={pageCount}
           onChange={setPage}
           total={finalList.length}
+          perPage={PER_PAGE}
           noun="role"
         />
       )}

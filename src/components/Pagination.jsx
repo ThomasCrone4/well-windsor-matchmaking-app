@@ -17,13 +17,25 @@
  * @param {number} pageCount total pages, 1 or more
  * @param {(n: number) => void} onChange
  * @param {number} total     how many items in the filtered list
+ * @param {number} perPage   page size, so the "Showing x-y" line is right
  * @param {string} noun      what is being counted, singular ("role")
  */
-export default function Pagination({ page, pageCount, onChange, total, noun = 'result' }) {
+export default function Pagination({
+  page,
+  pageCount,
+  onChange,
+  total,
+  perPage = 10,
+  noun = 'result',
+}) {
   if (pageCount <= 1) return null;
 
-  const first = (page - 1) * 10 + 1;
-  const last = Math.min(page * 10, total);
+  // perPage is a parameter and not the literal 10 it started as: the admin
+  // lists in 9.6 page at 50, and a hardcoded 10 here would have printed
+  // "Showing 1-10 of 137" above a page of fifty rows -- wrong in a way that
+  // looks like a data bug rather than a formatting one.
+  const first = (page - 1) * perPage + 1;
+  const last = Math.min(page * perPage, total);
 
   return (
     <nav

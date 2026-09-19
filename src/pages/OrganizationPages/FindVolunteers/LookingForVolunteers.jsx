@@ -2,18 +2,38 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../utils/supabase';
 import { useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import CardSkeleton from '../../../components/skeletons/CardSkeleton';
 import { summariseOutreach, cooldownHoursRemaining } from '../../../utils/outreach';
 import useUserProfile from '../../../hooks/useUserProfile';
 import ApprovalNotice from '../../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../../utils/approval';
 import { useTowns } from '../../../utils/towns';
+import Pagination from '../../../components/Pagination';
 
 export default function LookingForVolunteersPage() {
   const [filters, setFilters] = useState({ town: 'All'});
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
+
+  // WF9-4. 10 a page, the same component and the same rules as the browse:
+  // the page number in the query string so Back works, clamped so a silly
+  // ?page= shows the last page rather than an empty one, and back to page 1
+  // whenever a filter changes.
+  const PER_PAGE = 10;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pageParam = parseInt(searchParams.get('page') ?? '1', 10);
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+  const setPage = (n) => {
+    const next = new URLSearchParams(searchParams);
+    if (n <= 1) next.delete('page');
+    else next.set('page', String(n));
+    setSearchParams(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const resetPage = () => {
+    if (page !== 1) setPage(1);
+  };
   const { profile } = useUserProfile();
   // The view returns nothing to an unapproved organisation, which on its
   // own reads as "there are no volunteers". Say why instead.
@@ -38,9 +58,16 @@ export default function LookingForVolunteersPage() {
       // client, where anyone could bypass them by calling the API directly.
       // They are now enforced by the public_volunteers view, which also
       // omits dob, email and contact_number entirely.
+      // WF9-4: ordered, because this list is now sliced into pages. Postgres
+      // makes no promise about the order of an unordered SELECT, so without
+      // this two requests could return the same rows in a different sequence
+      // and a volunteer could appear on both page 1 and page 2, or on
+      // neither. That is invisible until the list is paginated.
       const { data, error } = await supabase
         .from('public_volunteers')
-        .select('id, name, home_town, skills, bio');
+        .select('id, name, home_town, skills, bio')
+        .order('name', { ascending: true })
+        .order('id', { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -128,6 +155,9 @@ export default function LookingForVolunteersPage() {
     );
 
   const filtered = filterVolunteers(data || []);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const safePage = Math.min(page, pageCount);
+  const visible = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8" id="main-content">
@@ -166,7 +196,10 @@ export default function LookingForVolunteersPage() {
               type="text"
               placeholder="Name, skills, bio…"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                resetPage();
+              }}
               className="input"
             />
           </div>
@@ -178,7 +211,10 @@ export default function LookingForVolunteersPage() {
               <select
                 id="town"
                 value={filters.town}
-                onChange={(e) => setFilters((f) => ({ ...f, town: e.target.value }))}
+                onChange={(e) => {
+                  setFilters((f) => ({ ...f, town: e.target.value }));
+                  resetPage();
+                }}
                 className="select"
               >
                 {['All', ...towns].map((t) => (
@@ -197,6 +233,7 @@ export default function LookingForVolunteersPage() {
               onClick={() => {
                 setFilters({ town: 'All'});
                 setSearchTerm('');
+                resetPage();
               }}
               className="btn-secondary"
             >
@@ -217,7 +254,7 @@ export default function LookingForVolunteersPage() {
         </div>
       ) : (
         <ul className="space-y-6">
-          {filtered.map((vol) => {
+          {visible.map((vol) => {
             const outreach = outreachByVolunteer.get(vol.id);
             const hoursLeft = cooldownHoursRemaining(outreach?.lastSentAt);
             return (
@@ -273,6 +310,15 @@ export default function LookingForVolunteersPage() {
           })}
         </ul>
       )}
+
+      <Pagination
+        page={safePage}
+        pageCount={pageCount}
+        onChange={setPage}
+        total={filtered.length}
+        perPage={PER_PAGE}
+        noun="volunteer"
+      />
     </div>
   );
 }
