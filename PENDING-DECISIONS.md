@@ -266,6 +266,21 @@ does not have to reconstruct it:
   finished". Mark it removed, with the reason (a static grid goes stale the
   week after sign-up) and the replacement idea (WF9-2, a date in the outreach
   email).
+- **9.3** — BRW-2 ("filter by when you are free") is gone: the When filter
+  was removed and replaced by an organisation filter, with soonest-next-date
+  ordering instead of filtering. BRW-4's search is unchanged.
+- **9.4** — nothing to add; pagination is not a map item.
+- **9.5** — ROLE-4's rule is unchanged, but its wording should say the offer
+  is three named buttons rather than one "Reopen".
+- **9.6** — **ADM-3 is now built** (the email log finally has a screen); add
+  it to the built list. APP-1's approval queue gains a second exit,
+  declining, which is new behaviour the map does not describe.
+- **9.7** — **ADM-8 is now genuinely reachable** (it was built in WF3 but had
+  no screen until now), and WF8-6 is closed by an admin delete. ADM-2/ADM-5
+  moved off the list screens onto the account page; same function, new home.
+
+So the built list gains **ADM-3** (WF9.6) and **ADM-8 becomes usable rather
+than merely present** (WF9.7).
 
 ### APP-4 · What does a human check before approving an organisation?
 Still open on the logic map. Blocks nothing — approval works without it.

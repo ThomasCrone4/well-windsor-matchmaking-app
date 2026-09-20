@@ -748,6 +748,12 @@ above. Put it in workflow 5, after `ROLE-5` — it is the same read paths.
 
 # Workflow 9 — Browse, admin and account management
 
+> **All seven batches are built (2026-09-18 to 2026-09-20).** 9.1-9.4 are
+> merged and live; 9.5, 9.6 and 9.7 are committed and waiting to be merged.
+> Every batch's notes, and the traps each one turned up, are in `CLAUDE.md`
+> under its own heading. What remains of v0 is in `PENDING-DECISIONS.md` and
+> is almost entirely not code.
+
 **Written 2026-09-18, after the first deploy to
 `well-windsor-matchmaking-app.pages.dev` and a walk-through of the live site.**
 Every decision below was taken by the user that day; the reasoning is in
