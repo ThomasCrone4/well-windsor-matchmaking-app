@@ -696,6 +696,15 @@ export default function AdminDashboard() {
                       </div>
                       
                       <div className="flex flex-col gap-2 shrink-0">
+                        {/* WF9-7: every admin list links to the one page
+                            about a person, where the per-account actions
+                            live. */}
+                        <Link
+                          to={`/admin/accounts/${org.id}`}
+                          className="btn-secondary btn-sm w-fit"
+                        >
+                          View account
+                        </Link>
                         {/* Approving lets this organisation publish roles,
                             see discoverable volunteers and email them.
                             Withdrawing takes its live roles off the public
@@ -856,7 +865,7 @@ export default function AdminDashboard() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
                             <Link
-                              to={`/volunteers/${v.id}`}
+                              to={`/admin/accounts/${v.id}`}
                               className="btn-secondary btn-sm flex items-center gap-1 w-fit"
                             >
                               <User size={14} />

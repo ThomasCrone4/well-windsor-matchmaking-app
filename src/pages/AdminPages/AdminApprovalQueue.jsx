@@ -11,6 +11,7 @@
 // it stopped meaning "things to do".
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { Building } from 'lucide-react';
 import { supabase } from '../../utils/supabase';
@@ -107,6 +108,10 @@ export default function AdminApprovalQueue({ organisations, isLoading }) {
               </div>
 
               <div className="flex flex-wrap gap-2">
+                {/* WF9-7: before deciding, look at them. */}
+                <Link to={`/admin/accounts/${org.id}`} className="btn-secondary">
+                  View account
+                </Link>
                 <button
                   className="btn-primary"
                   disabled={approve.isPending}

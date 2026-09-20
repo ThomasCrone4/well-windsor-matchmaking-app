@@ -125,9 +125,11 @@ approve it. Then set the `EMAIL_PRIVACY_URL` secret to `<site>/privacy`.
 `delete-account` deletes only the caller (deliberate, WF3). An admin
 deleting a user from the Supabase dashboard **skips `prepare_account_deletion`**:
 no preserved outreach record, no audit-log redaction, no email-outbox
-redaction. **Provisionally: nothing built.** Options: an admin-only
-deletion function that runs the same preparation; or a written procedure.
-Matters as soon as anyone emails asking to be deleted.
+redaction. **CLOSED 2026-09-20 by WF9.7:** `admin_delete_account()` on the
+new admin account page runs the same preparation as self-deletion, in one
+transaction, and refuses an admin or yourself. It needs a reason and the
+typed word DELETE, and is logged with who did it. Proven end to end by
+`.scratch/probe_wf9_7.py`.
 
 ### WF8-7 · Fonts served from the site instead of Google
 Google Fonts sends every visitor's IP address to Google, which the policy
@@ -166,6 +168,27 @@ is only flagging that the last step is irreversible and needs a separate word.
 Options: apply it after the merge; or export the rows to a file first, which
 means keeping a copy of personal data outside the database and is arguably
 worse than losing it.
+
+### WF9-17 · Admin deletion is written in SQL, not as an Edge Function
+Batch 9.7, closing WF8-6. `admin_delete_account()` runs the preparation and
+the delete in **one transaction**, where the existing self-service route
+(`delete-account`) prepares over RPC and then calls the auth API — two steps
+that can half-succeed, which is why that function has a branch for "the log
+says deleted and it was not". **Provisionally: built in SQL.** The trade-off
+is that it deletes `auth.users` directly rather than through
+`auth.admin.deleteUser`; the cascades are the same, and it is already how
+throwaway accounts are cleaned up here. Option: rewrite it as an Edge
+Function for symmetry with the self-service route, and accept the two-step.
+
+### WF9-18 · An admin can read another account's date of birth and phone
+Batch 9.7. The account page shows what the admin lists already showed, plus
+the login address and whether it is confirmed — and for a volunteer, their
+date of birth and phone number, which an organisation never sees.
+**Provisionally: shown.** An admin already has this by policy on
+`user_profiles`; putting it on one page makes it visible rather than merely
+reachable. Options: leave it; or hide dob and phone behind a "show" control
+the way the message log hides message text. Relevant to the privacy policy
+sign-off (WF8-5), which already says admins can see messages.
 
 ### WF9-14 · Declining an organisation is silent, and reversible
 Batch 9.6. An admin can now clear an organisation off the approval queue with

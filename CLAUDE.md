@@ -1177,6 +1177,60 @@ Re-runnable: `.scratch/probe_wf9_6.py` (37 cases) and
 `.scratch/walk_wf9_6.py` (36 UI checks; it declines the pending throwaway
 through the UI and restores it by `atexit`).
 
+**Workflow 9 batch 9.7 is built (2026-09-20, branch `wf9-7-account-page`).**
+One migration, one page, two dialogs. **This finishes Workflow 9.**
+
+- **`/admin/accounts/:id` — one person, one page.** Profile, what they have
+  on the site, their audit history, and the per-person actions gathered:
+  approve / withdraw / decline, switch account type (moved off the list
+  screens), change login email, delete.
+- **The volunteer list's "View" button pointed at `/volunteers/<id>`, which
+  is not a route** — the catch-all sent the admin to the home page. It has a
+  destination now, and the organisation list and the approval queue link to
+  the same page.
+- **ADM-8 has a screen at last.** `admin-change-email` has existed and been
+  proven since workflow 3. The dialog reads the refusal out of
+  `error.context`, the way `outreach.js` has to.
+- **WF8-6 is closed: `admin_delete_account(user, reason)`.** Deleting from
+  the Supabase dashboard skips `prepare_account_deletion()`, so the preserved
+  outreach record, the audit-log redaction and the outbox blanking never run
+  — three things the privacy policy promises. **Written in SQL rather than as
+  an Edge Function on purpose:** `delete-account` prepares over RPC and then
+  calls `auth.admin.deleteUser` over the API, two steps that can half-succeed
+  (it has an `account_deletion_failed` branch for exactly that). In the
+  database it is one transaction. It refuses an admin (revoke access first)
+  and refuses self (use your own profile page), and needs a reason and the
+  typed word DELETE.
+- **Order matters, and it is: prepare, then log.** The redaction scrubs
+  personal VALUES and the `reason` column while keeping `actor_id` and
+  `target_user_id`, so the "deleted by an admin" entry is written **after**
+  it — written before, the admin's reason would be blanked to 'deleted user'.
+  That entry therefore carries no personal data of its own.
+- **`outreach_preserved_on_deletion` rows are NOT keyed to the person.**
+  They carry `target_table = 'org_outreach'` and the message's id, with the
+  ids in metadata and **no `target_user_id`** — which is also why the
+  redaction, matching on `target_user_id`/`actor_id`, leaves them alone (they
+  hold no names to scrub). Querying for them by `target_user_id` finds
+  nothing and reads exactly like "the record was never written".
+- **The volunteer-facing outreach email never enters `email_outbox`.**
+  `send-outreach` sends it directly; the only outbox row a message produces
+  is the `outreach_copy` addressed to the ORGANISATION and keyed to it. So
+  deleting a volunteer reports `emails_redacted: 0` and that is correct —
+  their copy is covered by the 30-day job, not by deletion.
+- **Casting again, for the same reason as 9.6.** `audit_logs.created_at` is
+  `timestamp WITHOUT time zone` holding UTC and `action_type` is `varchar`;
+  both are cast in the body of `admin_account_history`, because
+  `CREATE OR REPLACE` cannot change a `RETURNS TABLE` and a DROP would hand
+  EXECUTE back to anon (trap 1c).
+- **A not-found must not be retried.** The account queries use
+  `retry: false`: React Query retried the `P0002` three times, so a stale
+  link sat on "Loading…" for several seconds before admitting the account
+  was gone.
+
+Re-runnable: `.scratch/probe_wf9_7.py` (33 cases; signs up its own doomed
+volunteer, has an organisation write to them, then deletes them) and
+`.scratch/walk_wf9_7.py` (25 UI checks, its fixture swept by `atexit`).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception
