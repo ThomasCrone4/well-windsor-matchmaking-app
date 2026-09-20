@@ -280,7 +280,9 @@ export default function EditOpportunity() {
     mutationFn: async (payload) => {
       // The blocks travel alongside the row but are not columns on it, so
       // they are split off before the update rather than sent and rejected.
-      const { __blocks: blocks, ...updateData } = payload;
+      // __reopened is the same: a flag for onSuccess, not a column. Leaving
+      // it in would send it to PostgREST and come back as PGRST204.
+      const { __blocks: blocks, __reopened: _reopened, ...updateData } = payload;
 
       // 1) Update the parent row
       const { error } = await supabase
@@ -300,8 +302,15 @@ export default function EditOpportunity() {
 
       return { ...updateData, when_needed: blocks ?? [] };
     },
-    onSuccess: (saved) => {
-      toast.success('Opportunity updated!');
+    onSuccess: (saved, variables) => {
+      // WF9-5. "Saved" is not specific enough when one of the buttons also
+      // puts the role back on the public browse: the organisation should be
+      // told which of the two happened.
+      toast.success(
+        variables?.__reopened
+          ? 'Saved, and this role is back on the browse.'
+          : 'Opportunity updated!'
+      );
       queryClient.invalidateQueries(['opportunity', id]);
       queryClient.invalidateQueries(['opportunity_timeblocks_edit', id]);
       queryClient.invalidateQueries(['volunteer_opportunities']);
@@ -312,6 +321,11 @@ export default function EditOpportunity() {
         { ...getValues(), ...saved, when_needed: saved.when_needed ?? [] },
         { keepDirty: false, keepTouched: false }
       );
+
+      // Reopening ends the job the organisation came here to do, so it
+      // returns to the dashboard where the role is now listed as active.
+      // Saving-and-keeping-closed does not: they are probably still editing.
+      if (variables?.__reopened) navigate('/organization-dashboard');
     },
     onError: (err) => {
       console.error('Update error:', err);
@@ -359,7 +373,7 @@ export default function EditOpportunity() {
       return;
     }
 
-    mutation.mutate({ ...updateData, __blocks: blocks });
+    mutation.mutate({ ...updateData, __blocks: blocks, __reopened: statusOverride === 'active' && isClosed });
   };
 
   /**
@@ -601,26 +615,13 @@ export default function EditOpportunity() {
                 </p>
                 <p className="mt-2">
                   {scheduleIsInTheFuture
-                    ? 'Its dates are still ahead, so you can put it back on the browse.'
-                    : 'Its dates have passed. Give it dates in the future above and you can reopen it.'}
+                    ? 'Its dates are still ahead, so "Save and reopen" below will put it back on the browse.'
+                    : 'Its dates have passed, so "Save and reopen" is unavailable. Give it dates in the future above and it becomes available.'}
                 </p>
-                <button
-                  type="button"
-                  disabled={
-                    !scheduleIsInTheFuture || pending || isSubmitting || mutation.isPending
-                  }
-                  title={
-                    pending
-                      ? 'Available once Well Windsor approves your organisation'
-                      : !scheduleIsInTheFuture
-                        ? 'Update the dates first'
-                        : undefined
-                  }
-                  onClick={handleSubmit((data) => handleSave(data, 'active'), onInvalid)}
-                  className="btn btn-primary btn-sm mt-3"
-                >
-                  Reopen this role
-                </button>
+                {/* WF9-5: the reopen button used to live here, inside the
+                    notice, while "Save Changes" sat at the bottom looking
+                    identical and doing something different. Both are now in
+                    the action row below, named for what they do. */}
               </div>
             )}
 
@@ -654,25 +655,74 @@ export default function EditOpportunity() {
                 </button>
               )}
 
-              <div className="flex gap-4 pt-2">
-                <button
-                  type="button"
-                  disabled={!isDirty || isSubmitting || mutation.isPending}
-                  onClick={handleSubmit((data) => handleSave(data), onInvalid)}
-                  className="btn btn-primary"
-                >
-                  Save Changes
-                </button>
+              {/* WF9-5. A closed role gets three buttons that say what they
+                  do, because "Reopen this role" and "Save Changes" used to
+                  look alike and mean different things -- one published the
+                  role, the other quietly left it closed.
 
-                <button
-                  type="button"
-                  onClick={handleDiscard}
-                  className="btn btn-outline"
-                  disabled={!isDirty}
-                >
-                  Discard Changes
-                </button>
-              </div>
+                  "Save and reopen" does not require unsaved changes: an
+                  organisation may want to reopen a role exactly as it
+                  stands. The other two do; there is nothing to save or
+                  discard otherwise. */}
+              {isClosed ? (
+                <div className="flex flex-wrap gap-4 pt-2">
+                  <button
+                    type="button"
+                    disabled={
+                      !scheduleIsInTheFuture || pending || isSubmitting || mutation.isPending
+                    }
+                    title={
+                      pending
+                        ? 'Available once Well Windsor approves your organisation'
+                        : !scheduleIsInTheFuture
+                          ? 'Give this role dates in the future first'
+                          : undefined
+                    }
+                    onClick={handleSubmit((data) => handleSave(data, 'active'), onInvalid)}
+                    className="btn btn-primary"
+                  >
+                    Save and reopen
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!isDirty || isSubmitting || mutation.isPending}
+                    onClick={handleSubmit((data) => handleSave(data), onInvalid)}
+                    className="btn btn-secondary"
+                  >
+                    Save and keep closed
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDiscard}
+                    className="btn btn-outline"
+                    disabled={!isDirty}
+                  >
+                    Discard changes
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-4 pt-2">
+                  <button
+                    type="button"
+                    disabled={!isDirty || isSubmitting || mutation.isPending}
+                    onClick={handleSubmit((data) => handleSave(data), onInvalid)}
+                    className="btn btn-primary"
+                  >
+                    Save Changes
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDiscard}
+                    className="btn btn-outline"
+                    disabled={!isDirty}
+                  >
+                    Discard Changes
+                  </button>
+                </div>
+              )}
             </div>
           </form>
         )}

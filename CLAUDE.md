@@ -1077,8 +1077,48 @@ Find Volunteers pages at 10, with the same component. No migration.
   sign-in waits for the URL to change rather than a fixed 3s — a short wait
   there left the walk on `/auth` and reported a missing `#search`.
 
-Re-runnable: `.scratch/walk_wf9_4.py` (19 UI checks; needs 11+ discoverable
+Re-runnable: `.scratch/walk_wf9_4.py` (20 UI checks; needs 11+ discoverable
 volunteers, and says so if not).
+
+**The drops of 9.2 were applied 2026-09-19** as
+`20260919194219_wf9_drop_availability_matching`, once the client was merged
+and live. **The deploy was verified, not assumed:** the published bundle was
+fetched from `pages.dev` and grepped, and contains zero references to any
+availability column, table or RPC. The row-count guard passed — nothing else
+changed. `probe_wf9_2` 24/24; `probe_wf8_final` lost its
+`volunteer_availability` section and is 96/96.
+
+**Workflow 9 batch 9.5 is built (2026-09-19, branch `wf9-5-reopen`).** No
+migration.
+
+- **A closed role gets three buttons that say what they do:** *Save and
+  reopen* (publishes, then returns to the dashboard), *Save and keep closed*,
+  *Discard changes*. The old "Reopen this role" sat inside the notice while a
+  "Save Changes" at the bottom looked identical and did something different.
+  ROLE-4's rule is unchanged: reopen is disabled, with the reason on screen,
+  while the dates are past.
+- **Save-and-reopen does not require unsaved changes** — an organisation may
+  want to reopen a role exactly as it stands. The other two do.
+- **A flag passed to `mutate()` must be stripped before the update.**
+  `__reopened` tells `onSuccess` which of the two happened; left in the
+  payload it would go to PostgREST as a column and come back `PGRST204`.
+
+**Three suites were leaking live roles onto the public browse, all the same
+way:** they post an `active` fixture at module level, before the `try`, and
+clean up at the bottom — so any crash in between leaves it on the real site.
+`walk_wf5`, `probe_wf8_final` and (by construction) `walk_wf9_5` now register
+an `atexit` sweep the moment the fixture exists. **Any script that posts an
+active role needs that, not a cleanup at the end.** Five leftovers were found
+and removed the ROLE-1 way on 2026-09-19.
+
+**Two throwaway accounts on production are indistinguishable on screen** —
+`probe_wf6` signs up a volunteer with the same name, bio, town and skills on
+every run, so nothing rendered told them apart and "is any row served on two
+pages" was untestable. `LookingForVolunteers` now carries
+`data-volunteer-id` on each card. A display name is not an identity.
+
+Re-runnable: `.scratch/walk_wf9_5.py` (26 UI checks, fixtures swept by
+`atexit`).
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
