@@ -185,6 +185,25 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     </AdminRoute>
                   }
                 />
+                {/* WF9-6: the admin is three pages over one component, which
+                    keeps the queries and dialogs in one place while the nav
+                    and the URL say which job you are doing. */}
+                <Route
+                  path="/admin/manage"
+                  element={
+                    <AdminRoute>
+                      <AdminDashboard />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/logs"
+                  element={
+                    <AdminRoute>
+                      <AdminDashboard />
+                    </AdminRoute>
+                  }
+                />
 
                 {/* Catch-all redirect */}
                 <Route path="*" element={<Navigate to="/" replace />} />

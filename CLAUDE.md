@@ -1120,6 +1120,63 @@ pages" was untestable. `LookingForVolunteers` now carries
 Re-runnable: `.scratch/walk_wf9_5.py` (26 UI checks, fixtures swept by
 `atexit`).
 
+**Workflow 9 batch 9.6 is built (2026-09-20, branch `wf9-6-admin`).** One
+migration, three new components, three routes.
+
+- **The admin is three pages over one component:** `/admin` (Access),
+  `/admin/manage` (Opportunities, Organisations, Volunteers, Towns as
+  sub-tabs), `/admin/logs`. One component keeps the queries and dialogs in
+  one place; `useLocation()` picks the section. Access is the landing page
+  because the approval queue is the only part with a person waiting at the
+  other end.
+- **Declining an organisation (`decline_organisation`).** `declined_at` is
+  set by that function and nothing else; the reason goes to the audit log,
+  not a column. It is deliberately quiet: the organisation is **not told**
+  and nothing it can do changes -- still cannot publish, still can save
+  drafts. Approving un-declines; withdrawing approval does **not** re-decline.
+  The waiting count is now `approved_at is null AND declined_at is null`,
+  so the badge can actually reach zero.
+- **`declined_at` is safe by construction, not by the revoke in the
+  migration.** `authenticated` holds `rm` on `user_profiles` -- **no
+  table-wide UPDATE** -- and UPDATE is granted on seven named columns.
+  Read `relacl` before believing a revoke did anything (trap 1d); the one in
+  that migration is a no-op kept as a guard.
+- **ADM-3 finally has a screen** (`/admin/logs`): messages organisations
+  sent volunteers, and automatic emails. Both come from admin-only SECURITY
+  DEFINER functions. `email_outbox` has **no client grants at all**, so a
+  function rather than a policy; the outreach log resolves the address the
+  message actually went to from `auth.users`, which a browser cannot reach.
+  Neither returns the outbox `payload` -- it is a second copy of what the
+  30-day job blanks. Message text sits behind **Show message**, and
+  `PrivacyPage.jsx` gained a line saying admins can see messages.
+- **`CREATE OR REPLACE` cannot change a `RETURNS TABLE`, so cast in the
+  BODY.** `admin_email_log` declared `attempts integer` over a `smallint`
+  column and every call failed with `42804`. Casting `e.attempts::integer`
+  fixes it without a DROP, which would have handed EXECUTE back to anon
+  (trap 1c).
+- **An error and an empty table look identical through a REST response.**
+  That 42804 returned no rows, which was read as "the outbox is empty" -- so
+  a fixture row was inserted to test against. The outbox had 35 rows going
+  back two days. Check the status code before concluding anything about the
+  data.
+- **Approving an organisation queues and SENDS an `org_approved` email.**
+  `is_test_address()` guards the signup alert, not this one, so a probe that
+  approves a throwaway org really does send -- harmless only because the
+  throwaways are all `.invalid`. 35 outbox rows accumulated during this
+  batch; none went to a real address.
+- **Admin lists page at 50** (`Pagination` with `perPage`), and the page
+  resets when the sub-tab changes.
+
+Four earlier walks navigated the old tab bar and had to be re-pointed:
+`walk_wf1` (reports are on `/admin/logs`), `walk_wf4` (Access is a page, not
+a tab), `walk_wf7` and `walk_audit` (the four lists are on `/admin/manage`).
+`walk_wf7` also matched `^Organizations`; the sub-tab is UK-spelled now, so
+it accepts either.
+
+Re-runnable: `.scratch/probe_wf9_6.py` (37 cases) and
+`.scratch/walk_wf9_6.py` (36 UI checks; it declines the pending throwaway
+through the UI and restores it by `atexit`).
+
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured
 `ca-bundle.crt` exists but lacks the issuer, which is what TLS interception

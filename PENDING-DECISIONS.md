@@ -167,6 +167,35 @@ Options: apply it after the merge; or export the rows to a file first, which
 means keeping a copy of personal data outside the database and is arguably
 worse than losing it.
 
+### WF9-14 · Declining an organisation is silent, and reversible
+Batch 9.6. An admin can now clear an organisation off the approval queue with
+a reason. **Provisionally built as: it is not told.** Nothing about what it
+can do changes -- it still cannot publish, it can still save drafts -- so from
+its side the application simply stays pending for ever. The reason goes to the
+audit log, not to them. Approving later undoes it.
+Options: leave it silent (matches ADM-1, where an organisation is not told its
+role was taken down); or tell them, which needs a seventh notification type
+and an email template, and means writing a rejection the charity has to stand
+behind.
+
+### WF9-15 · Admins can read the text of messages sent through the site
+Batch 9.6, and the privacy policy changed in the same commit to say so. The
+email log shows who wrote to whom, the address it went to, and the message
+itself behind a "Show message" control. **Provisionally built.** It exists so
+a complaint about a message can be investigated, which is hard to do
+otherwise. The alternative is to log only metadata and never the text, which
+would make "this organisation sent me something awful" uninvestigable.
+Worth a look from whoever signs off the privacy policy (WF8-5).
+
+### WF9-16 · Approving a throwaway organisation really sends an email
+Noticed in 9.6, not changed. `is_test_address()` stops a `.invalid` signup
+raising the admin alert, but the **approval** email is not guarded the same
+way, so approving a throwaway organisation queues and sends one. Harmless
+today because every throwaway is on `.invalid` and nothing can be delivered
+there. **Provisionally: unchanged.** Options: extend `is_test_address()` to
+the approval path too, for consistency; or leave it, since the address is
+undeliverable by construction.
+
 ### WF9-13 · Where a finished role sorts, and what "any time" means in a list
 Batch 9.3. Ordering is soonest-next-date first, which needed two calls you did
 not specify. **Provisionally built:** (a) a role whose dates have all passed

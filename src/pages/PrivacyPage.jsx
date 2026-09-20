@@ -93,6 +93,13 @@ export default function PrivacyPage() {
               An organisation&rsquo;s name, town and bio are public. Its login email and phone number, if
               given, can be seen by people signed in to the site.
             </li>
+            <li>
+              <strong>Well Windsor administrators can see messages sent through the
+              site</strong>, including the text of a message an organisation sent you
+              and the address it was sent to. This is so a complaint about a message
+              can be looked into. Administrators are a small number of named people
+              at the charity, and every administrator action is recorded.
+            </li>
             <li>Well Windsor&rsquo;s administrators can see all accounts, to run and protect the service.</li>
           </List>
           <p>We do not sell your information or use it for advertising.</p>
