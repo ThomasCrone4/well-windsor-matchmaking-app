@@ -1,9 +1,11 @@
 -- Workflow 9, batch 9.2 -- availability matching, and volunteer availability
 -- with it.
 --
--- NOT YET APPLIED. Rename to its ledger timestamp when it is.
+-- APPLIED 2026-09-19 as 20260919194219, after 9.2's client reached the live
+-- site (verified by fetching the deployed bundle and finding zero references
+-- to any availability column, table or RPC).
 --
--- WHY IT IS HELD BACK. There is one database and two deploys. A migration
+-- WHY IT WAS HELD BACK. There is one database and two deploys. A migration
 -- reaches production the moment it is applied; the client reaches production
 -- when `main` is merged and Cloudflare builds it. This migration drops columns
 -- the CURRENTLY DEPLOYED site still reads and writes, so applying it before
@@ -28,7 +30,12 @@
 -- DATA. The decision is that a weekly grid filled in at sign-up is stale within
 -- a fortnight, so keeping it is worse than losing it.
 
-begin;
+-- NOTE ON TRANSACTIONS: there is deliberately no `begin;`/`commit;` here.
+-- The Supabase connector wraps an apply in its own transaction -- a failed
+-- apply records nothing and rolls back whole -- and a nested COMMIT inside
+-- that would end it early, leaving the statements after it running outside
+-- any transaction. So the guard below relies on the connector's transaction,
+-- and the temp table is dropped explicitly rather than ON COMMIT.
 
 -- ---------------------------------------------------------------------------
 -- 0. Guard rails.
@@ -43,7 +50,8 @@ begin;
 -- It cannot catch what it does not count, so the list is every table with
 -- user data in it, not a sample.
 -- ---------------------------------------------------------------------------
-create temp table _wf92_before on commit drop as
+drop table if exists _wf92_before;
+create temp table _wf92_before as
 select 'user_profiles' as t, count(*) as n from public.user_profiles
 union all select 'auth_users',             count(*) from auth.users
 union all select 'applications',           count(*) from public.applications
@@ -305,7 +313,18 @@ do $guard$
 declare
   r record;
   msg text := '';
+  n_before integer;
 begin
+  -- A guard that silently checks nothing is worse than no guard. If the
+  -- before-counts are missing, stop rather than pass.
+  select count(*) into n_before from _wf92_before;
+  if coalesce(n_before, 0) = 0 then
+    raise exception
+      'WF9-2 aborted: the before-counts table is empty, so the row-count '
+      'guard would have passed without comparing anything'
+      using errcode = 'data_exception';
+  end if;
+
   for r in
     select b.t, b.n as before_n, a.n as after_n
     from _wf92_before b
@@ -337,4 +356,4 @@ begin
 end
 $guard$;
 
-commit;
+drop table if exists _wf92_before;

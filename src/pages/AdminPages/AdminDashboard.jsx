@@ -4,22 +4,29 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 import { toast } from 'react-hot-toast';
 import { format, parseISO, isValid } from 'date-fns';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ExternalLink, User, Building, Clock, MapPin, CheckCircle, XCircle } from 'lucide-react';
 import AdminAccessTab from './AdminAccessTab';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { TakeDownRoleDialog, SwitchAccountDialog } from './AdminActionDialogs';
+import AdminNav from './AdminNav';
+import AdminApprovalQueue from './AdminApprovalQueue';
+import AdminEmailLogs from './AdminEmailLogs';
+import Pagination from '../../components/Pagination';
 import { useTowns } from '../../utils/towns';
 
 // ===== Data fetchers =====
 async function getAllOrganisations() {
   const { data, error } = await supabase
     .from('user_profiles')
-    .select('id,name,email,created_at,approved_at')
+    .select('id,name,email,created_at,approved_at,declined_at')
     .eq('role', 'organization')
     .order('name');
   if (error) throw error;
-  // Waiting-for-approval first: that is the queue an admin is here to clear.
+  // Waiting-for-approval first. WF9-6 moved the queue itself onto /admin,
+  // where it is a list with Approve and Decline on it rather than a sort
+  // order buried in a list of every organisation that ever signed up -- but
+  // this order still helps whoever is scanning the full list here.
   return [...(data ?? [])].sort(
     (a, b) => Number(!!a.approved_at) - Number(!!b.approved_at)
   );
@@ -165,7 +172,37 @@ async function setReportStatus(id, status) {
 export default function AdminDashboard() {
   const qc = useQueryClient();
 
+  // WF9-6. The top-level split is the ROUTE now, not a tab: /admin,
+  // /admin/manage and /admin/logs. `activeTab` survives as the sub-tab
+  // WITHIN Site management, which still has four things to show.
+  const { pathname } = useLocation();
+  const section = pathname.startsWith('/admin/manage')
+    ? 'manage'
+    : pathname.startsWith('/admin/logs')
+      ? 'logs'
+      : 'access';
+
   const [activeTab, setActiveTab] = useState('opportunities');
+
+  // WF9-6. Admin lists page at 50, not 10: these rows carry no images, so a
+  // longer page is cheap and means less clicking through a list you are
+  // scanning rather than reading. Page state is per-list and resets when the
+  // sub-tab changes, so switching tabs never lands on an empty page 3.
+  const PER_PAGE = 50;
+  const [oppPage, setOppPage] = useState(1);
+  const [orgPage, setOrgPage] = useState(1);
+  const [volPage, setVolPage] = useState(1);
+  const paged = (list, page) => {
+    const rows = list ?? [];
+    const pageCount = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+    const safe = Math.min(page, pageCount);
+    return {
+      rows: rows.slice((safe - 1) * PER_PAGE, safe * PER_PAGE),
+      pageCount,
+      page: safe,
+      total: rows.length,
+    };
+  };
   const [currentUserId, setCurrentUserId] = useState(null);
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id ?? null));
@@ -288,7 +325,12 @@ export default function AdminDashboard() {
     onError: (e) => toast.error(e.message || 'Could not update approval'),
   });
 
-  const pendingOrgCount = (orgs ?? []).filter((o) => !o.approved_at).length;
+  // Waiting = neither approved nor declined (WF9-6). Counting every
+  // unapproved organisation meant the badge never went down once the
+  // charity had said no to somebody.
+  const pendingOrgCount = (orgs ?? []).filter(
+    (o) => !o.approved_at && !o.declined_at
+  ).length;
   const newReportCount = (reports ?? []).filter((r) => r.status === 'new').length;
 
   // Get org name by ID
@@ -321,7 +363,12 @@ export default function AdminDashboard() {
   // Reusable Tab Button
   const TabBtn = ({ id, children, count }) => (
     <button
-      onClick={() => setActiveTab(id)}
+      onClick={() => {
+        setActiveTab(id);
+        setOppPage(1);
+        setOrgPage(1);
+        setVolPage(1);
+      }}
       className={`btn ${activeTab === id ? 'btn-primary' : 'btn-secondary'} relative`}
     >
       {children}
@@ -337,37 +384,56 @@ export default function AdminDashboard() {
     <div className="container-app max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="title">Admin Dashboard</h1>
-        <p className="text-gray-600 mt-2">
-          Manage opportunities, organisations, volunteers and location settings
+        <h1 className="title">
+          {section === 'manage'
+            ? 'Site management'
+            : section === 'logs'
+              ? 'Logs and reports'
+              : 'Access'}
+        </h1>
+        <p className="mt-2" style={{ color: 'var(--color-text-secondary)' }}>
+          {section === 'manage'
+            ? 'Roles, organisations, volunteers and the towns the service covers.'
+            : section === 'logs'
+              ? 'What has been reported, and everything the site has sent.'
+              : 'Who is waiting to be approved, who can administer the site, and who gets alerted.'}
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-3 mb-8">
-        <TabBtn id="opportunities" count={opportunities?.length}>
-          Opportunities
-        </TabBtn>
-        <TabBtn id="organizations" count={pendingOrgCount || orgs?.length}>
-          Organizations
-        </TabBtn>
-        <TabBtn id="volunteers" count={volunteers?.length}>
-          Volunteers
-        </TabBtn>
-        <TabBtn id="towns" count={towns?.filter(t => t.is_active)?.length}>
-          Towns
-        </TabBtn>
-        <TabBtn id="reports" count={newReportCount}>
-          Reports
-        </TabBtn>
-        <TabBtn id="access">
-          Access
-        </TabBtn>
-      </div>
+      <AdminNav pendingCount={pendingOrgCount} reportCount={newReportCount} />
+
+      {/* Site management keeps sub-tabs: four different things, one page. */}
+      {section === 'manage' && (
+        <div className="flex flex-wrap gap-3 mb-8">
+          <TabBtn id="opportunities" count={opportunities?.length}>
+            Opportunities
+          </TabBtn>
+          <TabBtn id="organizations" count={orgs?.length}>
+            Organisations
+          </TabBtn>
+          <TabBtn id="volunteers" count={volunteers?.length}>
+            Volunteers
+          </TabBtn>
+          <TabBtn id="towns" count={towns?.filter(t => t.is_active)?.length}>
+            Towns
+          </TabBtn>
+        </div>
+      )}
+
+      {/* ACCESS -- the landing page. The queue first, because it is the only
+          part of the admin with somebody waiting at the other end. */}
+      {section === 'access' && (
+        <div className="space-y-8">
+          <AdminApprovalQueue organisations={orgs} isLoading={!orgs} />
+          <AdminAccessTab currentUserId={currentUserId} />
+        </div>
+      )}
+
+      {section === 'logs' && <AdminEmailLogs />}
 
       {/* Content */}
       {/* OPPORTUNITIES */}
-      {activeTab === 'opportunities' && (
+      {section === 'manage' && activeTab === 'opportunities' && (
         <section className="space-y-6">
           <div className="card">
             <h2 className="section-title mb-4">Opportunity Filters</h2>
@@ -456,7 +522,7 @@ export default function AdminDashboard() {
               <div className="py-12 text-center text-gray-500">No opportunities found</div>
             ) : (
               <div className="space-y-3">
-                {opportunities?.map((op) => {
+                {paged(opportunities, oppPage).rows.map((op) => {
                   // The "date needed" line that stood here read a column
                   // nothing ever wrote, so it printed "Ongoing" on every row
                   // in the table. Posted date is a fact; that was not.
@@ -547,12 +613,20 @@ export default function AdminDashboard() {
                 })}
               </div>
             )}
+            <Pagination
+              page={paged(opportunities, oppPage).page}
+              pageCount={paged(opportunities, oppPage).pageCount}
+              onChange={setOppPage}
+              total={paged(opportunities, oppPage).total}
+              perPage={PER_PAGE}
+              noun="role"
+            />
           </div>
         </section>
       )}
 
       {/* ORGANIZATIONS */}
-      {activeTab === 'organizations' && (
+      {section === 'manage' && activeTab === 'organizations' && (
         <section className="space-y-6">
           <div className="card">
             <h2 className="section-title mb-4">Organization Filters</h2>
@@ -591,7 +665,7 @@ export default function AdminDashboard() {
               <div className="py-12 text-center" style={{ color: 'var(--color-text-muted)' }}>No organizations found</div>
             ) : (
               <div className="space-y-3">
-                {filteredOrgs?.map((org) => (
+                {paged(filteredOrgs, orgPage).rows.map((org) => (
                   <div key={org.id} className="border rounded-lg p-4 hover:opacity-90 transition" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
@@ -622,6 +696,15 @@ export default function AdminDashboard() {
                       </div>
                       
                       <div className="flex flex-col gap-2 shrink-0">
+                        {/* WF9-7: every admin list links to the one page
+                            about a person, where the per-account actions
+                            live. */}
+                        <Link
+                          to={`/admin/accounts/${org.id}`}
+                          className="btn-secondary btn-sm w-fit"
+                        >
+                          View account
+                        </Link>
                         {/* Approving lets this organisation publish roles,
                             see discoverable volunteers and email them.
                             Withdrawing takes its live roles off the public
@@ -670,12 +753,20 @@ export default function AdminDashboard() {
                 ))}
               </div>
             )}
+            <Pagination
+              page={paged(filteredOrgs, orgPage).page}
+              pageCount={paged(filteredOrgs, orgPage).pageCount}
+              onChange={setOrgPage}
+              total={paged(filteredOrgs, orgPage).total}
+              perPage={PER_PAGE}
+              noun="organisation"
+            />
           </div>
         </section>
       )}
 
       {/* VOLUNTEERS */}
-      {activeTab === 'volunteers' && (
+      {section === 'manage' && activeTab === 'volunteers' && (
         <section className="space-y-6">
           <div className="card">
             <h2 className="section-title mb-4">Volunteer Filters</h2>
@@ -746,7 +837,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
-                    {volunteers?.map((v) => (
+                    {paged(volunteers, volPage).rows.map((v) => (
                       <tr key={v.id} className="hover:opacity-90">
                         <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-primary)' }}>{v.name}</td>
                         <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{v.email}</td>
@@ -774,7 +865,7 @@ export default function AdminDashboard() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
                             <Link
-                              to={`/volunteers/${v.id}`}
+                              to={`/admin/accounts/${v.id}`}
                               className="btn-secondary btn-sm flex items-center gap-1 w-fit"
                             >
                               <User size={14} />
@@ -794,12 +885,20 @@ export default function AdminDashboard() {
                 </table>
               </div>
             )}
+            <Pagination
+              page={paged(volunteers, volPage).page}
+              pageCount={paged(volunteers, volPage).pageCount}
+              onChange={setVolPage}
+              total={paged(volunteers, volPage).total}
+              perPage={PER_PAGE}
+              noun="volunteer"
+            />
           </div>
         </section>
       )}
 
       {/* TOWNS (ADM-6) */}
-      {activeTab === 'towns' && (
+      {section === 'manage' && activeTab === 'towns' && (
         <section className="card">
           <h2 className="section-title mb-2">Manage Towns</h2>
           <p className="text-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
@@ -820,10 +919,10 @@ export default function AdminDashboard() {
       )}
 
       {/* RECIPIENT LIST AND ADMIN ACCOUNTS (APP-3, APP-6) */}
-      {activeTab === 'access' && <AdminAccessTab currentUserId={currentUserId} />}
+      
 
       {/* PROBLEM REPORTS (ADM-7) */}
-      {activeTab === 'reports' && (
+      {section === 'logs' && (
         <section className="space-y-4">
           <div className="card">
             <h2 className="section-title mb-2">Problem reports</h2>

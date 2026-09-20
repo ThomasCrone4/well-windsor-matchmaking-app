@@ -48,6 +48,7 @@ import ProtectedRoute from './components/ProtectedRoutes';
 
 
 import AdminRoute from './pages/AdminPages/AdminRoute'; // create per earlier snippet
+import AdminAccountPage from './pages/AdminPages/AdminAccountPage';
 import AdminDashboard from './pages/AdminPages/AdminDashboard'; // place the dashboard here
 
 const queryClient = new QueryClient();
@@ -182,6 +183,36 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                   element={
                     <AdminRoute>
                       <AdminDashboard />
+                    </AdminRoute>
+                  }
+                />
+                {/* WF9-6: the admin is three pages over one component, which
+                    keeps the queries and dialogs in one place while the nav
+                    and the URL say which job you are doing. */}
+                <Route
+                  path="/admin/manage"
+                  element={
+                    <AdminRoute>
+                      <AdminDashboard />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/logs"
+                  element={
+                    <AdminRoute>
+                      <AdminDashboard />
+                    </AdminRoute>
+                  }
+                />
+                {/* WF9-7: one person, one page. The volunteer list's View
+                    button used to point at /volunteers/<id>, which is not a
+                    route, so the catch-all sent the admin to the home page. */}
+                <Route
+                  path="/admin/accounts/:id"
+                  element={
+                    <AdminRoute>
+                      <AdminAccountPage />
                     </AdminRoute>
                   }
                 />

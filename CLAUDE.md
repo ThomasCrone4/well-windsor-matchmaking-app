@@ -1077,8 +1077,159 @@ Find Volunteers pages at 10, with the same component. No migration.
   sign-in waits for the URL to change rather than a fixed 3s — a short wait
   there left the walk on `/auth` and reported a missing `#search`.
 
-Re-runnable: `.scratch/walk_wf9_4.py` (19 UI checks; needs 11+ discoverable
+Re-runnable: `.scratch/walk_wf9_4.py` (20 UI checks; needs 11+ discoverable
 volunteers, and says so if not).
+
+**The drops of 9.2 were applied 2026-09-19** as
+`20260919194219_wf9_drop_availability_matching`, once the client was merged
+and live. **The deploy was verified, not assumed:** the published bundle was
+fetched from `pages.dev` and grepped, and contains zero references to any
+availability column, table or RPC. The row-count guard passed — nothing else
+changed. `probe_wf9_2` 24/24; `probe_wf8_final` lost its
+`volunteer_availability` section and is 96/96.
+
+**Workflow 9 batch 9.5 is built (2026-09-19, branch `wf9-5-reopen`).** No
+migration.
+
+- **A closed role gets three buttons that say what they do:** *Save and
+  reopen* (publishes, then returns to the dashboard), *Save and keep closed*,
+  *Discard changes*. The old "Reopen this role" sat inside the notice while a
+  "Save Changes" at the bottom looked identical and did something different.
+  ROLE-4's rule is unchanged: reopen is disabled, with the reason on screen,
+  while the dates are past.
+- **Save-and-reopen does not require unsaved changes** — an organisation may
+  want to reopen a role exactly as it stands. The other two do.
+- **A flag passed to `mutate()` must be stripped before the update.**
+  `__reopened` tells `onSuccess` which of the two happened; left in the
+  payload it would go to PostgREST as a column and come back `PGRST204`.
+
+**Three suites were leaking live roles onto the public browse, all the same
+way:** they post an `active` fixture at module level, before the `try`, and
+clean up at the bottom — so any crash in between leaves it on the real site.
+`walk_wf5`, `probe_wf8_final` and (by construction) `walk_wf9_5` now register
+an `atexit` sweep the moment the fixture exists. **Any script that posts an
+active role needs that, not a cleanup at the end.** Five leftovers were found
+and removed the ROLE-1 way on 2026-09-19.
+
+**Two throwaway accounts on production are indistinguishable on screen** —
+`probe_wf6` signs up a volunteer with the same name, bio, town and skills on
+every run, so nothing rendered told them apart and "is any row served on two
+pages" was untestable. `LookingForVolunteers` now carries
+`data-volunteer-id` on each card. A display name is not an identity.
+
+Re-runnable: `.scratch/walk_wf9_5.py` (26 UI checks, fixtures swept by
+`atexit`).
+
+**Workflow 9 batch 9.6 is built (2026-09-20, branch `wf9-6-admin`).** One
+migration, three new components, three routes.
+
+- **The admin is three pages over one component:** `/admin` (Access),
+  `/admin/manage` (Opportunities, Organisations, Volunteers, Towns as
+  sub-tabs), `/admin/logs`. One component keeps the queries and dialogs in
+  one place; `useLocation()` picks the section. Access is the landing page
+  because the approval queue is the only part with a person waiting at the
+  other end.
+- **Declining an organisation (`decline_organisation`).** `declined_at` is
+  set by that function and nothing else; the reason goes to the audit log,
+  not a column. It is deliberately quiet: the organisation is **not told**
+  and nothing it can do changes -- still cannot publish, still can save
+  drafts. Approving un-declines; withdrawing approval does **not** re-decline.
+  The waiting count is now `approved_at is null AND declined_at is null`,
+  so the badge can actually reach zero.
+- **`declined_at` is safe by construction, not by the revoke in the
+  migration.** `authenticated` holds `rm` on `user_profiles` -- **no
+  table-wide UPDATE** -- and UPDATE is granted on seven named columns.
+  Read `relacl` before believing a revoke did anything (trap 1d); the one in
+  that migration is a no-op kept as a guard.
+- **ADM-3 finally has a screen** (`/admin/logs`): messages organisations
+  sent volunteers, and automatic emails. Both come from admin-only SECURITY
+  DEFINER functions. `email_outbox` has **no client grants at all**, so a
+  function rather than a policy; the outreach log resolves the address the
+  message actually went to from `auth.users`, which a browser cannot reach.
+  Neither returns the outbox `payload` -- it is a second copy of what the
+  30-day job blanks. Message text sits behind **Show message**, and
+  `PrivacyPage.jsx` gained a line saying admins can see messages.
+- **`CREATE OR REPLACE` cannot change a `RETURNS TABLE`, so cast in the
+  BODY.** `admin_email_log` declared `attempts integer` over a `smallint`
+  column and every call failed with `42804`. Casting `e.attempts::integer`
+  fixes it without a DROP, which would have handed EXECUTE back to anon
+  (trap 1c).
+- **An error and an empty table look identical through a REST response.**
+  That 42804 returned no rows, which was read as "the outbox is empty" -- so
+  a fixture row was inserted to test against. The outbox had 35 rows going
+  back two days. Check the status code before concluding anything about the
+  data.
+- **Approving an organisation queues and SENDS an `org_approved` email.**
+  `is_test_address()` guards the signup alert, not this one, so a probe that
+  approves a throwaway org really does send -- harmless only because the
+  throwaways are all `.invalid`. 35 outbox rows accumulated during this
+  batch; none went to a real address.
+- **Admin lists page at 50** (`Pagination` with `perPage`), and the page
+  resets when the sub-tab changes.
+
+Four earlier walks navigated the old tab bar and had to be re-pointed:
+`walk_wf1` (reports are on `/admin/logs`), `walk_wf4` (Access is a page, not
+a tab), `walk_wf7` and `walk_audit` (the four lists are on `/admin/manage`).
+`walk_wf7` also matched `^Organizations`; the sub-tab is UK-spelled now, so
+it accepts either.
+
+Re-runnable: `.scratch/probe_wf9_6.py` (37 cases) and
+`.scratch/walk_wf9_6.py` (36 UI checks; it declines the pending throwaway
+through the UI and restores it by `atexit`).
+
+**Workflow 9 batch 9.7 is built (2026-09-20, branch `wf9-7-account-page`).**
+One migration, one page, two dialogs. **This finishes Workflow 9.**
+
+- **`/admin/accounts/:id` — one person, one page.** Profile, what they have
+  on the site, their audit history, and the per-person actions gathered:
+  approve / withdraw / decline, switch account type (moved off the list
+  screens), change login email, delete.
+- **The volunteer list's "View" button pointed at `/volunteers/<id>`, which
+  is not a route** — the catch-all sent the admin to the home page. It has a
+  destination now, and the organisation list and the approval queue link to
+  the same page.
+- **ADM-8 has a screen at last.** `admin-change-email` has existed and been
+  proven since workflow 3. The dialog reads the refusal out of
+  `error.context`, the way `outreach.js` has to.
+- **WF8-6 is closed: `admin_delete_account(user, reason)`.** Deleting from
+  the Supabase dashboard skips `prepare_account_deletion()`, so the preserved
+  outreach record, the audit-log redaction and the outbox blanking never run
+  — three things the privacy policy promises. **Written in SQL rather than as
+  an Edge Function on purpose:** `delete-account` prepares over RPC and then
+  calls `auth.admin.deleteUser` over the API, two steps that can half-succeed
+  (it has an `account_deletion_failed` branch for exactly that). In the
+  database it is one transaction. It refuses an admin (revoke access first)
+  and refuses self (use your own profile page), and needs a reason and the
+  typed word DELETE.
+- **Order matters, and it is: prepare, then log.** The redaction scrubs
+  personal VALUES and the `reason` column while keeping `actor_id` and
+  `target_user_id`, so the "deleted by an admin" entry is written **after**
+  it — written before, the admin's reason would be blanked to 'deleted user'.
+  That entry therefore carries no personal data of its own.
+- **`outreach_preserved_on_deletion` rows are NOT keyed to the person.**
+  They carry `target_table = 'org_outreach'` and the message's id, with the
+  ids in metadata and **no `target_user_id`** — which is also why the
+  redaction, matching on `target_user_id`/`actor_id`, leaves them alone (they
+  hold no names to scrub). Querying for them by `target_user_id` finds
+  nothing and reads exactly like "the record was never written".
+- **The volunteer-facing outreach email never enters `email_outbox`.**
+  `send-outreach` sends it directly; the only outbox row a message produces
+  is the `outreach_copy` addressed to the ORGANISATION and keyed to it. So
+  deleting a volunteer reports `emails_redacted: 0` and that is correct —
+  their copy is covered by the 30-day job, not by deletion.
+- **Casting again, for the same reason as 9.6.** `audit_logs.created_at` is
+  `timestamp WITHOUT time zone` holding UTC and `action_type` is `varchar`;
+  both are cast in the body of `admin_account_history`, because
+  `CREATE OR REPLACE` cannot change a `RETURNS TABLE` and a DROP would hand
+  EXECUTE back to anon (trap 1c).
+- **A not-found must not be retried.** The account queries use
+  `retry: false`: React Query retried the `P0002` three times, so a stale
+  link sat on "Loading…" for several seconds before admitting the account
+  was gone.
+
+Re-runnable: `.scratch/probe_wf9_7.py` (33 cases; signs up its own doomed
+volunteer, has an organisation write to them, then deletes them) and
+`.scratch/walk_wf9_7.py` (25 UI checks, its fixture swept by `atexit`).
 
 **How to push from this machine.** The default `openssl` backend fails with
 `unable to get local issuer certificate (20)` — the configured

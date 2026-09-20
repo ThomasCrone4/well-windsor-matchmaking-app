@@ -118,6 +118,65 @@ export function TakeDownRoleDialog({ role, orgName, isPending, onClose, onConfir
   );
 }
 
+/**
+ * WF9-6. Declining an organisation: it leaves the approval queue and is not
+ * told. Without a way out, the queue only ever grows and the count beside it
+ * stops meaning "things to do", which is the only thing that count is for.
+ */
+export function DeclineOrganisationDialog({ org, isPending, onClose, onConfirm }) {
+  const [reason, setReason] = useState('');
+  const trimmed = reason.trim();
+
+  return (
+    <Dialog
+      title="Decline this organisation?"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose} autoFocus>Cancel</button>
+          <button
+            className="btn-primary !bg-red-600 hover:!bg-red-700"
+            disabled={!trimmed || reason.length > REASON_MAX || isPending}
+            onClick={() => onConfirm(trimmed)}
+          >
+            {isPending ? 'Declining…' : 'Decline'}
+          </button>
+        </>
+      }
+    >
+      <p>
+        <strong style={{ color: 'var(--color-text-primary)' }}>{org?.name}</strong>
+        {org?.email ? ` · ${org.email}` : ''}
+      </p>
+      <p>
+        This clears them from the waiting list. It changes{' '}
+        <strong>nothing else</strong>: they still cannot publish a role, they
+        can still save drafts, and they are <strong>not</strong> told. If you
+        want them to know, contact them directly.
+      </p>
+      <p>
+        You can still approve them later, which undoes this.
+      </p>
+      <div className="form-row">
+        <label htmlFor="decline-reason" className="label required">
+          Reason, for the audit log
+        </label>
+        <textarea
+          id="decline-reason"
+          className="input"
+          rows={3}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="e.g. Not a Windsor organisation; could not verify who they are"
+        />
+        <p className="help-text">
+          Only admins see this. {Math.max(0, REASON_MAX - reason.length)} characters left.
+        </p>
+      </div>
+    </Dialog>
+  );
+}
+
 /** ADM-2 and ADM-5. What happens is decided in admin_switch_account_type(); this says it in words. */
 export function SwitchAccountDialog({ account, toRole, isPending, onClose, onConfirm }) {
   const [dob, setDob] = useState('');

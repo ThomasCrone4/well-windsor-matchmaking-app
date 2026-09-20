@@ -258,7 +258,12 @@ export default function LookingForVolunteersPage() {
             const outreach = outreachByVolunteer.get(vol.id);
             const hoursLeft = cooldownHoursRemaining(outreach?.lastSentAt);
             return (
-              <li key={vol.id} className="card p-6 space-y-3">
+              // data-volunteer-id so a card has a stable identity in the
+              // DOM. Two volunteers can share a name, and two throwaway
+              // accounts on production share name, bio, town AND skills --
+              // so nothing on screen distinguished them, and "is any row
+              // served on two pages at once" was not checkable at all.
+              <li key={vol.id} data-volunteer-id={vol.id} className="card p-6 space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="text-xl font-semibold">{vol.name}</h2>
