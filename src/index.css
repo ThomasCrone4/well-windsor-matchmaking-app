@@ -336,11 +336,15 @@
     border-color: var(--color-brand);
     color: var(--color-on-brand);
   }
-  .btn-ghost { 
+  .btn-ghost {
     background-color: transparent;
     color: var(--color-text-primary);
     @apply btn;
   }
+  /* Size modifier, written after the variants so its padding wins. For a
+     button that sits beside content rather than under it -- the browse
+     page's Clear Filters, tucked into the corner of the filter card. */
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
   .btn-ghost:hover:not(:disabled) { 
     background-color: var(--color-background-secondary);
   }
@@ -596,6 +600,34 @@
     color: var(--color-text-muted);
     border: 1px solid var(--color-border);
     @apply tag;
+  }
+
+  /* The small monospaced heading over a block of facts on the role page.
+     Same treatment the old facts panel gave its <dt> labels, kept when that
+     panel was replaced by sections so the page did not lose its one
+     distinctive typographic note. */
+  .section-kicker {
+    color: var(--color-text-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    @apply text-[11px] font-medium uppercase tracking-[0.1em];
+  }
+
+  /* A pill that states a fact in sentence case -- a role's day and time, its
+     town, one skill. Distinct from .tag above, which is a 10px uppercase
+     label for a status. Shared with the skills picker. */
+  .chip {
+    background-color: var(--color-background-elevated);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium;
+  }
+  /* @apply first, overrides after: an applied component class brings its own
+     declarations with it and would otherwise win. */
+  .chip-solid {
+    @apply chip font-semibold;
+    background-color: var(--color-brand-subtle);
+    color: var(--color-brand-ink);
+    border-color: transparent;
   }
 
   /* ---------- Home hero scrim ----------

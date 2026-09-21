@@ -16,6 +16,8 @@ import useUserProfile from '../../../hooks/useUserProfile';
 import ApprovalNotice from '../../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../../utils/approval';
 import { LIMITS, checkFreeText, charsLeft } from '../../../utils/contentChecks';
+import SkillsPicker from '../../../components/SkillsPicker';
+import { replaceSkills } from '../../../utils/skills';
 
 const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
@@ -115,6 +117,12 @@ export default function PostOpportunity() {
       volunteers_needed: 1,
     },
   });
+
+  // POLISH-4. The chosen skill ids live here rather than in react-hook-form:
+  // the picker is not a registered <input>, and mirroring them into the form
+  // state would make two places the value lives -- which is how `skills`
+  // itself once went missing on this very form (see the schema note above).
+  const [skillIds, setSkillIds] = useState([]);
 
   const generallyNeeded = watch('generally_needed');
   const descriptionLeft = charsLeft(watch('description'), 'description');
@@ -246,7 +254,9 @@ export default function PostOpportunity() {
       // this is the sole town, or null while the towns query is still
       // loading, in which case the database files it under that town itself.
       town: (showPicker ? data.town : soleTown) || null,
-      skills: data.skills?.trim() || null,
+      // POLISH-4: skills are rows in opportunity_skills now, written below
+      // once the role has an id. The text column is left untouched -- it is
+      // dropped in supabase/pending/ after this client is live.
       // null rather than '': the CHECK accepts the three values or NULL,
       // and '' would be rejected outright.
       category: data.category || null,
@@ -283,6 +293,18 @@ export default function PostOpportunity() {
     } catch (e) {
       console.error('Saving timeblocks failed:', e);
       toast.error('Opportunity saved, but failed to save required times. Please edit and retry.');
+      navigate('/organization-dashboard');
+      return;
+    }
+
+    // POLISH-4. Same shape as the timeblocks write above, and the same
+    // failure handling: the role exists either way, so say what was and was
+    // not saved rather than pretending the whole thing failed.
+    try {
+      await replaceSkills('opportunity', opportunityId, skillIds);
+    } catch (e) {
+      console.error('Saving skills failed:', e);
+      toast.error('Opportunity saved, but its skills did not save. Please edit and retry.');
       navigate('/organization-dashboard');
       return;
     }
@@ -415,17 +437,14 @@ export default function PostOpportunity() {
               invented seed addresses. One fewer required field on the
               longest form on the site. */}
 
-          {/* Skills (optional) */}
-          <div className="form-row">
-            <label className="label">
-              Skills <span className="help-text">(optional)</span>
-            </label>
-            <input
-              {...register('skills')}
-              className="input"
-              placeholder="e.g. first aid, event setup"
-            />
-          </div>
+          {/* Skills (optional). POLISH-4: a managed list, not free text. */}
+          <SkillsPicker
+            id="skills"
+            label="Helpful but not required skills"
+            hint="(optional)"
+            value={skillIds}
+            onChange={setSkillIds}
+          />
 
           {/* Volunteers Needed */}
           <div className="form-row">

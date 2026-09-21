@@ -94,6 +94,32 @@ async function getAllVolunteers({ q, town }) {
   return data;
 }
 
+// POLISH-4. Skills are read through a function, not the table: the counts
+// come from the join tables, and the admin needs to see what hiding one would
+// leave behind. The table itself grants no writes to anybody -- admin_add_skill
+// and admin_set_skill_active are the only ways in.
+async function getSkillUsage() {
+  const { data, error } = await supabase.rpc('admin_skill_usage');
+  if (error) throw error;
+  return data ?? [];
+}
+
+async function addSkill({ name, category }) {
+  const { error } = await supabase.rpc('admin_add_skill', {
+    p_name: name,
+    p_category: category,
+  });
+  if (error) throw error;
+}
+
+async function setSkillActive(id, is_active) {
+  const { error } = await supabase.rpc('admin_set_skill_active', {
+    p_skill_id: id,
+    p_active: is_active,
+  });
+  if (error) throw error;
+}
+
 async function getTowns() {
   const { data, error } = await supabase.from('towns').select('*').order('name');
   if (error) throw error;
@@ -250,6 +276,36 @@ export default function AdminDashboard() {
     queryKey: ['towns'], 
     queryFn: getTowns,
     staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: skillRows } = useQuery({
+    queryKey: ['admin_skill_usage'],
+    queryFn: getSkillUsage,
+    staleTime: 60 * 1000,
+  });
+
+  const invalidateSkills = () => {
+    qc.invalidateQueries({ queryKey: ['admin_skill_usage'] });
+    // The pickers read this one, everywhere on the site.
+    qc.invalidateQueries({ queryKey: ['skills'] });
+  };
+
+  const addSkillMut = useMutation({
+    mutationFn: addSkill,
+    onSuccess: () => {
+      toast.success('Skill added');
+      invalidateSkills();
+    },
+    onError: (e) => toast.error(e.message || 'Failed to add skill'),
+  });
+
+  const toggleSkillMut = useMutation({
+    mutationFn: ({ id, is_active }) => setSkillActive(id, is_active),
+    onSuccess: (_d, v) => {
+      toast.success(v.is_active ? 'Skill restored' : 'Skill hidden');
+      invalidateSkills();
+    },
+    onError: (e) => toast.error(e.message || 'Failed to update skill'),
   });
 
   // Town mutations
@@ -416,6 +472,9 @@ export default function AdminDashboard() {
           </TabBtn>
           <TabBtn id="towns" count={towns?.filter(t => t.is_active)?.length}>
             Towns
+          </TabBtn>
+          <TabBtn id="skills" count={skillRows?.filter((s) => s.is_active)?.length}>
+            Skills
           </TabBtn>
         </div>
       )}
@@ -897,6 +956,31 @@ export default function AdminDashboard() {
         </section>
       )}
 
+      {/* SKILLS (POLISH-4) */}
+      {section === 'manage' && activeTab === 'skills' && (
+        <section className="card">
+          <h2 className="section-title mb-2">Manage Skills</h2>
+          <p className="text-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+            This is the list volunteers and organisations choose from, on
+            sign-up, on a profile and when posting a role.{' '}
+            <strong style={{ color: 'var(--color-text-primary)' }}>
+              Hiding a skill only stops new choices.
+            </strong>{' '}
+            Anyone who already chose it keeps it, and it carries on showing on
+            their profile and on any role that asked for it — so hiding is
+            always safe, even for a skill in use. There is no way to delete
+            one.
+          </p>
+          <SkillEditor
+            skills={skillRows || []}
+            onAdd={(name, category) => addSkillMut.mutate({ name, category })}
+            onToggle={(id, is_active) => toggleSkillMut.mutate({ id, is_active })}
+            isAdding={addSkillMut.isPending}
+            isToggling={toggleSkillMut.isPending}
+          />
+        </section>
+      )}
+
       {/* TOWNS (ADM-6) */}
       {section === 'manage' && activeTab === 'towns' && (
         <section className="card">
@@ -1041,6 +1125,134 @@ export default function AdminDashboard() {
 }
 
 // ===== Small UI pieces =====
+
+// POLISH-4. Deliberately simpler than TownEditor below, and the difference is
+// the point: activating a town changes the whole site at once, so it asks for
+// confirmation. Hiding a skill cannot hurt anybody -- everyone who holds it
+// keeps it -- so it just happens, and the count says what it will leave
+// behind.
+function SkillEditor({ skills, onAdd, onToggle, isAdding, isToggling }) {
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
+
+  const active = skills.filter((s) => s.is_active);
+  const hidden = skills.filter((s) => !s.is_active);
+
+  // Offered from what is already in use, so a new skill lands in a group the
+  // pickers already show rather than creating a group of one.
+  const categories = [...new Set(skills.map((s) => s.category).filter(Boolean))];
+
+  const submit = (e) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onAdd(trimmed, category || 'Other');
+    setName('');
+    setCategory('');
+  };
+
+  const usage = (s) => {
+    const bits = [];
+    if (s.volunteer_count) bits.push(`${s.volunteer_count} volunteer${s.volunteer_count === 1 ? '' : 's'}`);
+    if (s.opportunity_count) bits.push(`${s.opportunity_count} role${s.opportunity_count === 1 ? '' : 's'}`);
+    return bits.length ? bits.join(' · ') : 'Not chosen by anyone yet';
+  };
+
+  const Row = ({ s }) => (
+    <li
+      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+      style={{ borderTop: '1px solid var(--color-border)' }}
+    >
+      <div className="min-w-0">
+        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+          {s.name}
+        </p>
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          {s.category} &middot; {usage(s)}
+        </p>
+      </div>
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        disabled={isToggling}
+        onClick={() => onToggle(s.id, !s.is_active)}
+      >
+        {s.is_active ? 'Hide' : 'Restore'}
+      </button>
+    </li>
+  );
+
+  return (
+    <div className="grid gap-6">
+      <form onSubmit={submit} className="form-grid md:grid-cols-[2fr_1fr_auto] md:items-end">
+        <div className="form-row">
+          <label htmlFor="new-skill" className="label">Add a skill</label>
+          <input
+            id="new-skill"
+            className="input"
+            value={name}
+            maxLength={60}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Photography and video"
+          />
+        </div>
+        <div className="form-row">
+          <label htmlFor="new-skill-category" className="label">Group</label>
+          <select
+            id="new-skill-category"
+            className="select"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            <option value="">Other</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" className="btn-primary mb-1" disabled={isAdding || !name.trim()}>
+          Add
+        </button>
+      </form>
+
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+        <h3
+          className="px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em]"
+          style={{ backgroundColor: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)' }}
+        >
+          On the list ({active.length})
+        </h3>
+        <ul>
+          {active.map((s) => <Row key={s.id} s={s} />)}
+          {active.length === 0 && (
+            <li className="p-6 text-center" style={{ color: 'var(--color-text-muted)' }}>
+              No skills on the list
+            </li>
+          )}
+        </ul>
+      </div>
+
+      {hidden.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+          <h3
+            className="px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em]"
+            style={{ backgroundColor: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)' }}
+          >
+            Hidden ({hidden.length})
+          </h3>
+          <p className="px-4 pt-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            Not offered to anyone choosing skills now. Still shown on the
+            profiles and roles that already have them.
+          </p>
+          <ul>
+            {hidden.map((s) => <Row key={s.id} s={s} />)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TownEditor({ towns, onAdd, onToggle, isAdding, isToggling }) {
   const [name, setName] = useState('');
   // { kind: 'add', name } or { kind: 'activate', id, name }

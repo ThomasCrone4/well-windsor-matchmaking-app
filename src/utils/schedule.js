@@ -400,6 +400,58 @@ export function getNextDateFromToday(op) {
 }
 
 /**
+ * The next date a session actually falls on, or null if there is none.
+ *
+ * NOT the same question as getNextDateFromToday(), and the difference is the
+ * whole reason this exists. That one answers "when could this role next be
+ * turned up to at all", so for a role running now it returns TODAY -- correct
+ * for the browse ordering, and wrong on screen: a Saturday role would print
+ * "next session: Tuesday" on a Tuesday. This one only ever returns a date
+ * whose weekday the organisation actually named.
+ *
+ * A block with no days named cannot be narrowed, so it contributes the first
+ * date it runs rather than being skipped -- skipping it would report "no
+ * upcoming session" about a role that has one.
+ */
+export function getNextSessionDate(op) {
+  if (op?.generally_needed) return null;
+
+  const today = startOfToday();
+  const blocks = Array.isArray(op?.timeblocks) ? op.timeblocks : [];
+  let best = null;
+
+  for (const b of blocks) {
+    const s = toDate(b?.start_date);
+    const e = toDate(b?.end_date) || s;
+    if (!s && !e) continue;
+
+    const last = e || s;
+    if (last < today) continue;               // this block has finished
+    const from = s && s > today ? s : today;  // the window opens here
+
+    const idxs = normalizeDayIndices(b?.days);
+    if (idxs.length === 0) {
+      if (!best || from < best) best = from;
+      continue;
+    }
+
+    // Seven days is enough to meet any weekday, so this terminates.
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(from);
+      d.setDate(d.getDate() + i);
+      if (last && d > last) break;
+      // Date#getDay is Sunday-based; DAYS and these indices are Monday-based.
+      if (idxs.includes((d.getDay() + 6) % 7)) {
+        if (!best || d < best) best = d;
+        break;
+      }
+    }
+  }
+
+  return best;
+}
+
+/**
  * Sort key: 0 = happening today or later, 1 = no dates given (flexible, or the
  * organisation gave no schedule), 2 = every date is in the past.
  *
