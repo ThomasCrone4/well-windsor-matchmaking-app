@@ -114,6 +114,7 @@ export default function OpportunitiesPage() {
           location,
           town,
           skills,
+          skill_names,
           requires_dbs,
           generally_needed,
           volunteers_needed,
@@ -225,6 +226,22 @@ export default function OpportunitiesPage() {
     if (page !== 1) setPage(1);
   };
 
+  // What Clear Filters clears is what decides whether it is offered: a search
+  // term, either picker off 'All', or an ?opId= deep link showing one role.
+  // Offering it with nothing to clear was the old behaviour and it read as a
+  // button that does nothing.
+  const filtersApplied =
+    searchTerm.trim() !== '' ||
+    filters.town !== 'All' ||
+    filters.org !== 'All' ||
+    !!onlyId;
+
+  const clearFilters = () => {
+    setFilters({ town: 'All', org: 'All' });
+    setSearchTerm('');
+    navigate('/opportunities');
+  };
+
   const filterOpportunities = (items) => {
     return items.filter((op) => {
       // town, not location. location is free text ("St Edward's, Windsor")
@@ -241,7 +258,8 @@ export default function OpportunitiesPage() {
       // the word in the title, and searching for a school by name found
       // nothing at all. Description, skills and the organisation's name are
       // all on the card already — this searches what the reader can see.
-      const haystack = [op.title, op.description, op.skills, op.org_name]
+      // POLISH-4: the chosen skills, not the free text the column still holds.
+      const haystack = [op.title, op.description, (op.skill_names ?? []).join(' '), op.org_name]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
@@ -341,11 +359,26 @@ export default function OpportunitiesPage() {
       </div>
 
       {/* Filters */}
-      <div className="card mb-6">
-        {/* Three columns, or four when there is a town to choose. */}
+      <div className="card mb-6 relative">
+        {/* Clear Filters is pinned to the corner and appears only when there
+            is something to clear, so it neither takes width from the fields
+            nor invites a click that would do nothing. Absolute rather than a
+            row of its own: a row would push the fields down the moment the
+            first character is typed. */}
+        {filtersApplied && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="btn-primary btn-sm absolute right-4 top-2"
+          >
+            Clear Filters
+          </button>
+        )}
+
+        {/* Search takes two thirds, the pickers one third each. */}
         <div className={`form-grid ${showTownFilter ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
           {/* Search */}
-          <div className="form-row">
+          <div className="form-row md:col-span-2">
             <label htmlFor="search" className="label">Search</label>
             <input
               id="search"
@@ -396,20 +429,8 @@ export default function OpportunitiesPage() {
             </select>
           </div>
 
-          {/* WF9-2: "Show Matches Only" stood here, next to Clear Filters. */}
-          <div className="form-row">
-            <button
-              type="button"
-              onClick={() => {
-                setFilters({ town: 'All', org: 'All' });
-                setSearchTerm('');
-                navigate('/opportunities');
-              }}
-              className="btn-secondary mt-1"
-            >
-              Clear Filters
-            </button>
-          </div>
+          {/* WF9-2: "Show Matches Only" stood here, next to Clear Filters,
+              which is now in the card's corner above. */}
         </div>
       </div>
 

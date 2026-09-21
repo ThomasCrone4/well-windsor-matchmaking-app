@@ -370,3 +370,104 @@ deleting from the Supabase dashboard skips all of that.
 Re-run `.scratch/seed_throwaways.sql` before the probes. Audit-log entries
 naming them survive by design — the table refuses UPDATE and DELETE even to
 its owner.
+
+**POLISH-1 · The role detail page is one column, with no photograph**
+(2026-09-20). The picture was never the organisation's -- there is no upload
+and no image column, so `opportunityImages.js` gave every role one of six
+stock photos, and with almost no row carrying a category most got one of
+three neutral fallbacks hashed off the id. It could not be sharp either: the
+widest rendition is 800px against a full-window band, so the browser upscaled
+it and then cropped a 3:2 photo into a 288px letterbox. **The browse cards
+keep theirs**, where 800w is ample for a ~500px card. Mockups of the three
+options considered: https://claude.ai/artifact/EKUaJq6j94gBdnduYdyTif
+
+**POLISH-2 · DBS is stated once on the role page.** It was in the facts panel
+and again in a notice directly below it -- the same sentence twice, stacked.
+Both halves now live in one "What you need" section.
+
+**POLISH-3 · "Next session" is shown on a dated role.** It needed a new rule:
+`getNextDateFromToday()` answers "when could this be turned up to at all" and
+returns TODAY for a role running now, which would print "next session:
+Tuesday" on a Saturday-only role. `getNextSessionDate()` only ever returns a
+date whose weekday the organisation named. Covered by
+`.scratch/test_next_session.mjs` (14 cases) -- a UI walk cannot test it,
+because the live roles' dates are whatever they are on the day.
+
+**POLISH-4 · Skills become a managed list, not free text** (decided
+2026-09-20, NOT YET BUILT). The shape, all four settled with the user:
+
+- **Join tables**, not an array and not the text column: `skills`
+  (id, name, is_active, sort_order), `opportunity_skills`, `volunteer_skills`.
+  Real foreign keys, and v2 matchmaking becomes one join rather than string
+  matching.
+- **The admin manages the list** from the dashboard, mirroring the Towns tab
+  (ADM-6): add, rename, activate/deactivate, guarded so a skill in use cannot
+  vanish and every change is audited.
+- **One list, used in both places** -- posting a role and editing a volunteer
+  profile pick from the same rows.
+- **The picker is a dropdown with chips**: open it, tick skills, each ticked
+  skill becomes a removable chip below the control.
+- **Migration: map what matches, drop the rest.** The 13 roles carrying skills
+  are all `5eed...` seed rows that `delete_seed_data.sql` removes anyway. Four
+  real volunteer accounts have free text; whatever does not map to a listed
+  skill is dropped, with no note and no prompt.
+- Starting list of 20, editable in the admin afterwards: Working with children
+  | Working with parents and families | Reading and literacy | Maths and
+  tutoring | Sports and games | Arts and crafts | Music | Cooking and food |
+  Gardening and outdoors | Event support | Fundraising | Bid and grant writing
+  | Admin and organisation | Social media | Web and design | Research and data
+  | Writing and proofreading | First aid | Driving | Languages.
+
+Three things this reaches that are easy to miss: the browse search (BRW-4)
+searches the `skills` text and will need the join; `handle_new_user()` writes
+the profile from signup metadata and would have to write junction rows, which
+is the "three places" rule; and the detail page's chips come from splitting
+the text on commas today -- that one line is what changes.
+
+**POLISH-5 · The skills list is built** (2026-09-21). Three migrations applied,
+all additive; the destructive half is `supabase/pending/polish4_drop_skills_text.sql`
+and **must not be applied until the client is merged and live**.
+
+- `skills` (20 rows, four groups), `opportunity_skills`, `volunteer_skills`.
+- **Hiding is soft, and deliberately not the towns rule.** A town cannot be
+  deactivated while anything references it, because a dead town breaks a
+  foreign key. A skill can be hidden at any time and the holders keep it --
+  proven live: hiding "First aid" while a volunteer held it left their row
+  intact and dropped the pickers from 20 to 19.
+- **No delete path at all.** `skill_id` is ON DELETE RESTRICT from both join
+  tables and no grant permits a delete, so a skill somebody chose cannot
+  vanish from under them.
+- Writes go through `admin_add_skill` / `admin_set_skill_active`, not table
+  grants -- the shape workflow 4 settled on for `admins`.
+- **A picker offers the active list PLUS whatever the row already holds**
+  (`pickerOptions` in src/utils/skills.js). Without that, editing a role that
+  carries a since-hidden skill would silently drop it on the next save.
+- Find Volunteers filters by skill **id, not name**: a rename would otherwise
+  empty the list silently.
+
+Two bugs this found that had nothing to do with skills:
+
+- **A control outside react-hook-form does not make the form dirty,** and
+  every save button on the edit-role and volunteer-profile pages is
+  `disabled={!isDirty}`. Changing only your skills left Save greyed out. Found
+  by the walk, not by reading the code.
+- **`const` in the temporal dead zone.** `useUnsavedChangesWarning(formDirty)`
+  sat above `const formDirty = ...` -- a ReferenceError on every render of the
+  edit form, which eslint does not flag.
+
+Re-runnable: `.scratch/probe_skills.py` (23 outside-in cases) and
+`.scratch/walk_skills.py` (25 UI checks, fixtures swept by atexit).
+
+> **A walk that creates something must record it BEFORE it asserts anything.**
+> An early run of `walk_skills` added a skill, asserted, crashed on the
+> assertion, and left that skill ACTIVE in every real picker on the live site
+> -- `atexit` swept a list that was still empty. Removed by hand; the walk now
+> records the id first.
+
+> **One browser context is one session.** `walk_skills` opened a second page
+> in the same context and signed in as an organisation, which replaced the
+> admin's session on the first page -- the admin tab then rendered "that area
+> is for Well Windsor admins" and a working button looked broken. Use
+> `browser.new_context()` per account. Switching account in one context also
+> fills the console with 406s: React Query refetches with the OLD user's id
+> and the NEW user's token, and `user_profiles ... .single()` gets zero rows.

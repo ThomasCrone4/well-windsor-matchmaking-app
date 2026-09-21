@@ -5,6 +5,8 @@ import { toast } from 'react-hot-toast';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTowns } from '../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../utils/age';
+import SkillsPicker from '../components/SkillsPicker';
+import { replaceSkills, useSkills } from '../utils/skills';
 
 export default function AuthPage() {
   const [email, setEmail] = useState('');
@@ -16,7 +18,12 @@ export default function AuthPage() {
 
   // Volunteer fields
   const [bio, setBio] = useState('');
-  const [skills, setSkills] = useState('');
+  // POLISH-4. Chosen skill ids. The free-text `skills` box is gone; the
+  // derived string below is still sent as metadata because
+  // user_profiles_public_needs_detail is a CHECK on the TEXT column, and
+  // handle_new_user writes the profile row before this client can insert
+  // anything. Dropped together by the pending migration.
+  const [skillIds, setSkillIds] = useState([]);
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [homeTown, setHomeTown] = useState('');
@@ -57,7 +64,7 @@ export default function AuthPage() {
         // Bio & Skills only required if public
         if (publicProfile) {
           if (!bio?.trim()) newErrors.bio = 'Bio is required when profile is visible to organisations';
-          if (!skills?.trim()) newErrors.skills = 'Skills are required when profile is visible to organisations';
+          if (skillIds.length === 0) newErrors.skills = 'Choose at least one skill when your profile is visible to organisations';
         }
       }
     }
@@ -65,6 +72,16 @@ export default function AuthPage() {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
+  // The chosen skills as the text column still wants them. handle_new_user()
+  // builds the profile from this metadata, and it cannot read join rows that
+  // do not exist yet -- so the names travel as text and the rows are written
+  // below, once there is a session to write them with.
+  const { byId: skillsById } = useSkills();
+  const skillsText = skillIds
+    .map((id) => skillsById.get(id)?.name)
+    .filter(Boolean)
+    .join(', ');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -103,7 +120,7 @@ export default function AuthPage() {
             dob,
             contact_number: contactNumber?.trim() || null,
             bio: bio?.trim() || null,
-            skills: skills?.trim() || null,
+            skills: skillsText || null,
             public_profile: publicProfile,
           }),
         },
@@ -133,6 +150,21 @@ export default function AuthPage() {
       );
       navigate('/organization-dashboard');
       return;
+    }
+
+    // POLISH-4. The rows, now that there is a session. Email confirmation is
+    // currently off, so signUp returns one immediately; if it is ever switched
+    // on there is no session here and this is skipped -- which is why the
+    // names also travelled as metadata above, and why the profile page offers
+    // the picker again. A failure here must not read as a failed sign-up: the
+    // account exists and works.
+    if (role === 'volunteer' && skillIds.length > 0 && data?.user?.id) {
+      try {
+        await replaceSkills('volunteer', data.user.id, skillIds);
+      } catch (err) {
+        console.error('Saving skills at sign-up failed:', err);
+        toast('Account created. Add your skills on your profile page.', { icon: 'i' });
+      }
     }
 
     toast.success('Success! You are now logged in.');
@@ -377,18 +409,15 @@ export default function AuthPage() {
                   {errors.bio && <p className="error-text">{errors.bio}</p>}
                 </div>
 
-                {/* Skills */}
-                <div className="form-row">
-                  <label className="label">
-                    Skills / Experience{' '}
-                    {publicProfile ? <span className="required" /> : <span className="help-text">(optional)</span>}
-                  </label>
-                  <textarea
-                    className={`textarea ${errors.skills ? 'input-invalid' : ''}`}
-                    placeholder="e.g. Working with children, first aid, cooking"
-                    value={skills}
-                    onChange={(e) => setSkills(e.target.value)}
-                    aria-invalid={!!errors.skills}
+                {/* Skills. POLISH-4: a managed list, not free text. */}
+                <div>
+                  <SkillsPicker
+                    id="skills"
+                    label="Skills"
+                    hint={publicProfile ? '(at least one)' : '(optional)'}
+                    value={skillIds}
+                    onChange={setSkillIds}
+                    invalid={!!errors.skills}
                   />
                   {errors.skills && <p className="error-text">{errors.skills}</p>}
                 </div>

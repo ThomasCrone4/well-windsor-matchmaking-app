@@ -12,7 +12,7 @@ import { useTowns } from '../../../utils/towns';
 import Pagination from '../../../components/Pagination';
 
 export default function LookingForVolunteersPage() {
-  const [filters, setFilters] = useState({ town: 'All'});
+  const [filters, setFilters] = useState({ town: 'All', skill: 'All' });
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
@@ -65,7 +65,7 @@ export default function LookingForVolunteersPage() {
       // neither. That is invisible until the list is paginated.
       const { data, error } = await supabase
         .from('public_volunteers')
-        .select('id, name, home_town, skills, bio')
+        .select('id, name, home_town, skills, bio, skill_ids, skill_names')
         .order('name', { ascending: true })
         .order('id', { ascending: true });
       if (error) throw error;
@@ -98,16 +98,39 @@ export default function LookingForVolunteersPage() {
   // one, there is no filter at all (ADM-6, src/utils/towns.js).
   const { towns, showPicker: showTownFilter } = useTowns();
 
+  // POLISH-4. The skill filter's options, built from the skills the listed
+  // volunteers actually hold rather than from the whole managed list -- the
+  // same rule as the organisation filter on the browse, so no choice can lead
+  // to an empty page. A skill the admin has since hidden still appears here
+  // while somebody holds it, which is the point of hiding being soft.
+  const skillOptions = useMemo(() => {
+    const seen = new Map();
+    for (const v of data ?? []) {
+      (v.skill_ids ?? []).forEach((id, i) => {
+        const name = (v.skill_names ?? [])[i];
+        if (name && !seen.has(id)) seen.set(id, name);
+      });
+    }
+    return [...seen.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [data]);
+
   const filterVolunteers = (vols) =>
     vols.filter((v) => {
       const matchesTown =
         !showTownFilter || filters.town === 'All' || v.home_town === filters.town;
+      // POLISH-4. By id, not by name: filtering on a label would go wrong the
+      // moment an admin renames a skill, and the rename would silently empty
+      // this list rather than failing loudly.
+      const matchesSkill =
+        filters.skill === 'All' || (v.skill_ids ?? []).includes(filters.skill);
       const q = searchTerm.toLowerCase();
       const matchesSearch =
         (v.name || '').toLowerCase().includes(q) ||
-        (v.skills || '').toLowerCase().includes(q) ||
+        (v.skill_names ?? []).join(' ').toLowerCase().includes(q) ||
         (v.bio || '').toLowerCase().includes(q);
-      return matchesTown && matchesSearch;
+      return matchesTown && matchesSkill && matchesSearch;
     });
 
   const handleEnquire = (volunteerId) => {
@@ -187,7 +210,7 @@ export default function LookingForVolunteersPage() {
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className={`form-grid ${showTownFilter ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+        <div className={`form-grid ${showTownFilter ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
           {/* Search */}
           <div className="form-row">
             <label htmlFor="search" className="label">Search</label>
@@ -202,6 +225,28 @@ export default function LookingForVolunteersPage() {
               }}
               className="input"
             />
+          </div>
+
+          {/* Skill (POLISH-4). Built from the skills volunteers actually
+              hold, not from the whole list, so no choice can lead to an empty
+              page -- the same rule as the organisation filter on the browse.
+              A hidden skill still appears here while somebody holds it. */}
+          <div className="form-row">
+            <label htmlFor="skill" className="label">Skill</label>
+            <select
+              id="skill"
+              value={filters.skill}
+              onChange={(e) => {
+                setFilters((f) => ({ ...f, skill: e.target.value }));
+                resetPage();
+              }}
+              className="select"
+            >
+              <option value="All">All skills</option>
+              {skillOptions.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Town — only when there is more than one (ADM-6) */}
@@ -286,8 +331,18 @@ export default function LookingForVolunteersPage() {
                   </div>
                   <div>
                     <span className="text-[10px] font-semibold uppercase tracking-[0.1em] block" style={{ color: 'var(--color-text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>Skills</span>
-                    <dd className="mt-0.5 text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                      {vol.skills?.trim() || 'None listed'}
+                    <dd className="mt-1">
+                      {(vol.skill_names ?? []).length > 0 ? (
+                        <span className="flex flex-wrap gap-1.5">
+                          {vol.skill_names.map((n) => (
+                            <span key={n} className="chip">{n}</span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                          None listed
+                        </span>
+                      )}
                     </dd>
                   </div>
                 </dl>

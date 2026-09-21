@@ -5,6 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { supabase } from '../../../utils/supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import SkillsPicker from '../../../components/SkillsPicker';
+import { fetchSkillIds, replaceSkills } from '../../../utils/skills';
 import toast from 'react-hot-toast';
 import { useEffect, useRef, useState } from 'react';
 
@@ -140,8 +142,6 @@ export default function EditOpportunity() {
     },
   });
 
-  useUnsavedChangesWarning(isDirty);
-
   const { data: opportunity, isLoading } = useQuery({
     queryKey: ['opportunity', id],
     queryFn: async () => {
@@ -173,6 +173,38 @@ export default function EditOpportunity() {
     },
   });
 
+  // POLISH-4. The chosen skills, loaded separately because they are rows in
+  // opportunity_skills rather than a column on the role.
+  const { data: savedSkillIds, isPending: skillsPending } = useQuery({
+    queryKey: ['opportunity_skills_edit', id],
+    enabled: !!id,
+    queryFn: () => fetchSkillIds('opportunity', id),
+  });
+
+  const [skillIds, setSkillIds] = useState([]);
+  const initialSkillIds = useRef([]);
+
+  useEffect(() => {
+    if (!skillsPending && savedSkillIds) {
+      setSkillIds(savedSkillIds);
+      initialSkillIds.current = savedSkillIds;
+    }
+  }, [savedSkillIds, skillsPending]);
+
+  // The picker is not a registered input, so react-hook-form's isDirty knows
+  // nothing about it -- and every save button on this page is
+  // `disabled={!formDirty}`. Without this, changing ONLY the skills would leave
+  // every button greyed out and the change unsaveable.
+  const skillsDirty =
+    skillIds.length !== initialSkillIds.current.length ||
+    skillIds.some((v) => !initialSkillIds.current.includes(v));
+  const formDirty = isDirty || skillsDirty;
+
+  // Called here, below formDirty, and not up with the other hooks: `const` is
+  // in the temporal dead zone until its declaration runs, so reading it
+  // earlier is a ReferenceError at render -- and eslint does not flag it.
+  useUnsavedChangesWarning(formDirty);
+
   useEffect(() => {
     // Wait for both: resetting on the opportunity alone would seed the matrix
     // empty and then never re-seed it, because reset() only runs once.
@@ -198,14 +230,14 @@ export default function EditOpportunity() {
 
   useEffect(() => {
     const beforeUnload = (e) => {
-      if (isDirty) {
+      if (formDirty) {
         e.preventDefault();
         e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', beforeUnload);
     return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [isDirty]);
+  }, [formDirty]);
 
   /* -------------------- Normalization (via schedule.js) -------------------- */
 
@@ -282,7 +314,12 @@ export default function EditOpportunity() {
       // they are split off before the update rather than sent and rejected.
       // __reopened is the same: a flag for onSuccess, not a column. Leaving
       // it in would send it to PostgREST and come back as PGRST204.
-      const { __blocks: blocks, __reopened: _reopened, ...updateData } = payload;
+      const {
+        __blocks: blocks,
+        __reopened: _reopened,
+        __skillIds: _skillIds,
+        ...updateData
+      } = payload;
 
       // 1) Update the parent row
       const { error } = await supabase
@@ -298,6 +335,16 @@ export default function EditOpportunity() {
       } catch (e) {
         console.error('Saving timeblocks failed:', e);
         toast.error('Saved details, but failed to save required times. Please retry.');
+      }
+
+      // 3) The skills, in the only place they live. Same failure shape as
+      //    the timeblocks above: the row saved, so say what did not.
+      try {
+        await replaceSkills('opportunity', id, payload.__skillIds ?? []);
+        initialSkillIds.current = payload.__skillIds ?? [];
+      } catch (e) {
+        console.error('Saving skills failed:', e);
+        toast.error('Saved details, but failed to save the skills. Please retry.');
       }
 
       return { ...updateData, when_needed: blocks ?? [] };
@@ -344,7 +391,9 @@ export default function EditOpportunity() {
       // one is filed under the sole town (by the database, if this is still
       // loading).
       town: formData.town || soleTown || null,
-      skills: formData.skills || null,
+      // POLISH-4: skills are rows in opportunity_skills now, written by the
+      // mutation below. The text column is left exactly as it is until the
+      // pending migration drops it.
       category: formData.category || null,
       volunteers_needed: Number(formData.volunteers_needed ?? 1),
       generally_needed: !!formData.generally_needed,
@@ -373,7 +422,12 @@ export default function EditOpportunity() {
       return;
     }
 
-    mutation.mutate({ ...updateData, __blocks: blocks, __reopened: statusOverride === 'active' && isClosed });
+    mutation.mutate({
+      ...updateData,
+      __blocks: blocks,
+      __skillIds: skillIds,
+      __reopened: statusOverride === 'active' && isClosed,
+    });
   };
 
   /**
@@ -393,11 +447,15 @@ export default function EditOpportunity() {
 
   const handleDiscard = () => {
     reset(originalData.current, { keepDirty: false, keepTouched: false });
+    // The picker is outside react-hook-form, so reset() does not reach it.
+    // Without this, "Discard changes" would leave the skills as edited while
+    // saying everything was discarded.
+    setSkillIds(initialSkillIds.current);
     toast.success('Changes discarded');
   };
 
   const handleBack = () => {
-    if (isDirty) {
+    if (formDirty) {
       toast.error('You have unsaved changes. Please Save or Discard first.');
       return;
     }
@@ -539,17 +597,14 @@ export default function EditOpportunity() {
             {/* ROLE-3. The required "Contact Email" field is gone — see the
                 note on PostOpportunity. No volunteer ever saw it. */}
 
-            {/* Skills */}
-            <div className="form-row">
-              <label className="label">
-                Skills <span className="help-text">(optional)</span>
-              </label>
-              <input
-                {...register('skills')}
-                className="input"
-                placeholder="e.g. first aid, event setup"
-              />
-            </div>
+            {/* Skills. POLISH-4: a managed list, not free text. */}
+            <SkillsPicker
+              id="skills"
+              label="Helpful but not required skills"
+              hint="(optional)"
+              value={skillIds}
+              onChange={setSkillIds}
+            />
 
             {/* Volunteers needed */}
             <div className="form-row">
@@ -686,7 +741,7 @@ export default function EditOpportunity() {
 
                   <button
                     type="button"
-                    disabled={!isDirty || isSubmitting || mutation.isPending}
+                    disabled={!formDirty || isSubmitting || mutation.isPending}
                     onClick={handleSubmit((data) => handleSave(data), onInvalid)}
                     className="btn btn-secondary"
                   >
@@ -697,7 +752,7 @@ export default function EditOpportunity() {
                     type="button"
                     onClick={handleDiscard}
                     className="btn btn-outline"
-                    disabled={!isDirty}
+                    disabled={!formDirty}
                   >
                     Discard changes
                   </button>
@@ -706,7 +761,7 @@ export default function EditOpportunity() {
                 <div className="flex gap-4 pt-2">
                   <button
                     type="button"
-                    disabled={!isDirty || isSubmitting || mutation.isPending}
+                    disabled={!formDirty || isSubmitting || mutation.isPending}
                     onClick={handleSubmit((data) => handleSave(data), onInvalid)}
                     className="btn btn-primary"
                   >
@@ -717,7 +772,7 @@ export default function EditOpportunity() {
                     type="button"
                     onClick={handleDiscard}
                     className="btn btn-outline"
-                    disabled={!isDirty}
+                    disabled={!formDirty}
                   >
                     Discard Changes
                   </button>

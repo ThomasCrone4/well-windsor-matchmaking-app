@@ -13,6 +13,8 @@ import { useTowns, townOptionsFor } from '../../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../../utils/age';
 import DeleteAccountSection from '../../components/DeleteAccountSection';
 import ChangeEmailSection from '../../components/ChangeEmailSection';
+import SkillsPicker from '../../components/SkillsPicker';
+import { fetchSkillIds, replaceSkills, useSkills } from '../../utils/skills';
 
 const profileSchema = z
   .object({
@@ -39,10 +41,14 @@ const profileSchema = z
     message: 'Bio is required to appear publicly',
     path: ['public_profile_bio'],
   })
-  .refine((d) => !d.public_profile || !!d.skills?.trim(), {
-    message: 'Skills are required to appear publicly',
-    path: ['public_profile_skills'],
-  });
+  // POLISH-4. The skills refine that stood here is gone: `skills` is no
+  // longer a registered input, so it would be undefined on every submit and
+  // would block every public profile. The rule itself is unchanged -- a
+  // public profile still needs at least one skill -- and is checked in
+  // onSubmit against the picker, where the message can be shown next to the
+  // control. A hidden required field failing validation silently is the WF7
+  // trap; this keeps it visible.
+  ;
 
 export default function VolunteerProfilePage() {
   const queryClient = useQueryClient();
@@ -63,6 +69,36 @@ export default function VolunteerProfilePage() {
   });
 
   const publicProfile = watch('public_profile');
+
+  // POLISH-4. Chosen skills are rows in volunteer_skills, not a column.
+  const { byId: skillsById } = useSkills();
+  const [skillIds, setSkillIds] = useState([]);
+  const [savedSkillIds, setSavedSkillIds] = useState([]);
+  const [skillsError, setSkillsError] = useState('');
+
+  // The picker is not a registered input, so react-hook-form's isDirty knows
+  // nothing about it -- and both buttons below are `disabled={!isDirty && !skillsDirty}`.
+  // Without this, changing ONLY your skills leaves Save greyed out and the
+  // change unsaveable. The same trap as EditOpportunity; found by the walk,
+  // not by reading the code.
+  const skillsDirty =
+    skillIds.length !== savedSkillIds.length ||
+    skillIds.some((v) => !savedSkillIds.includes(v));
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return undefined;
+    fetchSkillIds('volunteer', userId)
+      .then((ids) => {
+        if (cancelled) return;
+        setSkillIds(ids);
+        setSavedSkillIds(ids);
+      })
+      .catch((e) => console.error('Loading skills failed:', e));
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
   const { towns, soleTown, showPicker } = useTowns();
 
   useEffect(() => {
@@ -90,7 +126,17 @@ export default function VolunteerProfilePage() {
     contact_number: trimOrNull(formData.contact_number),
     home_town: trimOrNull(formData.home_town) ?? soleTown,
     bio: trimOrNull(formData.bio),
-    skills: trimOrNull(formData.skills),
+    // POLISH-4, transitional. The rows in volunteer_skills are the real
+    // answer, written by the mutation. This text column is still written
+    // because user_profiles_public_needs_detail is a CHECK requiring a
+    // non-empty string before a volunteer may be public -- a CHECK cannot
+    // query another table, so it cannot be taught about the join table. The
+    // pending migration swaps it for a trigger and drops this column; until
+    // then, writing only the rows would make every public profile unsaveable
+    // with a 23514.
+    skills: trimOrNull(
+      skillIds.map((id) => skillsById.get(id)?.name).filter(Boolean).join(', ')
+    ),
 
     // date
     dob: emptyToNull(formData.dob),
@@ -123,6 +169,9 @@ export default function VolunteerProfilePage() {
 
       if (error) throw error;
 
+      await replaceSkills('volunteer', userId, skillIds);
+      setSavedSkillIds(skillIds);
+
       return update;
     },
     onSuccess: (update) => {
@@ -147,6 +196,11 @@ export default function VolunteerProfilePage() {
       toast.error('Please select your home town.');
       return;
     }
+    if (data.public_profile && skillIds.length === 0) {
+      setSkillsError('Choose at least one skill to appear in volunteer searches.');
+      return;
+    }
+    setSkillsError('');
     mutation.mutate(data);
   };
 
@@ -158,9 +212,12 @@ export default function VolunteerProfilePage() {
         home_town: profile?.home_town ?? '',
         dob: profile?.dob ?? '',
         bio: profile?.bio ?? '',
-        skills: profile?.skills ?? '',
         public_profile: !!profile?.public_profile,
       });
+      // reset() does not reach the picker, which is not a registered input.
+      // Without this, "discard" would leave the skills as edited.
+      setSkillIds(savedSkillIds);
+      setSkillsError('');
       toast.success('Changes discarded');
     }
   };
@@ -261,19 +318,20 @@ export default function VolunteerProfilePage() {
           {errors.public_profile_bio && <p className="error-text">{errors.public_profile_bio.message}</p>}
         </div>
 
-        {/* Skills */}
-        <div className="form-row">
-          <label className="label">
-            Skills / Experience{' '}
-            {publicProfile ? <span className="required" /> : <span className="help-text">(optional)</span>}
-          </label>
-          <textarea
-            {...register('skills')}
-            className="textarea"
-            placeholder="e.g. Working with children, first aid, cooking"
+        {/* Skills. POLISH-4: a managed list, not free text. */}
+        <div>
+          <SkillsPicker
+            id="skills"
+            label="Skills"
+            hint={publicProfile ? '(at least one, to appear in searches)' : '(optional)'}
+            value={skillIds}
+            onChange={(next) => {
+              setSkillIds(next);
+              if (skillsError) setSkillsError('');
+            }}
+            invalid={!!skillsError}
           />
-          {errors.skills && <p className="error-text">{errors.skills.message}</p>}
-          {errors.public_profile_skills && <p className="error-text">{errors.public_profile_skills.message}</p>}
+          {skillsError && <p className="error-text">{skillsError}</p>}
         </div>
 
         {/*
@@ -319,7 +377,7 @@ export default function VolunteerProfilePage() {
           {/* The errors themselves sit on the bio and skills fields, which is
               where they get fixed. This switch is below both, so ticking it
               would otherwise surface a message off-screen. */}
-          {(errors.public_profile_bio || errors.public_profile_skills) && (
+          {(errors.public_profile_bio || skillsError) && (
             <p className="error-text mt-2">
               Add a bio and your skills above before organisations can find you.
             </p>
@@ -337,7 +395,7 @@ export default function VolunteerProfilePage() {
           <button
             type="submit"
             className="btn btn-primary flex-1"
-            disabled={!isDirty || mutation.isPending}
+            disabled={(!isDirty && !skillsDirty) || mutation.isPending}
           >
             Save Profile
           </button>
