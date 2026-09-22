@@ -10,9 +10,15 @@ import ApprovalNotice from '../../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../../utils/approval';
 import { useTowns } from '../../../utils/towns';
 import Pagination from '../../../components/Pagination';
+import SkillsPicker from '../../../components/SkillsPicker';
+import { useSkills } from '../../../utils/skills';
 
 export default function LookingForVolunteersPage() {
-  const [filters, setFilters] = useState({ town: 'All', skill: 'All' });
+  const [filters, setFilters] = useState({ town: 'All' });
+  // POLISH-8. Several skills, matched with OR: a volunteer is listed if they
+  // have AT LEAST ONE of them. Kept out of `filters` because it is an array
+  // and the clear-everything path below resets that object wholesale.
+  const [skillIds, setSkillIds] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
@@ -103,6 +109,7 @@ export default function LookingForVolunteersPage() {
   // same rule as the organisation filter on the browse, so no choice can lead
   // to an empty page. A skill the admin has since hidden still appears here
   // while somebody holds it, which is the point of hiding being soft.
+  const { byId: skillsById } = useSkills();
   const skillOptions = useMemo(() => {
     const seen = new Map();
     for (const v of data ?? []) {
@@ -112,19 +119,50 @@ export default function LookingForVolunteersPage() {
       });
     }
     return [...seen.entries()]
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [data]);
+      .map(([id, name]) => {
+        // The view gives ids and names; the group comes from the list, so
+        // the picker can head each section. A skill missing from the list
+        // should be impossible (the id is a foreign key) -- filed under
+        // Other rather than dropped, so it cannot silently vanish.
+        const row = skillsById.get(id);
+        return {
+          id,
+          name: row?.name ?? name,
+          category: row?.category ?? 'Other',
+          sort_order: row?.sort_order ?? 999,
+          is_active: true,
+        };
+      })
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  }, [data, skillsById]);
+
+  // What Clear Filters clears is what decides whether it is offered -- the
+  // same rule as the browse. The town only counts while its picker exists
+  // (ADM-6): with one town it is always 'All' and there is nothing to clear.
+  const filtersApplied =
+    searchTerm.trim() !== '' ||
+    skillIds.length > 0 ||
+    (showTownFilter && filters.town !== 'All');
+
+  const clearFilters = () => {
+    setFilters({ town: 'All' });
+    setSkillIds([]);
+    setSearchTerm('');
+    resetPage();
+  };
 
   const filterVolunteers = (vols) =>
     vols.filter((v) => {
       const matchesTown =
         !showTownFilter || filters.town === 'All' || v.home_town === filters.town;
-      // POLISH-4. By id, not by name: filtering on a label would go wrong the
-      // moment an admin renames a skill, and the rename would silently empty
-      // this list rather than failing loudly.
+      // POLISH-4/8. By id, not by name: filtering on a label would go wrong
+      // the moment an admin renames a skill, and the rename would silently
+      // empty this list rather than failing loudly. Several skills match with
+      // OR -- "someone who can do first aid OR drive" is the question an
+      // organisation actually has; AND would mostly return nobody.
       const matchesSkill =
-        filters.skill === 'All' || (v.skill_ids ?? []).includes(filters.skill);
+        skillIds.length === 0 ||
+        (v.skill_ids ?? []).some((id) => skillIds.includes(id));
       const q = searchTerm.toLowerCase();
       const matchesSearch =
         (v.name || '').toLowerCase().includes(q) ||
@@ -208,9 +246,23 @@ export default function LookingForVolunteersPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="card mb-6">
-        <div className={`form-grid ${showTownFilter ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+      {/* Filters. POLISH-8: the same card as the browse -- Clear Filters is a
+          small pill in the corner, shown only when there is something to
+          clear, and absolutely positioned so nothing moves when it appears.
+          The old button sat in the grid AND reset `filters` to
+          `{ town: 'All' }`, which dropped the skill key entirely. */}
+      <div className="card mb-6 relative">
+        {filtersApplied && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="btn-primary btn-sm absolute right-4 top-2"
+          >
+            Clear Filters
+          </button>
+        )}
+
+        <div className={`form-grid ${showTownFilter ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           {/* Search */}
           <div className="form-row">
             <label htmlFor="search" className="label">Search</label>
@@ -231,23 +283,18 @@ export default function LookingForVolunteersPage() {
               hold, not from the whole list, so no choice can lead to an empty
               page -- the same rule as the organisation filter on the browse.
               A hidden skill still appears here while somebody holds it. */}
-          <div className="form-row">
-            <label htmlFor="skill" className="label">Skill</label>
-            <select
-              id="skill"
-              value={filters.skill}
-              onChange={(e) => {
-                setFilters((f) => ({ ...f, skill: e.target.value }));
-                resetPage();
-              }}
-              className="select"
-            >
-              <option value="All">All skills</option>
-              {skillOptions.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
+          <SkillsPicker
+            id="skill"
+            label="Skills"
+            hint="(any of them)"
+            options={skillOptions}
+            emptyLabel="Any skill"
+            value={skillIds}
+            onChange={(next) => {
+              setSkillIds(next);
+              resetPage();
+            }}
+          />
 
           {/* Town — only when there is more than one (ADM-6) */}
           {showTownFilter && (
@@ -270,21 +317,6 @@ export default function LookingForVolunteersPage() {
           )}
    
 
-          {/* Clear */}
-          <div className="form-row">
-            <label className="label">&nbsp;</label>
-            <button
-              type="button"
-              onClick={() => {
-                setFilters({ town: 'All'});
-                setSearchTerm('');
-                resetPage();
-              }}
-              className="btn-secondary"
-            >
-              Clear Filters
-            </button>
-          </div>
         </div>
       </div>
 

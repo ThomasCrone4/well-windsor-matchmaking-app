@@ -543,3 +543,33 @@ signs up both a volunteer and an organisation, because `handle_new_user` is
 the trigger where a mistake breaks every sign-up), `.scratch/walk_skills.py`
 (26). Regression-checked: `probe_wf9_1` 36/36, `probe_wf3` 37/37,
 `probe_wf7` 75/75, `walk_detail_a` 18/18.
+
+**POLISH-8 · Find Volunteers: any of several skills, and the browse's clear
+button** (2026-09-22).
+
+- The Skill filter was a single-select whose "don't filter" option read
+  "All skills". It is now the same `SkillsPicker` the forms use, **matching
+  with OR**: a volunteer is listed if they hold **at least one** of the
+  chosen skills. AND was never what an organisation is asking -- "someone
+  who can do first aid or drive" -- and on a list this size it would mostly
+  return nobody.
+- `SkillsPicker` gained an `options` prop for this. A FILTER offers only the
+  skills its listed volunteers actually hold, so no choice leads to an empty
+  page; a FORM offers the whole managed list. The group headings still work
+  because the page looks each id up in `useSkills().byId` for its category --
+  the view returns ids and names only.
+- Clear Filters matches the browse exactly: a small teal pill in the card's
+  corner, shown only when there is something to clear, absolutely positioned
+  so nothing moves when it appears.
+
+> **A bug this replaced, introduced when the skill filter was added:** the
+> old Clear Filters did `setFilters({ town: 'All' })`, which dropped the
+> `skill` key entirely rather than resetting it. `filters.skill` became
+> `undefined`, so `filters.skill === 'All'` was false and the filter matched
+> nothing -- clearing the filters emptied the list. **When state is one
+> object, resetting it wholesale silently drops any key added later.**
+
+Re-runnable: `.scratch/walk_find_volunteers.py` (16 UI checks, read-only).
+It proves the OR against the DATA rather than the control: it filters by each
+of two skills alone, then by both, and asserts the result is their **union**.
+An AND would be the intersection -- smaller than either.
