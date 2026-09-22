@@ -503,3 +503,43 @@ and broken profile saving with `PGRST204`.
 > transaction. **This was caught by tracing the consequence before applying,
 > not by a test** -- the trigger would have broken profile saving for every
 > public volunteer on the live site.
+
+**POLISH-7 · The `skills` text columns are dropped** (2026-09-22).
+`20260922123700_skills_drop_text` and `20260922124740_fix_...`, applied after
+the client went live and the deployed bundle was checked (`index-K5eacUP-.js`
+sends no `home_town, skills, bio` and writes no `skills:`).
+
+- `user_profiles_public_needs_detail` is now the deferred constraint trigger
+  `enforce_public_profile_detail`, on **both** `user_profiles` and
+  `volunteer_skills` -- the rule can be broken from either side, by ticking
+  public with no skills or by removing the last one.
+- `handle_new_user` writes the join rows from `skill_ids` metadata, guarded
+  by `jsonb_typeof(...) = 'array'` and `s.is_active` (the metadata is
+  client-supplied).
+- `admin_switch_account_type` deletes the rows instead of nulling the string.
+- `admin_account_overview` keeps the key `skills` and fills it with a
+  `string_agg`, so AdminAccountPage needed no change.
+
+> **A CASE EXPRESSION in PL/pgSQL resolves record fields in EVERY branch.**
+> The trigger is shared by two tables and chose the id with
+> `case tg_table_name when 'user_profiles' then coalesce(new.id, old.id)
+> else coalesce(new.volunteer_id, old.volunteer_id) end`. On
+> `volunteer_skills` that is `42703: record "new" has no field "id"`, because
+> the whole expression is prepared, not just the branch taken. **Every DELETE
+> from volunteer_skills failed, which took `set_volunteer_skills()` with it
+> and broke saving a volunteer profile on the live site.** It got through
+> because the first checks after applying were all on `user_profiles`, where
+> the taken branch happens to be the one that resolves. Use IF statements, and
+> use TG_OP -- NEW is unassigned on DELETE and OLD on INSERT.
+
+> **An assertion can go vacuous when a column is dropped.** `probe_wf7`
+> checked `p.get("skills") is None` after an account switch. With the column
+> gone, `select=*` has no such key and that passes however many skills the
+> person holds. It now asks `volunteer_skills` instead. Same shape as the
+> `eslint -f unix` diff that compared two empty files.
+
+Re-runnable after the drop: `.scratch/probe_skills.py` (32 cases, and it
+signs up both a volunteer and an organisation, because `handle_new_user` is
+the trigger where a mistake breaks every sign-up), `.scratch/walk_skills.py`
+(26). Regression-checked: `probe_wf9_1` 36/36, `probe_wf3` 37/37,
+`probe_wf7` 75/75, `walk_detail_a` 18/18.
