@@ -108,9 +108,12 @@ export default function OpportunityApplicantsPage() {
           {applicant.home_town ? ` · ${applicant.home_town}` : ''}
         </p>
 
-        {applicant.skills?.trim() && (
-          <p className="text-sm muted">
-            <span className="font-semibold">Skills:</span> {applicant.skills}
+        {(applicant.skill_names ?? []).length > 0 && (
+          <p className="text-sm muted flex flex-wrap items-center gap-1.5">
+            <span className="font-semibold">Skills:</span>
+            {applicant.skill_names.map((n) => (
+              <span key={n} className="chip">{n}</span>
+            ))}
           </p>
         )}
         {applicant.bio?.trim() && <p className="text">{applicant.bio}</p>}

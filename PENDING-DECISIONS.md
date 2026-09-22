@@ -471,3 +471,35 @@ Re-runnable: `.scratch/probe_skills.py` (23 outside-in cases) and
 > `browser.new_context()` per account. Switching account in one context also
 > fills the console with 406s: React Query refetches with the OLD user's id
 > and the NEW user's token, and `user_profiles ... .single()` gets zero rows.
+
+**POLISH-6 · The client stops touching the `skills` text columns** (2026-09-22).
+Needed before `supabase/pending/polish4_drop_skills_text.sql` can be applied.
+
+**Why there had to be a second client pass at all:** the first one deliberately
+wrote BOTH the join rows and the derived text, because
+`user_profiles_public_needs_detail` is a CHECK requiring a non-empty skills
+STRING. That was right, but it means the deployed site keeps reading and
+writing the column, so the drop needs its own deploy. Checked against the live
+bundle rather than the repo: on 2026-09-22 `index-CU4WZhFs.js` still sent
+`select("id, name, home_town, skills, bio, skill_ids, skill_names")` and still
+wrote `skills:` on the profile. Dropping then would have 400'd Find Volunteers
+and broken profile saving with `PGRST204`.
+
+- Every remaining read switched to `skill_names`: Find Volunteers, the
+  outreach compose page, the applicants list, the browse, the role page.
+- The profile stops writing the text; sign-up sends `skill_ids` metadata
+  instead, which the new `handle_new_user` will use to write the join rows.
+- `contentChecks.js` loses `skills: 300`, and both role schemas lose their
+  dead `skills` field -- `freeText('skills')` would have read a LIMITS key
+  that no longer exists.
+
+> **A DELETE then an INSERT over PostgREST is TWO transactions.**
+> `replaceSkills()` rewrote skills the way the role forms rewrite timeblocks,
+> so between the two requests a volunteer genuinely had no skills. Harmless
+> while the rule was a CHECK on a text column -- and fatal the moment it
+> becomes a trigger reading `volunteer_skills`, because a deferred trigger
+> fires on the DELETE's commit and refuses it. `set_volunteer_skills()` /
+> `set_opportunity_skills()` (20260922074836) do both statements in one
+> transaction. **This was caught by tracing the consequence before applying,
+> not by a test** -- the trigger would have broken profile saving for every
+> public volunteer on the live site.

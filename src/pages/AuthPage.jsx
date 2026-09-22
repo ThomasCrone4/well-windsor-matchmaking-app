@@ -6,7 +6,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTowns } from '../utils/towns';
 import { MIN_VOLUNTEER_AGE, isOldEnough } from '../utils/age';
 import SkillsPicker from '../components/SkillsPicker';
-import { replaceSkills, useSkills } from '../utils/skills';
+import { replaceSkills } from '../utils/skills';
 
 export default function AuthPage() {
   const [email, setEmail] = useState('');
@@ -18,11 +18,9 @@ export default function AuthPage() {
 
   // Volunteer fields
   const [bio, setBio] = useState('');
-  // POLISH-4. Chosen skill ids. The free-text `skills` box is gone; the
-  // derived string below is still sent as metadata because
-  // user_profiles_public_needs_detail is a CHECK on the TEXT column, and
-  // handle_new_user writes the profile row before this client can insert
-  // anything. Dropped together by the pending migration.
+  // POLISH-4. Chosen skill ids. They travel to handle_new_user as
+  // `skill_ids` metadata, which writes the join rows -- the client cannot,
+  // because the profile row exists before there is a session.
   const [skillIds, setSkillIds] = useState([]);
   const [dob, setDob] = useState('');
   const [contactNumber, setContactNumber] = useState('');
@@ -73,16 +71,6 @@ export default function AuthPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // The chosen skills as the text column still wants them. handle_new_user()
-  // builds the profile from this metadata, and it cannot read join rows that
-  // do not exist yet -- so the names travel as text and the rows are written
-  // below, once there is a session to write them with.
-  const { byId: skillsById } = useSkills();
-  const skillsText = skillIds
-    .map((id) => skillsById.get(id)?.name)
-    .filter(Boolean)
-    .join(', ');
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -120,7 +108,11 @@ export default function AuthPage() {
             dob,
             contact_number: contactNumber?.trim() || null,
             bio: bio?.trim() || null,
-            skills: skillsText || null,
+            // POLISH-4. The IDS, not the text: handle_new_user writes the
+            // join rows from these. The text column is gone. Sent even
+            // though the client also writes the rows below, because with
+            // email confirmation on there is no session here to write with.
+            skill_ids: skillIds,
             public_profile: publicProfile,
           }),
         },

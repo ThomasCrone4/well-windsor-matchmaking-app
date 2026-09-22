@@ -82,38 +82,42 @@ export function groupByCategory(rows) {
 }
 
 /**
- * Rewrite one row's skills: delete what it had, insert what it now has.
+ * Rewrite one row's skills, in a single transaction.
  *
- * The same shape both role forms already use for opportunity_timeblocks --
- * delete every row and re-insert on each save. It is honest about the fact
- * that nothing here needs to know WHICH skill changed, and a join table with
- * no columns of its own has nothing to preserve across the rewrite.
+ * This used to delete every row and then insert the new set, the way both
+ * role forms rewrite opportunity_timeblocks. Over PostgREST that is two HTTP
+ * requests and therefore TWO TRANSACTIONS, so between them the row genuinely
+ * has no skills at all. Two things follow, and the second is why this
+ * changed:
  *
- * Unlike timeblocks there is no schedule_revision to protect: no trigger
- * watches these tables, so a no-op rewrite notifies nobody.
+ *  - A DELETE that succeeded followed by an INSERT that failed left somebody
+ *    with no skills and an error message about saving.
+ *  - The public-profile rule is becoming a trigger that reads
+ *    volunteer_skills. A deferred trigger fires at COMMIT -- so the DELETE's
+ *    commit, where a public volunteer has zero skills, is exactly the state
+ *    it refuses. Saving your profile would fail.
+ *
+ * The RPCs do both statements in one transaction, so a deferred trigger only
+ * ever sees the end state. They are SECURITY INVOKER: RLS still decides who
+ * may write what.
  *
  * @param {'opportunity'|'volunteer'} kind which join table
- * @param {string} ownerId the opportunity id or the volunteer id
+ * @param {string} ownerId the opportunity id; ignored for a volunteer, whose
+ *   rows are always their own (the RPC takes no user id at all)
  * @param {string[]} skillIds the chosen ids
  */
 export async function replaceSkills(kind, ownerId, skillIds) {
-  const table = kind === 'opportunity' ? 'opportunity_skills' : 'volunteer_skills';
-  const ownerCol = kind === 'opportunity' ? 'opportunity_id' : 'volunteer_id';
+  const ids = [...new Set(skillIds ?? [])];
 
-  const { error: delError } = await supabase
-    .from(table)
-    .delete()
-    .eq(ownerCol, ownerId);
-  if (delError) throw delError;
+  const { error } =
+    kind === 'opportunity'
+      ? await supabase.rpc('set_opportunity_skills', {
+          p_opportunity_id: ownerId,
+          p_skill_ids: ids,
+        })
+      : await supabase.rpc('set_volunteer_skills', { p_skill_ids: ids });
 
-  const rows = [...new Set(skillIds ?? [])].map((id) => ({
-    [ownerCol]: ownerId,
-    skill_id: id,
-  }));
-  if (rows.length === 0) return;
-
-  const { error: insError } = await supabase.from(table).insert(rows);
-  if (insError) throw insError;
+  if (error) throw error;
 }
 
 /**

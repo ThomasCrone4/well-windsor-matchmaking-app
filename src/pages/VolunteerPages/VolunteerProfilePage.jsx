@@ -14,7 +14,7 @@ import { MIN_VOLUNTEER_AGE, isOldEnough } from '../../utils/age';
 import DeleteAccountSection from '../../components/DeleteAccountSection';
 import ChangeEmailSection from '../../components/ChangeEmailSection';
 import SkillsPicker from '../../components/SkillsPicker';
-import { fetchSkillIds, replaceSkills, useSkills } from '../../utils/skills';
+import { fetchSkillIds, replaceSkills } from '../../utils/skills';
 
 const profileSchema = z
   .object({
@@ -34,7 +34,6 @@ const profileSchema = z
       .min(1, 'Date of birth is required')
       .refine(isOldEnough, `Volunteers must be ${MIN_VOLUNTEER_AGE} or over`),
     bio: z.string().optional(),
-    skills: z.string().optional(),
     public_profile: z.boolean(),
   })
   .refine((d) => !d.public_profile || !!d.bio?.trim(), {
@@ -71,7 +70,6 @@ export default function VolunteerProfilePage() {
   const publicProfile = watch('public_profile');
 
   // POLISH-4. Chosen skills are rows in volunteer_skills, not a column.
-  const { byId: skillsById } = useSkills();
   const [skillIds, setSkillIds] = useState([]);
   const [savedSkillIds, setSavedSkillIds] = useState([]);
   const [skillsError, setSkillsError] = useState('');
@@ -109,7 +107,6 @@ export default function VolunteerProfilePage() {
         home_town: profile?.home_town ?? '',
         dob: profile?.dob ?? '',
         bio: profile?.bio ?? '',
-        skills: profile?.skills ?? '',
         public_profile: !!profile?.public_profile,
       });
       setHydrated(true);
@@ -126,17 +123,6 @@ export default function VolunteerProfilePage() {
     contact_number: trimOrNull(formData.contact_number),
     home_town: trimOrNull(formData.home_town) ?? soleTown,
     bio: trimOrNull(formData.bio),
-    // POLISH-4, transitional. The rows in volunteer_skills are the real
-    // answer, written by the mutation. This text column is still written
-    // because user_profiles_public_needs_detail is a CHECK requiring a
-    // non-empty string before a volunteer may be public -- a CHECK cannot
-    // query another table, so it cannot be taught about the join table. The
-    // pending migration swaps it for a trigger and drops this column; until
-    // then, writing only the rows would make every public profile unsaveable
-    // with a 23514.
-    skills: trimOrNull(
-      skillIds.map((id) => skillsById.get(id)?.name).filter(Boolean).join(', ')
-    ),
 
     // date
     dob: emptyToNull(formData.dob),

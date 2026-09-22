@@ -57,7 +57,6 @@ const getOpportunitySchema = (isDraft, towns, showPicker) =>
     // name, so `data.skills` never reached submitOpportunity -- and
     // postData did not send it either. Proven by the 2026-09-11 core-loop
     // walk, which posted "first aid, marshalling" and read back NULL.
-    skills: freeText('skills').optional(),
     // Optional in both states -- the browse falls back to a neutral image.
     // It MUST be declared here even so: zod strips keys the schema does not
     // mention, so a field that is registered but unlisted silently never
@@ -109,7 +108,6 @@ export default function PostOpportunity() {
       description: '',
       location: '',
       town: '',
-      skills: '',
       category: '',
       generally_needed: true,
       when_needed: [],

@@ -22,7 +22,7 @@ export default function EnquireVolunteersPage() {
       // every contact field. The base table is not readable here.
       const { data, error } = await supabase
         .from('public_volunteers')
-        .select('id, name, home_town, skills, bio')
+        .select('id, name, home_town, bio, skill_names')
         .eq('id', volunteerId)
         .maybeSingle();
       if (error) throw error;
@@ -68,11 +68,14 @@ export default function EnquireVolunteersPage() {
           <div className="card stack mb-4">
             <h2 className="card-title">{volunteer.name || 'Unnamed volunteer'}</h2>
             <p className="caption">{volunteer.home_town || 'Town not given'}</p>
-            {volunteer.skills?.trim() && (
-            <p className="text-sm muted">
-              <span className="font-semibold">Skills:</span> {volunteer.skills}
-            </p>
-          )}
+            {(volunteer.skill_names ?? []).length > 0 && (
+              <p className="text-sm muted flex flex-wrap items-center gap-1.5">
+                <span className="font-semibold">Skills:</span>
+                {volunteer.skill_names.map((n) => (
+                  <span key={n} className="chip">{n}</span>
+                ))}
+              </p>
+            )}
             {volunteer.bio?.trim() && <p className="text">{volunteer.bio}</p>}
           </div>
 
