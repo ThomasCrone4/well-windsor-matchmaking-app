@@ -65,7 +65,7 @@ export default function LookingForVolunteersPage() {
       // neither. That is invisible until the list is paginated.
       const { data, error } = await supabase
         .from('public_volunteers')
-        .select('id, name, home_town, skills, bio, skill_ids, skill_names')
+        .select('id, name, home_town, bio, skill_ids, skill_names')
         .order('name', { ascending: true })
         .order('id', { ascending: true });
       if (error) throw error;

@@ -109,13 +109,14 @@ create constraint trigger trg_public_profile_skills
 -- client can only write them when signUp returns a session, which it does
 -- only while confirmation is off).
 --
--- NOTE: fill in the CURRENT body before applying -- read it with
---   select pg_get_functiondef('public.handle_new_user'::regproc);
--- and edit, rather than pasting a guess from here. The body below shows only
--- the two changes this migration needs.
+-- The bodies are NOT transcribed here on purpose. They are ~3.8k and ~2.3k
+-- characters, this file cannot be applied until a deploy that has not
+-- happened yet, and a hand-copied body that drifts from the live one is worse
+-- than no body at all. Read each with pg_get_functiondef at apply time and
+-- make exactly the edits below.
 --
 --   * remove  `skills`            from the INSERT column list
---   * remove  `new.raw_user_meta_data->>'skills'` from the VALUES
+--   * remove  `nullif(btrim(meta->>'skills'), '')` from the VALUES
 --   * add, after the profile insert:
 --
 --       insert into public.volunteer_skills (volunteer_id, skill_id)
@@ -171,6 +172,26 @@ create constraint trigger trg_public_profile_skills
 -- Read pg_class.relacl afterwards and compare. A view with a join refuses
 -- writes with 55000 before it looks at privileges, so a failed write is NOT
 -- evidence the revoke landed (WF9-1).
+
+-- ---------------------------------------------------------------------------
+-- 3b. The client no longer writes either column
+-- ---------------------------------------------------------------------------
+-- Confirmed before applying by grepping the DEPLOYED bundle, not the repo:
+--
+--   curl -s https://well-windsor-matchmaking-app.pages.dev/ --     | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js'
+--   curl -s https://well-windsor-matchmaking-app.pages.dev/assets/<that> --     | grep -c 'home_town, skills, bio'      # must be 0
+--
+-- On 2026-09-22 the live bundle still sent
+-- `select("id, name, home_town, skills, bio, skill_ids, skill_names")` and
+-- still wrote `skills:` on the profile -- so applying this then would have
+-- 400'd Find Volunteers and broken profile saving with PGRST204. The client
+-- change that removes both is POLISH-6.
+--
+-- Note also 20260922074836_skills_atomic_writes: replaceSkills() used to
+-- DELETE then INSERT over two HTTP requests, which is two transactions, so a
+-- public volunteer briefly had zero skills. The deferred trigger in part 1
+-- above fires on that intermediate commit and refuses it. The RPCs make the
+-- rewrite atomic, and the client must be using them before this is applied.
 
 -- ---------------------------------------------------------------------------
 -- 4. Finally, the columns

@@ -113,7 +113,6 @@ export default function OpportunitiesPage() {
           description,
           location,
           town,
-          skills,
           skill_names,
           requires_dbs,
           generally_needed,

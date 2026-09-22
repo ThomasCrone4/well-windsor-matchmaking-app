@@ -30,7 +30,6 @@ export const LIMITS = {
   title: 120,
   description: 5000,
   location: 200,
-  skills: 300,
   closed_reason: 200,
   volunteers_needed: 500,
 };

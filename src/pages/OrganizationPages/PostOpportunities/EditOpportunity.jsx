@@ -73,7 +73,6 @@ const getSchema = (isDraft, towns, showPicker) =>
     town: isDraft || !showPicker
       ? nullableText
       : z.string().refine((v) => towns.includes(v), 'Please choose a town'),
-    skills: freeText('skills'),
     // Nullable on the table and null on every row that predates it, so
     // reset() feeds this null -- .optional() alone would reject that and
     // make Save Changes fail silently, exactly as `skills` once did.
@@ -133,7 +132,6 @@ export default function EditOpportunity() {
       description: '',
       location: '',
       town: '',
-      skills: '',
       category: '',
       volunteers_needed: 1,
       generally_needed: true,

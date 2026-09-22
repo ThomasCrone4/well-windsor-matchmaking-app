@@ -75,7 +75,6 @@ export default function OpportunityDetailPage() {
           requires_dbs,
           generally_needed,
           volunteers_needed,
-          skills,
           status,
           deleted_at,
           org_id,
