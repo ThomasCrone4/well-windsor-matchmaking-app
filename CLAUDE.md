@@ -9,8 +9,17 @@ only** because Windsor is the only *active* row in the `towns` table. Admins
 add and activate towns from the dashboard; there is no list in code and no
 CHECK any more (workflow 7, ADM-6).
 
-**Real users, real data.** The production database holds accounts belonging to
-actual people. Treat destructive operations accordingly.
+**Not live to the public yet, but the accounts are real people's**
+(clarified 2026-09-22). The site has not been opened to volunteers or
+organisations outside the charity; every account is someone testing it
+internally. So a few minutes of breakage is survivable — it is not the end of
+the world — and that is a reason to move, not a reason to be careless.
+
+What does *not* relax: those accounts are colleagues' real inboxes, so the
+test-target rule stands unchanged (trap 6 — never use a real id as a test
+target, not even for a test you expect to be rejected), and destructive
+operations still destroy real data. **The change to make is "act, then
+verify quickly", not "verify less".**
 
 ## Commands
 
@@ -47,12 +56,18 @@ volunteer's profile row, and adding one is not the answer. Use a view:
 
 | View | Who sees what |
 |---|---|
-| `public_volunteers` | volunteers who set `public_profile = true` |
-| `opportunity_applicants` | people who applied to *your* opportunities |
+| `public_volunteers` | volunteers who set `public_profile = true`, with `skill_ids` + `skill_names` |
+| `opportunity_applicants` | people who applied to *your* opportunities, with `skill_names` |
 | `org_outreach_sent` | *your* outreach log, with the volunteer's name |
 | `public_organisations` | every organisation: id, name, home_town, bio |
 | `my_registrations` | *your own* registrations, with the role attached |
-| `public_opportunities` | every publicly visible role, with its organisation's name |
+| `public_opportunities` | every publicly visible role, with its organisation's name and `skill_ids` + `skill_names` |
+
+The skill arrays are how an organisation sees a volunteer's skills:
+`volunteer_skills` itself is readable only by its owner and an admin, and a
+policy there for organisations would be a second, divergent definition of who
+may see a volunteer. The arrays are **ordered** in the view — an unordered
+`array_agg` promises nothing, and the chips would reshuffle between renders.
 
 All six run with owner rights (`security_invoker = false`) and carry no
 contact columns.
@@ -73,7 +88,9 @@ all of them as "Security Definer View" — that is the design, not a finding.
 the base table.** `20260903121939` revoked anon's *table* SELECT on
 `user_profiles` and granted back ten named columns (id, role, name,
 home_town, skills, bio, available_anytime, availability_matrix,
-public_profile, created_at); the `profiles: organizations are public`
+public_profile, created_at) — of which `skills`, `available_anytime` and
+`availability_matrix` are since **dropped columns**, so the live grant is the
+remaining seven; the `profiles: organizations are public`
 policy then limits anon to `role = 'organization'` rows. So a logged-out
 visitor does see real organisation names — verify before "fixing" that.
 Prefer `public_organisations` in new code anyway: a fixed column list
@@ -198,16 +215,69 @@ is `ON DELETE CASCADE` on `user_profiles`, and an unconditional raise would
 break account deletion. Proven by running the real `delete-account` function,
 not by reading the trigger.
 
+**Skills are rows, not text, and hiding one is soft (2026-09-22).**
+`user_profiles.skills` and `volunteer_opportunities.skills` are **dropped
+columns** — writing either is a `PGRST204`. The list is `skills` (20 rows in
+four groups); who has what is `volunteer_skills` and `opportunity_skills`.
+
+- **Every picker is `SkillsPicker`**, fed by `useSkills()` in
+  `src/utils/skills.js`. Four surfaces choose: sign-up, the volunteer
+  profile, posting a role, editing one. Find Volunteers filters by skill.
+- **`is_active = false` hides a skill from the pickers and touches nobody
+  who already holds it.** Deliberately *not* the towns rule (ADM-6), where a
+  town cannot be deactivated while anything references it — a dead town
+  breaks a foreign key, whereas a volunteer who really does speak Welsh does
+  not stop speaking it because the charity stopped advertising for it.
+- **There is no delete path at all.** `skill_id` is `ON DELETE RESTRICT`
+  from both join tables and no grant permits a delete; the admin adds and
+  hides. Added and hidden only through `admin_add_skill` /
+  `admin_set_skill_active`.
+- **A picker offers the active list PLUS whatever the row already holds**
+  (`pickerOptions`). Without that, editing a role carrying a since-hidden
+  skill would silently drop it on the next save.
+- **Filter by skill id, never by name.** A rename would otherwise empty a
+  filtered list with no error.
+- **Write through `set_volunteer_skills` / `set_opportunity_skills`.** A
+  DELETE then an INSERT over PostgREST is *two transactions*, so between
+  them the row has no skills — and the deferred trigger below fires on that
+  intermediate commit and refuses it.
+- **The public-profile rule is a trigger now**
+  (`enforce_public_profile_detail`), on *both* `user_profiles` and
+  `volunteer_skills`, because it can be broken from either side. It replaced
+  `user_profiles_public_needs_detail`, which was a CHECK on the text column —
+  and a CHECK cannot query another table.
+- **`handle_new_user` writes the join rows from `skill_ids` metadata.** It is
+  a SECURITY DEFINER trigger on `auth.users`: get it wrong and *every*
+  sign-up fails, an organisation's included. `probe_skills` signs up both to
+  prove it does not.
+
+**A `CASE` expression in PL/pgSQL resolves record fields in every branch.**
+The trigger above is shared by two tables and chose its id with
+`case tg_table_name when 'user_profiles' then coalesce(new.id, old.id) else
+coalesce(new.volunteer_id, old.volunteer_id) end`. On `volunteer_skills` that
+is `42703: record "new" has no field "id"` — the whole expression is
+prepared, not only the branch taken. Every DELETE from `volunteer_skills`
+failed, which broke saving a volunteer profile on the live site. Use `IF`
+statements, and use `TG_OP`: NEW is unassigned on DELETE and OLD on INSERT.
+
 **Zod `.optional()` does not accept `null`, and `reset()` feeds it the raw
 database row.** `EditOpportunity` resets the form from `select('*')`, so
 every nullable column arrives as `null`. `skills: z.string().optional()`
 rejected that, `handleSubmit` refused to fire, and because the skills input
-has no error slot the page showed *nothing at all* — no toast, no message,
+had no error slot the page showed *nothing at all* — no toast, no message,
 no saved row. Saving an opportunity had been silently impossible whenever
-`skills` was null, which is most of them. Any nullable column reaching a
-form schema needs `.nullable()`, and every `handleSubmit` on that page now
-passes an `onInvalid` handler so a rejected submit can never be silent
-again.
+`skills` was null, which was most of them. (That field is gone — skills are
+rows now — but the trap is live for every other nullable column.) Any
+nullable column reaching a form schema needs `.nullable()`, and every
+`handleSubmit` on that page now passes an `onInvalid` handler so a rejected
+submit can never be silent again.
+
+**A control outside react-hook-form does not make the form dirty.** Every
+save button on `EditOpportunity` and `VolunteerProfilePage` is
+`disabled={!isDirty}`, and `SkillsPicker` is not a registered input — so
+changing only the skills left Save greyed out and the change unsaveable.
+Both pages now OR in a `skillsDirty` of their own. Found by a walk; reading
+the code had not shown it.
 
 **A disabled React Query is not "loading".** With `enabled: !!userId`,
 v5 reports `isLoading: false` while the query is disabled, so a
@@ -727,14 +797,17 @@ Items: ROLE-5, ROLE-3, ROLE-2, ROLE-1, ROLE-4, APP-5, BRW-4.
   dates it closed with, usually already past. The form offers it while the
   organisation is looking at those dates, and only when the dates are ahead.
 - **APP-5 is split on purpose.** Length limits are CHECK constraints
-  (`title` 120, `description` 5000, `location` 200, `skills` 300,
-  `closed_reason` 200, `volunteers_needed` 1-500) because the form is not
-  the only way in; the banned-word list is client-side only, in
+  (`title` 120, `description` 5000, `location` 200, `closed_reason` 200,
+  `volunteers_needed` 1-500) because the form is not the only way in.
+  `skills` 300 was on this list and went with the column (POLISH-7), along
+  with its mirror in `contentChecks.js`. The banned-word list is
+  client-side only, in
   `src/utils/contentChecks.js`, because a false positive in the database is
   a 23514 nobody can read. **No SQL-injection or HTML filter** — the user
   asked, the reasoning against is in the APP-5 thread, and they accepted it.
 - **BRW-4:** the browse searches description, skills and organisation name,
-  not just the title.
+  not just the title. Since POLISH-7 the skills half reads
+  `public_opportunities.skill_names`, not a free-text column.
 - **The advisor's twelve anon-executable SECURITY DEFINER functions are down
   to three,** all deliberate: `count_volunteers`, `count_organisations` and
   `is_approved_org` — the last of which **anon must keep**, because the
@@ -843,8 +916,9 @@ Items: ADM-6, ADM-1, ADM-2, ADM-5.
   allows a change only when the transaction-local `app.account_switch` flag
   is on **and** `current_user` is not a browser role — the same shape as
   `app.audit_redaction`. Volunteer → organisation: pending approval,
-  registrations **withdrawn** (INT-4, kept), and dob/phone/bio/skills/
-  availability **cleared**, because organisation rows are readable by signed-in
+  registrations **withdrawn** (INT-4, kept), and dob/phone/bio **cleared**
+  with the `volunteer_skills` rows **deleted** (POLISH-7 — it used to null a
+  `skills` string), because organisation rows are readable by signed-in
   users. Organisation → volunteer: 18+ dob required, live roles **closed**
   (registrants told), drafts left, approval cleared.
 - Noticed, not changed: `notify_role_state_change` notifies every
@@ -1254,3 +1328,67 @@ Since workflow 2 the organisation *is* told about new registrations, by the
 there is still nothing to accept or decline. And since workflow 6 the
 silence runs both ways: withdrawing is invisible to the organisation, which
 is never told, so neither side has to explain itself.
+
+## Polish pass (2026-09-20 to 09-22, branch `polishes` then `polish-skills-part2`)
+
+Workflow 9 finished the plan; this is the round of "make it production-ready
+to my liking" the user drives by walking the site. **Decisions live in
+`PENDING-DECISIONS.md` as POLISH-1 to POLISH-7.** The working agreement for
+this round: the user describes what they do not like, Claude states back what
+it will change *before* touching anything, and asks whenever two readings are
+possible. Nothing is widened beyond what was asked.
+
+**The browse filter card.** Clear Filters is a small teal pill in the card's
+top-right corner and appears only when there is something to clear — a search
+term, either picker off "All", or an `?opId=` deep link. It is absolutely
+positioned so nothing moves when it appears. Search takes two thirds.
+
+**The role detail page is one column, and has no photograph.** The picture was
+never the organisation's: there is no upload and no image column, so
+`opportunityImages.js` gives every role one of six stock photos, and with
+almost no row carrying a category most get one of three neutral fallbacks
+hashed off the id. Nor could it be sharp — the widest rendition is 800px
+against a full-window band, so the browser upscaled it and then cropped a 3:2
+photo into a 288px letterbox. **The browse cards keep theirs**, where 800w is
+ample for a ~500px card. Order: chips → description → When → Where → What you
+need → skills → about → register.
+
+**DBS is stated once.** It was in the facts panel and again in a notice
+directly beneath it — the same sentence twice, stacked.
+
+**`getNextSessionDate()` is not `getNextDateFromToday()`.** The latter answers
+"when could this be turned up to at all" and returns TODAY for a role running
+now, which is right for the browse ordering and wrong on screen: a
+Saturday-only role would print "next session: Tuesday" on a Tuesday. The
+former only ever returns a date whose weekday the organisation named. Covered
+by `.scratch/test_next_session.mjs` (14 cases) — a UI walk cannot test it,
+because the live roles' dates are whatever they are on the day.
+
+**Skills became a managed list** — see the convention above, and POLISH-4 to
+POLISH-7. Three lessons from doing it that generalise:
+
+- **One database, two deploys, and a transitional client writes BOTH.** The
+  first pass wrote the join rows *and* the derived text, because a CHECK
+  demanded the string. That was right, and it meant the drop needed its own
+  deploy. Check the **deployed bundle**, not the repo, before applying
+  anything that removes a column:
+  `curl -s <origin>/ | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js'`, then grep
+  that file for the reads and writes you are about to break.
+- **A walk that creates something must record it BEFORE it asserts.** An early
+  `walk_skills` added a skill, asserted, crashed on the assertion, and left it
+  ACTIVE in every real picker on the live site — `atexit` swept a list that
+  was still empty.
+- **One browser context is one session.** Opening a second page in the same
+  context and signing in as another account replaces the first page's session;
+  the admin tab then renders "that area is for Well Windsor admins" and a
+  working button looks broken. Use `browser.new_context()` per account.
+  Switching account in one context also fills the console with 406s — React
+  Query refetches with the OLD user's id and the NEW user's token.
+
+Re-runnable: `.scratch/probe_skills.py` (32), `.scratch/walk_skills.py` (26),
+`.scratch/walk_filters.py` (26), `.scratch/walk_detail_a.py` (18),
+`.scratch/test_next_session.mjs` (14).
+
+**Still open after this round:** `formatDateRange` prints "Sep 12 – Nov 28,
+2026" US-ordered for a UK audience; it is shared with the browse cards and the
+home page, so changing it moves three surfaces at once.
