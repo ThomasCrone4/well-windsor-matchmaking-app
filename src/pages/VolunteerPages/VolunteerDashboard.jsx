@@ -166,7 +166,7 @@ export default function VolunteerDashboard() {
                 {application.opportunity_location || 'Location not given'}
               </p>
               <p className="caption">
-                Registered {format(new Date(application.registered_at), 'PPP')}
+                Registered {format(new Date(application.registered_at), 'd MMM yyyy')}
               </p>
 
               {/* ROLE-1 and ROLE-2. The organisation is never asked to
@@ -225,7 +225,7 @@ export default function VolunteerDashboard() {
             <li key={approach.id} className="card stack">
               <h3 className="card-title">{approach.org?.name || 'An organisation'}</h3>
               <p className="caption">
-                {format(new Date(approach.created_at), 'PPP p')}
+                {format(new Date(approach.created_at), 'd MMM yyyy, HH:mm')}
                 {approach.org?.home_town ? ` · ${approach.org.home_town}` : ''}
               </p>
               <p className="highlight">{approach.subject}</p>

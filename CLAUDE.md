@@ -1389,6 +1389,19 @@ Re-runnable: `.scratch/probe_skills.py` (32), `.scratch/walk_skills.py` (26),
 `.scratch/walk_filters.py` (26), `.scratch/walk_detail_a.py` (18),
 `.scratch/test_next_session.mjs` (14).
 
-**Still open after this round:** `formatDateRange` prints "Sep 12 – Nov 28,
-2026" US-ordered for a UK audience; it is shared with the browse cards and the
-home page, so changing it moves three surfaces at once.
+**Dates are day-first everywhere (2026-09-22).** `formatDateRange` printed
+"Sep 12 – Nov 28, 2026"; it now prints "12 Sep – 28 Nov 2026", and says the
+month and year once when both ends share them ("12–28 Sep 2026"). It is one
+formatter feeding the browse cards, the home page and the role page, which is
+why it was worth fixing in one place.
+
+Four other call sites were month-first and easy to miss, because the format
+string does not look American: **date-fns `'PPP'` is locale-aware and the
+default locale is en-US**, so it rendered "September 12th, 2026 2:05 PM" on
+the volunteer dashboard, the sent-messages list and the admin organisation
+list. All now `'d MMM yyyy'` / `'d MMM yyyy, HH:mm'` -- 24-hour, matching
+`formatTimeRange`. If you add a date, grep for `'PPP` before assuming the
+app is consistent.
+
+Covered by `.scratch/test_date_range.mjs` (11 cases): a walk cannot reach all
+four range shapes, because the live roles' dates are whatever they are today.

@@ -155,20 +155,34 @@ export function deriveDateRangeFromBlocks(blocks) {
   return { start: minStart, end: maxEnd };
 }
 
+/**
+ * A date range, day first.
+ *
+ * UK ordering: "12 Sep 2026", not "Sep 12, 2026". The service is in the Royal
+ * Borough of Windsor and Maidenhead and every reader of these dates is here;
+ * month-first reads as American, and "3/4" is genuinely ambiguous to them
+ * even though this format spells the month out.
+ *
+ * One formatter, three surfaces — the browse cards, the home page and the
+ * role detail page all call this, which is why it is worth getting right in
+ * one place rather than formatting dates at each call site.
+ */
 export function formatDateRange(start, end, { tbcLabel = 'Schedule TBC' } = {}) {
   if (!start && !end) return tbcLabel;
-  if (start && !end) return format(start, 'MMM d, yyyy');
-  if (!start && end) return format(end, 'MMM d, yyyy');
+  if (start && !end) return format(start, 'd MMM yyyy');
+  if (!start && end) return format(end, 'd MMM yyyy');
 
-  if (start.getTime() === end.getTime()) return format(start, 'MMM d, yyyy');
+  if (start.getTime() === end.getTime()) return format(start, 'd MMM yyyy');
 
   if (isSameYear(start, end)) {
+    // The month and year are said once when both ends share them:
+    // "12–28 Sep 2026", not "12 Sep 2026 – 28 Sep 2026".
     if (isSameMonth(start, end)) {
-      return `${format(start, 'MMM d')}-${format(end, 'd, yyyy')}`;
+      return `${format(start, 'd')}–${format(end, 'd MMM yyyy')}`;
     }
-    return `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`;
+    return `${format(start, 'd MMM')} – ${format(end, 'd MMM yyyy')}`;
   }
-  return `${format(start, 'MMM d, yyyy')} – ${format(end, 'MMM d, yyyy')}`;
+  return `${format(start, 'd MMM yyyy')} – ${format(end, 'd MMM yyyy')}`;
 }
 
 // -----------------------------------------------------------------------------
