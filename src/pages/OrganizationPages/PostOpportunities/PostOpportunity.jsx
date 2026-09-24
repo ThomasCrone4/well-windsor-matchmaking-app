@@ -117,8 +117,9 @@ export default function PostOpportunity() {
   // A new role starts with a picture already chosen, at random from the ones
   // on offer, so neighbouring roles do not all open on the same one. Once
   // only: after the organisation (or this) has chosen, a refetch of the
-  // library must not re-roll it. An empty library leaves it null, and the
-  // card falls back to a neutral picture.
+  // library must not re-roll it. If the library never loads, imageId stays
+  // null and the database picks one at random on insert -- a role always
+  // gets a picture (image_id is NOT NULL).
   const pickedDefault = useRef(false);
   useEffect(() => {
     if (pickedDefault.current) return;

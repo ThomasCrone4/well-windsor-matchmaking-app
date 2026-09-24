@@ -1415,11 +1415,19 @@ in `PENDING-DECISIONS.md` as POLISH-9.
 
 - **`role_images` is the library**; `volunteer_opportunities.image_id` points
   at one row, nullable (null = a neutral fallback hashed off the id).
-- **There is no "no preference" choice in the picker** (asked 2026-09-24).
-  The post form opens with a RANDOM active picture already chosen, once per
-  page load; a role saved earlier with none opens on Edit with nothing
-  selected and keeps its fallback until someone picks. So null still exists
-  in the data, but nobody can choose it.
+- **Every role has a picture** (asked 2026-09-24, 20260924154447).
+  `image_id` is NOT NULL; every existing row, removed ones included, was
+  given a random active picture (nobody notified -- no trigger watches it).
+  The picker has no "no preference"; the post form opens on a random active
+  picture. `image_rules` fills a missing picture with a random active one on
+  INSERT -- so a fixture that omits it still works -- and refuses clearing
+  one on UPDATE. **The last active picture cannot be hidden** (like the last
+  active town). The neutral fallback in `opportunityImages.js` is now only a
+  safety net.
+- **A walk fixture that omits `image_id` gets a RANDOM picture**, which can
+  be one the walk itself just uploaded -- and a library row a role points at
+  cannot be deleted (RESTRICT). `walk_role_images` sets an explicit picture
+  for that reason.
   A row is either `static_base` (a stock photo shipped in `public/images/`)
   or `storage_path` (a file in the public `role-images` bucket).
 - **Same shape as skills:** hiding is soft and nobody loses a picture they

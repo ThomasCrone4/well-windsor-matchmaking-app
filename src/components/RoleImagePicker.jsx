@@ -6,11 +6,11 @@
 // skills. Without that, opening a role whose picture was hidden would show
 // nothing selected and the next save would quietly drop it.
 //
-// There is no "no preference" choice (asked 2026-09-24): a new role starts
-// with a random picture already chosen (PostOpportunity), and a role saved
-// before that, with none, opens with nothing selected and keeps its neutral
-// fallback until the organisation picks one. So the value can be null, but
-// nobody can choose null.
+// Every role has a picture (asked 2026-09-24): there is no "no preference"
+// choice, a new role opens with a random one already chosen
+// (PostOpportunity), and image_id is NOT NULL. If a role is saved before the
+// library has loaded, the database picks one at random rather than refusing
+// (volunteer_opportunities_image_rules), and clearing one is refused.
 //
 // Real radio inputs underneath, so it is keyboard- and screen-reader-operable
 // with no extra work: arrow keys move between pictures.
@@ -67,7 +67,10 @@ export default function RoleImagePicker({ value, onChange, name = 'role-image' }
       </p>
 
       {isError ? (
-        <p className="error-text">Could not load the pictures. Your role will use a general one.</p>
+        <p className="error-text">
+          Could not load the pictures. One will be chosen for you, and you can
+          change it later.
+        </p>
       ) : isPending ? (
         <p className="help-text">Loading pictures…</p>
       ) : (

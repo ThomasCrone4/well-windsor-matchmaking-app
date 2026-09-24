@@ -604,6 +604,12 @@ rule on the form. The user replaced it before any of that was built:
   with no picture shows nothing selected on Edit and keeps its neutral
   fallback until the organisation picks one (the user chose this over
   pre-selecting a random one on Edit).
+- **Then required** (asked the same day): every existing role, all 196
+  without one, was given a random active picture; `image_id` is NOT NULL; a
+  role saved without one gets a random one; clearing one is refused; the
+  last active picture cannot be hidden. The random spread is uneven -- 6 of
+  the 14 live roles landed on the "Act now" picture -- which is what random
+  looks like at 14 rows; the organisations can change theirs.
 - **Browse card only.** The role page stays as POLISH-1 left it.
 
 Built: `role_images` + the public `role-images` bucket (5 MB; JPEG, PNG,
