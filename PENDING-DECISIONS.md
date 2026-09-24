@@ -611,6 +611,10 @@ swapped after it is on the list), `volunteer_opportunities.image_id`,
 re-encodes it, which also strips EXIF -- a phone photo's GPS position never
 leaves the machine (the walk proves it).
 
+**Admins can edit a picture's description** (asked 2026-09-24): Edit
+description on each tile, `admin_set_role_image_alt`, audited with old and
+new text. Built-in pictures too. Reordering was not asked for and is not built.
+
 **`category` dropped** 2026-09-24 (20260924144544), after the published
 bundle was checked for any remaining read or write of it.
 

@@ -1419,7 +1419,9 @@ in `PENDING-DECISIONS.md` as POLISH-9.
   or `storage_path` (a file in the public `role-images` bucket).
 - **Same shape as skills:** hiding is soft and nobody loses a picture they
   already chose; there is no delete path; the only writers are
-  `admin_add_role_image` and `admin_set_role_image_active`, both audited.
+  `admin_add_role_image`, `admin_set_role_image_active` and
+  `admin_set_role_image_alt` (the description, i.e. the alt text -- built-in
+  pictures included, same 1-200 rule), all audited.
   The `image_rules` trigger refuses CHOOSING a hidden picture but lets a role
   already holding one be re-saved (the towns rule).
 - **The bucket has an admin INSERT policy and nothing else.** No UPDATE or
@@ -1448,4 +1450,6 @@ in `PENDING-DECISIONS.md` as POLISH-9.
   those components.**
 
 Re-runnable: `.scratch/probe_role_images.py` (39) and
-`.scratch/walk_role_images.py` (28), both as the throwaway admin-a.
+`.scratch/walk_role_images.py` (28), both as the throwaway admin-a, and
+`.scratch/probe_picture_description.py` (19, API + page; edits a built-in
+picture's description and restores it by `atexit`, uploads nothing).
