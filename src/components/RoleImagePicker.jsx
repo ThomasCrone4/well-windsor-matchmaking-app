@@ -6,6 +6,12 @@
 // skills. Without that, opening a role whose picture was hidden would show
 // nothing selected and the next save would quietly drop it.
 //
+// Every role has a picture (asked 2026-09-24): there is no "no preference"
+// choice, a new role opens with a random one already chosen
+// (PostOpportunity), and image_id is NOT NULL. If a role is saved before the
+// library has loaded, the database picks one at random rather than refusing
+// (volunteer_opportunities_image_rules), and clearing one is refused.
+//
 // Real radio inputs underneath, so it is keyboard- and screen-reader-operable
 // with no extra work: arrow keys move between pictures.
 import OpportunityPhoto from './OpportunityPhoto';
@@ -57,31 +63,18 @@ export default function RoleImagePicker({ value, onChange, name = 'role-image' }
       <legend className="label">Picture for the card</legend>
       <p className="help-text mb-3">
         Shown on your role&rsquo;s card in the list of roles. Choose one of the
-        pictures Well Windsor provides, or leave it to us.
+        pictures Well Windsor provides.
       </p>
 
       {isError ? (
-        <p className="error-text">Could not load the pictures. Your role will use a general one.</p>
+        <p className="error-text">
+          Could not load the pictures. One will be chosen for you, and you can
+          change it later.
+        </p>
       ) : isPending ? (
         <p className="help-text">Loading pictures…</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Tile
-            name={name}
-            checked={current === null}
-            onSelect={() => onChange(null)}
-            label="No picture chosen: use a general one"
-          >
-            <span
-              className="flex h-full w-full items-center justify-center p-3 text-center text-sm"
-              style={{
-                backgroundColor: 'var(--color-background-secondary)',
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              No preference &mdash; use a general picture
-            </span>
-          </Tile>
           {options.map((img) => (
             <Tile
               key={img.id}

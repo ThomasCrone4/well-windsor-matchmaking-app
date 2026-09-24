@@ -16,8 +16,11 @@
  *   - `storage_path`: a file an admin uploaded to the public `role-images`
  *     bucket, already resized in the browser before upload (one width).
  *
- * The image is OPTIONAL. With none chosen the card shows one of three neutral
- * fallbacks that claim nothing -- a town, some pencils, four people from
+ * Every role HAS a picture: image_id is NOT NULL, and the database picks one
+ * at random if a role is saved without one (2026-09-24). The neutral fallback
+ * below is only a safety net for a stale client or a view row that somehow
+ * arrives without the image columns -- it shows one of three pictures
+ * that claim nothing -- a town, some pencils, four people from
  * behind -- picked by hashing the role id, so the same role keeps the same
  * picture and neighbouring cards differ. One picture repeated down the grid
  * read as a broken image loop, which is what a single castle on eleven of

@@ -598,8 +598,18 @@ rule on the form. The user replaced it before any of that was built:
   `wellwindsorshootstill037` (the home-page hero) because it shows
   identifiable pupils, and nothing on a card had done that before. An admin
   can upload it deliberately if the charity wants it on cards.
-- **Optional.** No choice means one of three neutral fallbacks, hashed off
-  the role id, as before.
+- **Optional at first; then no "no preference" at all** (asked later the
+  same day). The post form opens with a random active picture already
+  chosen, and neither form offers "no preference". A role saved before that
+  with no picture shows nothing selected on Edit and keeps its neutral
+  fallback until the organisation picks one (the user chose this over
+  pre-selecting a random one on Edit).
+- **Then required** (asked the same day): every existing role, all 196
+  without one, was given a random active picture; `image_id` is NOT NULL; a
+  role saved without one gets a random one; clearing one is refused; the
+  last active picture cannot be hidden. The random spread is uneven -- 6 of
+  the 14 live roles landed on the "Act now" picture -- which is what random
+  looks like at 14 rows; the organisations can change theirs.
 - **Browse card only.** The role page stays as POLISH-1 left it.
 
 Built: `role_images` + the public `role-images` bucket (5 MB; JPEG, PNG,
@@ -610,6 +620,10 @@ swapped after it is on the list), `volunteer_opportunities.image_id`,
 `/admin/manage`. The admin's browser resizes an upload to 1200px wide and
 re-encodes it, which also strips EXIF -- a phone photo's GPS position never
 leaves the machine (the walk proves it).
+
+**Admins can edit a picture's description** (asked 2026-09-24): Edit
+description on each tile, `admin_set_role_image_alt`, audited with old and
+new text. Built-in pictures too. Reordering was not asked for and is not built.
 
 **`category` dropped** 2026-09-24 (20260924144544), after the published
 bundle was checked for any remaining read or write of it.

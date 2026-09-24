@@ -72,6 +72,16 @@ async function setImageActive(id, active) {
   if (error) throw error;
 }
 
+// The description is the picture's alt text: what a screen reader says on every
+// card that uses it. Same 1-200 rule as adding; the function audits old + new.
+async function setImageAlt(id, alt) {
+  const { error } = await supabase.rpc('admin_set_role_image_alt', {
+    p_image_id: id,
+    p_alt: alt,
+  });
+  if (error) throw error;
+}
+
 // How many live (not removed) roles use each picture, so hiding one says what
 // it leaves behind. An admin reads every role by policy.
 async function getUsage() {
@@ -100,38 +110,115 @@ function Heading({ children }) {
   );
 }
 
-function Grid({ list, usageText, onToggle, isToggling }) {
+// One picture. Editing state is per tile and lives here, so opening one
+// description for editing never disturbs another.
+function PictureTile({ img, usageText, onToggle, isToggling, onSaveAlt }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(img.alt);
+  const [saving, setSaving] = useState(false);
+  const inputId = `role-image-alt-${img.id}`;
+  const trimmed = draft.trim();
+
+  const start = () => {
+    setDraft(img.alt);
+    setEditing(true);
+  };
+  const cancel = () => {
+    setDraft(img.alt);
+    setEditing(false);
+  };
+  const save = async (e) => {
+    e.preventDefault();
+    if (!trimmed || trimmed === img.alt) return;
+    setSaving(true);
+    try {
+      await onSaveAlt(img.id, trimmed);
+      setEditing(false);
+    } catch {
+      // The mutation has already said why; stay open so nothing typed is lost.
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <ul className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
-      {list.map((img) => (
-        <li
-          key={img.id}
-          data-role-image-id={img.id}
-          className="overflow-hidden rounded-xl"
-          style={{ border: '1px solid var(--color-border)' }}
-        >
-          <div className="aspect-[3/2]">
-            <OpportunityPhoto image={roleImageSources(img)} sizes="(min-width: 1024px) 30vw, 90vw" />
+    <li
+      data-role-image-id={img.id}
+      className="overflow-hidden rounded-xl"
+      style={{ border: '1px solid var(--color-border)' }}
+    >
+      <div className="aspect-[3/2]">
+        <OpportunityPhoto image={roleImageSources(img)} sizes="(min-width: 1024px) 30vw, 90vw" />
+      </div>
+
+      {editing ? (
+        <form onSubmit={save} className="grid gap-2 p-3">
+          <label htmlFor={inputId} className="label">
+            Describe it for people who cannot see it
+          </label>
+          <textarea
+            id={inputId}
+            className="input"
+            rows={3}
+            maxLength={200}
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') cancel();
+            }}
+          />
+          <p className="help-text">
+            {200 - draft.length} characters left. Changes every card that uses
+            this picture.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="btn-primary btn-sm"
+              disabled={saving || !trimmed || trimmed === img.alt}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" className="btn-secondary btn-sm" onClick={cancel} disabled={saving}>
+              Cancel
+            </button>
           </div>
-          <div className="flex items-start justify-between gap-3 p-3">
-            <div className="min-w-0">
-              <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                {img.alt}
-              </p>
-              <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                {img.static_base ? 'Built-in' : 'Uploaded'} &middot; {usageText(img.id)}
-              </p>
-            </div>
+        </form>
+      ) : (
+        <div className="flex items-start justify-between gap-3 p-3">
+          <div className="min-w-0">
+            <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>
+              {img.alt}
+            </p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              {img.static_base ? 'Built-in' : 'Uploaded'} &middot; {usageText(img.id)}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col gap-2">
+            <button type="button" className="btn-secondary btn-sm" onClick={start}>
+              Edit description
+            </button>
             <button
               type="button"
-              className="btn-secondary btn-sm shrink-0"
+              className="btn-secondary btn-sm"
               disabled={isToggling}
               onClick={() => onToggle(img.id, !img.is_active)}
             >
               {img.is_active ? 'Hide' : 'Restore'}
             </button>
           </div>
-        </li>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function Grid({ list, ...tileProps }) {
+  return (
+    <ul className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+      {list.map((img) => (
+        <PictureTile key={img.id} img={img} {...tileProps} />
       ))}
     </ul>
   );
@@ -182,6 +269,17 @@ export default function AdminRoleImages() {
       invalidate();
     },
     onError: (e) => toast.error(e.message || 'Could not update the picture'),
+  });
+
+  const altMut = useMutation({
+    mutationFn: ({ id, alt }) => setImageAlt(id, alt),
+    onSuccess: () => {
+      toast.success('Description updated');
+      invalidate();
+      // The browse reads the description through public_opportunities.
+      qc.invalidateQueries({ queryKey: ['public_opportunities'] });
+    },
+    onError: (e) => toast.error(e.message || 'Could not update the description'),
   });
 
   const onPick = (e) => {
@@ -269,7 +367,7 @@ export default function AdminRoleImages() {
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
             <Heading>Offered to organisations ({active.length})</Heading>
             {active.length ? (
-              <Grid list={active} usageText={usageText} onToggle={(id, active) => toggleMut.mutate({ id, active })} isToggling={toggleMut.isPending} />
+              <Grid list={active} usageText={usageText} onToggle={(id, active) => toggleMut.mutate({ id, active })} isToggling={toggleMut.isPending} onSaveAlt={(id, alt) => altMut.mutateAsync({ id, alt })} />
             ) : (
               <p className="p-6 text-center" style={{ color: 'var(--color-text-muted)' }}>
                 No pictures offered. Every role will use a general one.
@@ -284,7 +382,7 @@ export default function AdminRoleImages() {
                 Not offered to anyone posting a role now. Still shown on the
                 roles that already chose them.
               </p>
-              <Grid list={hidden} usageText={usageText} onToggle={(id, active) => toggleMut.mutate({ id, active })} isToggling={toggleMut.isPending} />
+              <Grid list={hidden} usageText={usageText} onToggle={(id, active) => toggleMut.mutate({ id, active })} isToggling={toggleMut.isPending} onSaveAlt={(id, alt) => altMut.mutateAsync({ id, alt })} />
             </div>
           )}
         </div>
