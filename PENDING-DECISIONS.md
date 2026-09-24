@@ -503,3 +503,122 @@ and broken profile saving with `PGRST204`.
 > transaction. **This was caught by tracing the consequence before applying,
 > not by a test** -- the trigger would have broken profile saving for every
 > public volunteer on the live site.
+
+**POLISH-7 · The `skills` text columns are dropped** (2026-09-22).
+`20260922123700_skills_drop_text` and `20260922124740_fix_...`, applied after
+the client went live and the deployed bundle was checked (`index-K5eacUP-.js`
+sends no `home_town, skills, bio` and writes no `skills:`).
+
+- `user_profiles_public_needs_detail` is now the deferred constraint trigger
+  `enforce_public_profile_detail`, on **both** `user_profiles` and
+  `volunteer_skills` -- the rule can be broken from either side, by ticking
+  public with no skills or by removing the last one.
+- `handle_new_user` writes the join rows from `skill_ids` metadata, guarded
+  by `jsonb_typeof(...) = 'array'` and `s.is_active` (the metadata is
+  client-supplied).
+- `admin_switch_account_type` deletes the rows instead of nulling the string.
+- `admin_account_overview` keeps the key `skills` and fills it with a
+  `string_agg`, so AdminAccountPage needed no change.
+
+> **A CASE EXPRESSION in PL/pgSQL resolves record fields in EVERY branch.**
+> The trigger is shared by two tables and chose the id with
+> `case tg_table_name when 'user_profiles' then coalesce(new.id, old.id)
+> else coalesce(new.volunteer_id, old.volunteer_id) end`. On
+> `volunteer_skills` that is `42703: record "new" has no field "id"`, because
+> the whole expression is prepared, not just the branch taken. **Every DELETE
+> from volunteer_skills failed, which took `set_volunteer_skills()` with it
+> and broke saving a volunteer profile on the live site.** It got through
+> because the first checks after applying were all on `user_profiles`, where
+> the taken branch happens to be the one that resolves. Use IF statements, and
+> use TG_OP -- NEW is unassigned on DELETE and OLD on INSERT.
+
+> **An assertion can go vacuous when a column is dropped.** `probe_wf7`
+> checked `p.get("skills") is None` after an account switch. With the column
+> gone, `select=*` has no such key and that passes however many skills the
+> person holds. It now asks `volunteer_skills` instead. Same shape as the
+> `eslint -f unix` diff that compared two empty files.
+
+Re-runnable after the drop: `.scratch/probe_skills.py` (32 cases, and it
+signs up both a volunteer and an organisation, because `handle_new_user` is
+the trigger where a mistake breaks every sign-up), `.scratch/walk_skills.py`
+(26). Regression-checked: `probe_wf9_1` 36/36, `probe_wf3` 37/37,
+`probe_wf7` 75/75, `walk_detail_a` 18/18.
+
+**POLISH-8 · Find Volunteers: any of several skills, and the browse's clear
+button** (2026-09-22).
+
+- The Skill filter was a single-select whose "don't filter" option read
+  "All skills". It is now the same `SkillsPicker` the forms use, **matching
+  with OR**: a volunteer is listed if they hold **at least one** of the
+  chosen skills. AND was never what an organisation is asking -- "someone
+  who can do first aid or drive" -- and on a list this size it would mostly
+  return nobody.
+- `SkillsPicker` gained an `options` prop for this. A FILTER offers only the
+  skills its listed volunteers actually hold, so no choice leads to an empty
+  page; a FORM offers the whole managed list. The group headings still work
+  because the page looks each id up in `useSkills().byId` for its category --
+  the view returns ids and names only.
+- Clear Filters matches the browse exactly: a small teal pill in the card's
+  corner, shown only when there is something to clear, absolutely positioned
+  so nothing moves when it appears.
+
+> **A bug this replaced, introduced when the skill filter was added:** the
+> old Clear Filters did `setFilters({ town: 'All' })`, which dropped the
+> `skill` key entirely rather than resetting it. `filters.skill` became
+> `undefined`, so `filters.skill === 'All'` was false and the filter matched
+> nothing -- clearing the filters emptied the list. **When state is one
+> object, resetting it wholesale silently drops any key added later.**
+
+Re-runnable: `.scratch/walk_find_volunteers.py` (16 UI checks, read-only).
+It proves the OR against the DATA rather than the control: it filters by each
+of two skills alone, then by both, and asserts the result is their **union**.
+An AND would be the intersection -- smaller than either.
+
+**POLISH-9 · An image on a role, and a preview** (decided 2026-09-24).
+The preview half is BUILT; the image half is **blocked** on the Supabase
+connector, which disconnected mid-session — a migration and an Edge Function
+cannot be applied without it, and only the anon key is available locally.
+
+Decided with the user:
+
+- **Upload is allowed, with the rule on screen.** The form will say plainly
+  that photographs of identifiable children need written consent from a
+  parent or guardian, and that Well Windsor does not check images before they
+  appear; an admin can take one down. **This reverses the deliberate omission
+  recorded in `opportunityImages.js`**, which said upload was not built
+  because the safeguarding question had not been put to the charity. It has
+  been now, and this is the answer.
+- **A pasted URL is fetched once, server-side, and stored as our own copy.**
+  Not hotlinked: a hotlinked image can be swapped for anything after an admin
+  has looked at it, breaks silently when the source moves, and leaks every
+  visitor's IP to that host.
+- **The image appears on the BROWSE CARD only.** The role page stays as
+  POLISH-1 left it — one column, no photograph.
+- Stock images stay as the fallback when no image is chosen.
+
+**Still to build (needs the connector):** an image column + a storage bucket
+with size and type limits and its own RLS (**not** the shape of
+`enquiry_attachments`, which CLAUDE.md lists as accepting uploads of any size
+or type from any signed-in user), an Edge Function for the fetch-and-store
+path, the form control, and an admin take-down.
+
+**Built now:**
+
+- `OpportunityCard.jsx` and `RoleDetailBody.jsx` are extracted from the
+  browse and the role page. **The preview renders those, not copies.** A
+  preview built from duplicated markup drifts from the thing it previews,
+  which is worse than no preview: it tells the organisation something untrue
+  with a straight face. Same reasoning as OpportunityPhoto being one
+  component.
+- `OpportunityPreviewDialog.jsx` shows the browse card and the role page
+  together, from **unsaved form state** — it deliberately does not run
+  through `handleSubmit`, because a half-filled form is exactly when somebody
+  wants to look, and validation would refuse to open.
+- Fixed in passing: the role page said "1 volunteers needed".
+
+> **Noticed, not changed:** the edit form's Title input has **no `id`** and
+> its `<label>` no `htmlFor`, so clicking the label does not focus the field.
+> The post form's does. Found because a walk selecting `#title` timed out.
+
+Re-runnable: `.scratch/walk_preview.py` (14 UI checks; it creates its own
+DRAFT fixture — invisible on the public browse — and sweeps it by `atexit`).

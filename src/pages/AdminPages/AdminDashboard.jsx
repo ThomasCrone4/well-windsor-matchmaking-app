@@ -748,7 +748,7 @@ export default function AdminDashboard() {
                           {org.created_at && (
                             <div className="flex items-center gap-2">
                               <Clock size={14} />
-                              <span>Joined {format(parseISO(org.created_at), 'PPP')}</span>
+                              <span>Joined {format(parseISO(org.created_at), 'd MMM yyyy')}</span>
                             </div>
                           )}
                         </div>

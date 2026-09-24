@@ -73,7 +73,7 @@ export default function SentEnquiriesOrgPage() {
               </div>
 
               <p className="caption">
-                {format(new Date(message.created_at), 'PPP p')}
+                {format(new Date(message.created_at), 'd MMM yyyy, HH:mm')}
                 {message.volunteer_home_town ? ` · ${message.volunteer_home_town}` : ''}
                 {message.opportunity_title ? ` · about ${message.opportunity_title}` : ''}
               </p>

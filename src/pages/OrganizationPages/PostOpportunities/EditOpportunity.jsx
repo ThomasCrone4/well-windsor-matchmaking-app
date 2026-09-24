@@ -6,7 +6,8 @@ import { supabase } from '../../../utils/supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import SkillsPicker from '../../../components/SkillsPicker';
-import { fetchSkillIds, replaceSkills } from '../../../utils/skills';
+import { fetchSkillIds, replaceSkills, useSkills } from '../../../utils/skills';
+import OpportunityPreviewDialog from '../../../components/OpportunityPreviewDialog';
 import toast from 'react-hot-toast';
 import { useEffect, useRef, useState } from 'react';
 
@@ -181,6 +182,10 @@ export default function EditOpportunity() {
 
   const [skillIds, setSkillIds] = useState([]);
   const initialSkillIds = useRef([]);
+  const [previewing, setPreviewing] = useState(false);
+  // The preview shows skill NAMES, and the organisation's own details --
+  // it renders the role as a volunteer will see it.
+  const { byId: skillsById } = useSkills();
 
   useEffect(() => {
     if (!skillsPending && savedSkillIds) {
@@ -754,6 +759,16 @@ export default function EditOpportunity() {
                   >
                     Discard changes
                   </button>
+
+                  {/* Not gated on formDirty: looking at an unchanged role is
+                      a perfectly good reason to open this. */}
+                  <button
+                    type="button"
+                    onClick={() => setPreviewing(true)}
+                    className="btn btn-ghost"
+                  >
+                    Preview
+                  </button>
                 </div>
               ) : (
                 <div className="flex gap-4 pt-2">
@@ -774,12 +789,42 @@ export default function EditOpportunity() {
                   >
                     Discard Changes
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPreviewing(true)}
+                    className="btn btn-ghost"
+                  >
+                    Preview
+                  </button>
                 </div>
               )}
             </div>
           </form>
         )}
       </div>
+
+      {previewing && (
+        <OpportunityPreviewDialog
+          op={{
+            id: id ?? 'preview',
+            title: watch('title'),
+            description: watch('description'),
+            location: watch('location'),
+            town: watch('town') || soleTown,
+            category: watch('category'),
+            requires_dbs: !!watch('requires_dbs'),
+            generally_needed: !!watch('generally_needed'),
+            volunteers_needed: Number(watch('volunteers_needed')) || 1,
+          }}
+          orgName={profile?.name || 'Your organisation'}
+          orgHomeTown={profile?.home_town}
+          orgBio={profile?.bio}
+          blocks={watch('when_needed') ?? []}
+          skillNames={skillIds.map((sid) => skillsById.get(sid)?.name).filter(Boolean)}
+          onClose={() => setPreviewing(false)}
+        />
+      )}
     </div>
   );
 }
