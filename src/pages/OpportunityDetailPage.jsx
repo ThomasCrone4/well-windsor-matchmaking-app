@@ -71,7 +71,6 @@ export default function OpportunityDetailPage() {
           status,
           deleted_at,
           org_id,
-          category,
           created_at
         `
         )
@@ -248,9 +247,8 @@ export default function OpportunityDetailPage() {
   // lives in RoleDetailBody now, so the preview on the role forms renders
   // the same thing rather than a second copy of the rules.
   // WF-polish. The full-bleed photograph is gone. It was never the
-  // organisation's -- opportunityImages.js picks one of six stock pictures
-  // from the role's category, and with almost no row carrying a category most
-  // got one of three neutral fallbacks hashed off the id. It could not be
+  // organisation's -- it was a stock picture, and (POLISH-9) is now one the
+  // organisation chooses from the admins' library for the CARD only. It could not be
   // sharp either: the widest rendition is 800px and the band was the width of
   // the window, so the browser upscaled it and then cropped a 3:2 photo into a
   // 288px letterbox. The browse cards keep theirs, where 800w is ample.
