@@ -1414,7 +1414,12 @@ replaced by the user before it was built -- do not revive it. Decisions are
 in `PENDING-DECISIONS.md` as POLISH-9.
 
 - **`role_images` is the library**; `volunteer_opportunities.image_id` points
-  at one row, nullable (no choice = a neutral fallback hashed off the id).
+  at one row, nullable (null = a neutral fallback hashed off the id).
+- **There is no "no preference" choice in the picker** (asked 2026-09-24).
+  The post form opens with a RANDOM active picture already chosen, once per
+  page load; a role saved earlier with none opens on Edit with nothing
+  selected and keeps its fallback until someone picks. So null still exists
+  in the data, but nobody can choose it.
   A row is either `static_base` (a stock photo shipped in `public/images/`)
   or `storage_path` (a file in the public `role-images` bucket).
 - **Same shape as skills:** hiding is soft and nobody loses a picture they

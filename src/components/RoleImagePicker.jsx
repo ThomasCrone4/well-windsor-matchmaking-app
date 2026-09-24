@@ -6,6 +6,12 @@
 // skills. Without that, opening a role whose picture was hidden would show
 // nothing selected and the next save would quietly drop it.
 //
+// There is no "no preference" choice (asked 2026-09-24): a new role starts
+// with a random picture already chosen (PostOpportunity), and a role saved
+// before that, with none, opens with nothing selected and keeps its neutral
+// fallback until the organisation picks one. So the value can be null, but
+// nobody can choose null.
+//
 // Real radio inputs underneath, so it is keyboard- and screen-reader-operable
 // with no extra work: arrow keys move between pictures.
 import OpportunityPhoto from './OpportunityPhoto';
@@ -57,7 +63,7 @@ export default function RoleImagePicker({ value, onChange, name = 'role-image' }
       <legend className="label">Picture for the card</legend>
       <p className="help-text mb-3">
         Shown on your role&rsquo;s card in the list of roles. Choose one of the
-        pictures Well Windsor provides, or leave it to us.
+        pictures Well Windsor provides.
       </p>
 
       {isError ? (
@@ -66,22 +72,6 @@ export default function RoleImagePicker({ value, onChange, name = 'role-image' }
         <p className="help-text">Loading pictures…</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Tile
-            name={name}
-            checked={current === null}
-            onSelect={() => onChange(null)}
-            label="No picture chosen: use a general one"
-          >
-            <span
-              className="flex h-full w-full items-center justify-center p-3 text-center text-sm"
-              style={{
-                backgroundColor: 'var(--color-background-secondary)',
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              No preference &mdash; use a general picture
-            </span>
-          </Tile>
           {options.map((img) => (
             <Tile
               key={img.id}

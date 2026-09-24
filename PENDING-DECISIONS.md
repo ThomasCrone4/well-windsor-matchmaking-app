@@ -598,8 +598,12 @@ rule on the form. The user replaced it before any of that was built:
   `wellwindsorshootstill037` (the home-page hero) because it shows
   identifiable pupils, and nothing on a card had done that before. An admin
   can upload it deliberately if the charity wants it on cards.
-- **Optional.** No choice means one of three neutral fallbacks, hashed off
-  the role id, as before.
+- **Optional at first; then no "no preference" at all** (asked later the
+  same day). The post form opens with a random active picture already
+  chosen, and neither form offers "no preference". A role saved before that
+  with no picture shows nothing selected on Edit and keeps its neutral
+  fallback until the organisation picks one (the user chose this over
+  pre-selecting a random one on Edit).
 - **Browse card only.** The role page stays as POLISH-1 left it.
 
 Built: `role_images` + the public `role-images` bucket (5 MB; JPEG, PNG,

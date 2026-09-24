@@ -2,7 +2,7 @@
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../../../utils/supabase';
 import toast from 'react-hot-toast';
 import AvailabilityMatrix from '../../../components/AvailabilityMatrix';
@@ -113,6 +113,20 @@ export default function PostOpportunity() {
   // POLISH-9. Same reasoning: the picture picker is not a registered input.
   const [imageId, setImageId] = useState(null);
   const { data: roleImages = [] } = useRoleImages();
+
+  // A new role starts with a picture already chosen, at random from the ones
+  // on offer, so neighbouring roles do not all open on the same one. Once
+  // only: after the organisation (or this) has chosen, a refetch of the
+  // library must not re-roll it. An empty library leaves it null, and the
+  // card falls back to a neutral picture.
+  const pickedDefault = useRef(false);
+  useEffect(() => {
+    if (pickedDefault.current) return;
+    const offered = roleImages.filter((i) => i.is_active);
+    if (!offered.length) return;
+    pickedDefault.current = true;
+    setImageId(offered[Math.floor(Math.random() * offered.length)].id);
+  }, [roleImages]);
   const [previewing, setPreviewing] = useState(false);
 
   // The preview needs names, not ids, and the organisation's own details --
