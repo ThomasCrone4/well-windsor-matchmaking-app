@@ -611,8 +611,8 @@ swapped after it is on the list), `volunteer_opportunities.image_id`,
 re-encodes it, which also strips EXIF -- a phone photo's GPS position never
 leaves the machine (the walk proves it).
 
-**Held:** `supabase/pending/polish9_drop_category.sql` drops `category` once
-this client is live -- the deployed client still reads and writes it.
+**`category` dropped** 2026-09-24 (20260924144544), after the published
+bundle was checked for any remaining read or write of it.
 
 > **Probes leave a file behind.** Storage refuses a direct SQL delete
 > (`storage.protect_delete`) and the bucket deliberately has no DELETE
