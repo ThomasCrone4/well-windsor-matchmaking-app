@@ -5,14 +5,13 @@ import { toast } from 'react-hot-toast';
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
-  formatOpportunitySchedule,
   blocksFromTimeblockRows,
   compareByNextDate,
 } from '../utils/schedule';
 import CardSkeleton from '../components/skeletons/CardSkeleton';
-import OpportunityPhoto from '../components/OpportunityPhoto';
 import { useTowns } from '../utils/towns';
 import Pagination from '../components/Pagination';
+import OpportunityCard from '../components/OpportunityCard';
 
 // WF9-2. The availability badge ("Full availability match" and its four
 // siblings) and the "Show Matches Only" toggle were here. Both are gone with
@@ -449,115 +448,15 @@ export default function OpportunitiesPage() {
             const blocks = blocksByOpp.get(op.id) ?? [];
 
             return (
-              <li key={op.id} className="card !p-0 flex flex-col overflow-hidden">
-                {/* Photograph chosen from the category. There is no image
-                    column and no upload, so this is a fallback, not a
-                    picture of this role -- see utils/opportunityImages.js. */}
-                <Link
-                  to={`/opportunities/${op.id}`}
-                  className="block h-40 sm:h-44 overflow-hidden"
-                  tabIndex={-1}
-                  aria-hidden="true"
-                >
-                  <OpportunityPhoto
-                    category={op.category}
-                    id={op.id}
-                    sizes="(min-width: 1024px) 45vw, 100vw"
-                  />
-                </Link>
-
-                <div className="flex flex-1 flex-col gap-2 p-5">
-                  <p
-                    className="text-xs font-semibold"
-                    style={{ color: 'var(--color-brand-ink)' }}
-                  >
-                    {orgName}
-                  </p>
-
-                  <h2 className="text-lg font-semibold leading-snug">
-                    <Link to={`/opportunities/${op.id}`} className="hover:underline">
-                      {op.title}
-                    </Link>
-                  </h2>
-
-                  <p
-                    className="text-sm line-3"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
-                    {op.description}
-                  </p>
-
-                  {/* Tags. The schedule, the place and the volunteer count
-                      were three labelled lines of emoji; they are the same
-                      facts, read faster. */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    {op.requires_dbs && <span className="tag">DBS check</span>}
-                    {/* ROLE-5. This now reads the same rows the matcher and
-                        the detail page read, so the tag can no longer
-                        contradict them. It used to read `when_needed`, which
-                        was NULL on every live role — the reason no card has
-                        ever shown a schedule. Still silent rather than
-                        "Schedule TBC" when a non-flexible role genuinely has
-                        no times: saying nothing is honest, guessing is not. */}
-                    {op.generally_needed ? (
-                      <span className="tag-plain">Flexible timing</span>
-                    ) : blocks.length > 0 ? (
-                      <span className="tag-plain">
-                        {formatOpportunitySchedule({ ...op, timeblocks: blocks })}
-                      </span>
-                    ) : null}
-                    {/* location is meant to be the venue -- "St Edward's,
-                        Parsonage Lane". On every row today it just repeats
-                        the town, so this would print "Windsor" on all
-                        fourteen cards: a tag that says the same thing
-                        everywhere carries no information. Show it only once
-                        it says something the town does not. */}
-                    {op.location && op.location !== op.town && (
-                      <span className="tag-plain">{op.location}</span>
-                    )}
-                    {op.volunteers_needed > 1 && (
-                      <span className="tag-plain">{op.volunteers_needed} needed</span>
-                    )}
-                  </div>
-
-                  {/* Safeguarding. The platform vets nobody; say so where the
-                      requirement is, not only in the page preamble. */}
-                  {op.requires_dbs && (
-                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                      The DBS check is arranged by the organisation, not by Well
-                      Windsor.
-                    </p>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-3 pt-3 mt-auto">
-                    <Link to={`/opportunities/${op.id}`} className="btn-secondary btn-sm">
-                      Read more
-                    </Link>
-
-                    {userProfile?.role === 'volunteer' && (
-                      <>
-                        {alreadyEnquired ? (
-                          <button
-                            className="btn-secondary btn-sm opacity-60 cursor-not-allowed"
-                            disabled
-                            title="You have already registered interest in this role"
-                          >
-                            Interest registered
-                          </button>
-                        ) : (
-                          <button
-                            className="btn-primary btn-sm"
-                            onClick={() => handleApply(op.id)}
-                            title="Register interest in this role"
-                          >
-                            Register interest
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              </li>
+              <OpportunityCard
+                key={op.id}
+                op={op}
+                blocks={blocks}
+                orgName={orgName}
+                isVolunteer={userProfile?.role === 'volunteer'}
+                alreadyEnquired={alreadyEnquired}
+                onApply={handleApply}
+              />
             );
           })}
         </ul>

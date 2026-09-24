@@ -17,7 +17,8 @@ import ApprovalNotice from '../../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../../utils/approval';
 import { LIMITS, checkFreeText, charsLeft } from '../../../utils/contentChecks';
 import SkillsPicker from '../../../components/SkillsPicker';
-import { replaceSkills } from '../../../utils/skills';
+import { replaceSkills, useSkills } from '../../../utils/skills';
+import OpportunityPreviewDialog from '../../../components/OpportunityPreviewDialog';
 
 const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
@@ -121,6 +122,12 @@ export default function PostOpportunity() {
   // state would make two places the value lives -- which is how `skills`
   // itself once went missing on this very form (see the schema note above).
   const [skillIds, setSkillIds] = useState([]);
+  const [previewing, setPreviewing] = useState(false);
+
+  // The preview needs names, not ids, and the organisation's own details --
+  // it is showing the role as a volunteer will see it, and a volunteer sees
+  // the organisation's name at the top.
+  const { byId: skillsById } = useSkills();
 
   const generallyNeeded = watch('generally_needed');
   const descriptionLeft = charsLeft(watch('description'), 'description');
@@ -529,8 +536,42 @@ export default function PostOpportunity() {
           >
             Save as Draft
           </button>
+
+          {/* Preview does NOT validate or save: it shows what is typed, even
+              half-typed. Running it through handleSubmit would refuse to open
+              on an incomplete form, which is exactly when somebody wants to
+              look. */}
+          <button
+            type="button"
+            onClick={() => setPreviewing(true)}
+            className="btn-ghost w-full"
+          >
+            Preview
+          </button>
         </div>
       </form>
+
+      {previewing && (
+        <OpportunityPreviewDialog
+          op={{
+            id: 'preview',
+            title: watch('title'),
+            description: watch('description'),
+            location: watch('location'),
+            town: showPicker ? watch('town') : soleTown,
+            category: watch('category'),
+            requires_dbs: !!watch('requires_dbs'),
+            generally_needed: !!watch('generally_needed'),
+            volunteers_needed: Number(watch('volunteers_needed')) || 1,
+          }}
+          orgName={profile?.name || 'Your organisation'}
+          orgHomeTown={profile?.home_town}
+          orgBio={profile?.bio}
+          blocks={watch('when_needed') ?? []}
+          skillNames={skillIds.map((id) => skillsById.get(id)?.name).filter(Boolean)}
+          onClose={() => setPreviewing(false)}
+        />
+      )}
     </div>
   );
 }

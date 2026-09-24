@@ -573,3 +573,52 @@ Re-runnable: `.scratch/walk_find_volunteers.py` (16 UI checks, read-only).
 It proves the OR against the DATA rather than the control: it filters by each
 of two skills alone, then by both, and asserts the result is their **union**.
 An AND would be the intersection -- smaller than either.
+
+**POLISH-9 · An image on a role, and a preview** (decided 2026-09-24).
+The preview half is BUILT; the image half is **blocked** on the Supabase
+connector, which disconnected mid-session — a migration and an Edge Function
+cannot be applied without it, and only the anon key is available locally.
+
+Decided with the user:
+
+- **Upload is allowed, with the rule on screen.** The form will say plainly
+  that photographs of identifiable children need written consent from a
+  parent or guardian, and that Well Windsor does not check images before they
+  appear; an admin can take one down. **This reverses the deliberate omission
+  recorded in `opportunityImages.js`**, which said upload was not built
+  because the safeguarding question had not been put to the charity. It has
+  been now, and this is the answer.
+- **A pasted URL is fetched once, server-side, and stored as our own copy.**
+  Not hotlinked: a hotlinked image can be swapped for anything after an admin
+  has looked at it, breaks silently when the source moves, and leaks every
+  visitor's IP to that host.
+- **The image appears on the BROWSE CARD only.** The role page stays as
+  POLISH-1 left it — one column, no photograph.
+- Stock images stay as the fallback when no image is chosen.
+
+**Still to build (needs the connector):** an image column + a storage bucket
+with size and type limits and its own RLS (**not** the shape of
+`enquiry_attachments`, which CLAUDE.md lists as accepting uploads of any size
+or type from any signed-in user), an Edge Function for the fetch-and-store
+path, the form control, and an admin take-down.
+
+**Built now:**
+
+- `OpportunityCard.jsx` and `RoleDetailBody.jsx` are extracted from the
+  browse and the role page. **The preview renders those, not copies.** A
+  preview built from duplicated markup drifts from the thing it previews,
+  which is worse than no preview: it tells the organisation something untrue
+  with a straight face. Same reasoning as OpportunityPhoto being one
+  component.
+- `OpportunityPreviewDialog.jsx` shows the browse card and the role page
+  together, from **unsaved form state** — it deliberately does not run
+  through `handleSubmit`, because a half-filled form is exactly when somebody
+  wants to look, and validation would refuse to open.
+- Fixed in passing: the role page said "1 volunteers needed".
+
+> **Noticed, not changed:** the edit form's Title input has **no `id`** and
+> its `<label>` no `htmlFor`, so clicking the label does not focus the field.
+> The post form's does. Found because a walk selecting `#title` timed out.
+
+Re-runnable: `.scratch/walk_preview.py` (14 UI checks; it creates its own
+DRAFT fixture — invisible on the public browse — and sweeps it by `atexit`).
