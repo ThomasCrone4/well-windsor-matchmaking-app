@@ -25,7 +25,10 @@ charity's go-ahead rather than a deploy.
 
 ## Currently held
 
-Nothing.
+- **`polish9_drop_category.sql`** — drops `volunteer_opportunities.category`,
+  replaced by `image_id` (POLISH-9). Waits for the `polish-role-images`
+  client to be merged and live: the client deployed before it reads and
+  writes `category`.
 
 ## Applied from here
 

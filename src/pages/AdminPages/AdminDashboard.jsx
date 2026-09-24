@@ -12,6 +12,7 @@ import { TakeDownRoleDialog, SwitchAccountDialog } from './AdminActionDialogs';
 import AdminNav from './AdminNav';
 import AdminApprovalQueue from './AdminApprovalQueue';
 import AdminEmailLogs from './AdminEmailLogs';
+import AdminRoleImages from './AdminRoleImages';
 import Pagination from '../../components/Pagination';
 import { useTowns } from '../../utils/towns';
 
@@ -475,6 +476,9 @@ export default function AdminDashboard() {
           </TabBtn>
           <TabBtn id="skills" count={skillRows?.filter((s) => s.is_active)?.length}>
             Skills
+          </TabBtn>
+          <TabBtn id="images">
+            Pictures
           </TabBtn>
         </div>
       )}
@@ -980,6 +984,9 @@ export default function AdminDashboard() {
           />
         </section>
       )}
+
+      {/* ROLE PICTURES (POLISH-9) */}
+      {section === 'manage' && activeTab === 'images' && <AdminRoleImages />}
 
       {/* TOWNS (ADM-6) */}
       {section === 'manage' && activeTab === 'towns' && (

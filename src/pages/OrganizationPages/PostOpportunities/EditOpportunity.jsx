@@ -24,13 +24,13 @@ import {
   sameSchedule,
 } from '../../../utils/schedule';
 import { useTowns, townOptionsFor } from '../../../utils/towns';
-import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
+import { imageFieldsFor, useRoleImages } from '../../../utils/opportunityImages';
+import RoleImagePicker from '../../../components/RoleImagePicker';
 import useUserProfile from '../../../hooks/useUserProfile';
 import ApprovalNotice from '../../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../../utils/approval';
 import { LIMITS, checkFreeText, charsLeft } from '../../../utils/contentChecks';
 
-const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
 // This form is reset() straight from the database row, so every field that
 // is nullable in the database arrives here as null -- and z.string().optional()
@@ -74,13 +74,6 @@ const getSchema = (isDraft, towns, showPicker) =>
     town: isDraft || !showPicker
       ? nullableText
       : z.string().refine((v) => towns.includes(v), 'Please choose a town'),
-    // Nullable on the table and null on every row that predates it, so
-    // reset() feeds this null -- .optional() alone would reject that and
-    // make Save Changes fail silently, exactly as `skills` once did.
-    category: nullableText.refine(
-      (v) => !v || CATEGORY_VALUES.includes(v),
-      'Please choose a kind of role'
-    ),
     volunteers_needed: isDraft
       ? z.coerce.number().max(LIMITS.volunteers_needed).optional()
       : z.coerce
@@ -133,7 +126,6 @@ export default function EditOpportunity() {
       description: '',
       location: '',
       town: '',
-      category: '',
       volunteers_needed: 1,
       generally_needed: true,
       when_needed: [],
@@ -201,7 +193,22 @@ export default function EditOpportunity() {
   const skillsDirty =
     skillIds.length !== initialSkillIds.current.length ||
     skillIds.some((v) => !initialSkillIds.current.includes(v));
-  const formDirty = isDirty || skillsDirty;
+
+  // POLISH-9. The picture picker is outside react-hook-form for the same
+  // reason, so it needs the same dirty flag -- or choosing only a new picture
+  // would leave Save greyed out.
+  const [imageId, setImageId] = useState(null);
+  const initialImageId = useRef(null);
+  const { data: roleImages = [] } = useRoleImages();
+  useEffect(() => {
+    if (opportunity) {
+      setImageId(opportunity.image_id ?? null);
+      initialImageId.current = opportunity.image_id ?? null;
+    }
+  }, [opportunity]);
+  const imageDirty = imageId !== initialImageId.current;
+
+  const formDirty = isDirty || skillsDirty || imageDirty;
 
   // Called here, below formDirty, and not up with the other hooks: `const` is
   // in the temporal dead zone until its declaration runs, so reading it
@@ -220,9 +227,6 @@ export default function EditOpportunity() {
         ...opportunity,
         when_needed: blocks,
         town: opportunity.town ?? '',
-        // Same reason as town: a null on a controlled <select> makes React
-        // fall back to uncontrolled and warn.
-        category: opportunity.category ?? '',
       };
       reset(defaults, { keepDirty: false, keepTouched: false });
       originalData.current = defaults;
@@ -366,6 +370,7 @@ export default function EditOpportunity() {
       queryClient.invalidateQueries(['volunteer_opportunities']);
 
       originalData.current = { ...(originalData.current || {}), ...saved };
+      initialImageId.current = saved.image_id ?? null;
 
       reset(
         { ...getValues(), ...saved, when_needed: saved.when_needed ?? [] },
@@ -397,7 +402,9 @@ export default function EditOpportunity() {
       // POLISH-4: skills are rows in opportunity_skills now, written by the
       // mutation below. The text column is left exactly as it is until the
       // pending migration drops it.
-      category: formData.category || null,
+      // POLISH-9. The trigger refuses a hidden picture only when it CHANGES,
+      // so re-saving a role that holds a since-hidden one is fine.
+      image_id: imageId,
       volunteers_needed: Number(formData.volunteers_needed ?? 1),
       generally_needed: !!formData.generally_needed,
       requires_dbs: !!formData.requires_dbs,
@@ -454,6 +461,7 @@ export default function EditOpportunity() {
     // Without this, "Discard changes" would leave the skills as edited while
     // saying everything was discarded.
     setSkillIds(initialSkillIds.current);
+    setImageId(initialImageId.current);
     toast.success('Changes discarded');
   };
 
@@ -558,27 +566,9 @@ export default function EditOpportunity() {
             </div>
             )}
 
-            {/* Category — picks the photograph on the listing */}
+            {/* POLISH-9. The card's picture, from the admins' library. */}
             <div className="form-row">
-              <label className="label">
-                Kind of role <span className="help-text">(optional)</span>
-              </label>
-              <select
-                {...register('category')}
-                className={`select ${errors.category ? 'input-invalid' : ''}`}
-                aria-invalid={!!errors.category}
-              >
-                <option value="">No preference (use a general photo)</option>
-                {OPPORTUNITY_CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
-              {errors.category
-                ? <p className="error-text">{errors.category.message}</p>
-                : <p className="help-text">
-                    Chooses the photograph shown on your listing. You cannot
-                    upload your own picture yet.
-                  </p>}
+              <RoleImagePicker value={imageId} onChange={setImageId} />
             </div>
 
             {/* Location — free text, the human-readable place */}
@@ -812,7 +802,7 @@ export default function EditOpportunity() {
             description: watch('description'),
             location: watch('location'),
             town: watch('town') || soleTown,
-            category: watch('category'),
+            ...imageFieldsFor(roleImages.find((i) => i.id === imageId)),
             requires_dbs: !!watch('requires_dbs'),
             generally_needed: !!watch('generally_needed'),
             volunteers_needed: Number(watch('volunteers_needed')) || 1,

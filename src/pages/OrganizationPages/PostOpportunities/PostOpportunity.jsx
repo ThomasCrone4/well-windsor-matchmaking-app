@@ -11,7 +11,8 @@ import { useNavigate } from 'react-router-dom';
 // 🔁 use your schedule.js
 import { toDate, toMinutes, normalizeDays, DAYS } from '../../../utils/schedule';
 import { useTowns } from '../../../utils/towns';
-import { OPPORTUNITY_CATEGORIES } from '../../../utils/opportunityImages';
+import { imageFieldsFor, useRoleImages } from '../../../utils/opportunityImages';
+import RoleImagePicker from '../../../components/RoleImagePicker';
 import useUserProfile from '../../../hooks/useUserProfile';
 import ApprovalNotice from '../../../components/ApprovalNotice';
 import { isPendingOrganisation } from '../../../utils/approval';
@@ -19,8 +20,6 @@ import { LIMITS, checkFreeText, charsLeft } from '../../../utils/contentChecks';
 import SkillsPicker from '../../../components/SkillsPicker';
 import { replaceSkills, useSkills } from '../../../utils/skills';
 import OpportunityPreviewDialog from '../../../components/OpportunityPreviewDialog';
-
-const CATEGORY_VALUES = OPPORTUNITY_CATEGORIES.map((c) => c.value);
 
 // APP-5. Length limits mirror the CHECK constraints on the table, so the form
 // can say it in words instead of surfacing a 23514 nobody can read; the word
@@ -58,16 +57,6 @@ const getOpportunitySchema = (isDraft, towns, showPicker) =>
     // name, so `data.skills` never reached submitOpportunity -- and
     // postData did not send it either. Proven by the 2026-09-11 core-loop
     // walk, which posted "first aid, marshalling" and read back NULL.
-    // Optional in both states -- the browse falls back to a neutral image.
-    // It MUST be declared here even so: zod strips keys the schema does not
-    // mention, so a field that is registered but unlisted silently never
-    // reaches the submit handler. That is what happens to `skills` on this
-    // form today.
-    category: z
-      .string()
-      .nullable()
-      .optional()
-      .refine((v) => !v || CATEGORY_VALUES.includes(v), 'Please choose a category'),
     generally_needed: z.boolean(),
     // Still called when_needed here: it is the AvailabilityMatrix field name,
     // not a column. The column of that name is gone -- these blocks are
@@ -109,7 +98,6 @@ export default function PostOpportunity() {
       description: '',
       location: '',
       town: '',
-      category: '',
       generally_needed: true,
       when_needed: [],
       requires_dbs: false,
@@ -122,6 +110,9 @@ export default function PostOpportunity() {
   // state would make two places the value lives -- which is how `skills`
   // itself once went missing on this very form (see the schema note above).
   const [skillIds, setSkillIds] = useState([]);
+  // POLISH-9. Same reasoning: the picture picker is not a registered input.
+  const [imageId, setImageId] = useState(null);
+  const { data: roleImages = [] } = useRoleImages();
   const [previewing, setPreviewing] = useState(false);
 
   // The preview needs names, not ids, and the organisation's own details --
@@ -262,9 +253,8 @@ export default function PostOpportunity() {
       // POLISH-4: skills are rows in opportunity_skills now, written below
       // once the role has an id. The text column is left untouched -- it is
       // dropped in supabase/pending/ after this client is live.
-      // null rather than '': the CHECK accepts the three values or NULL,
-      // and '' would be rejected outright.
-      category: data.category || null,
+      // POLISH-9. One of the admins' pictures, or null for a neutral one.
+      image_id: imageId,
       generally_needed: !!data.generally_needed,
       // No `when_needed` and no `contact`: both columns are gone (ROLE-5,
       // ROLE-3). The schedule goes to opportunity_timeblocks below, which is
@@ -393,30 +383,10 @@ export default function PostOpportunity() {
           </div>
           )}
 
-          {/* Category — picks the photograph on the listing. Optional:
-              without one the card gets a neutral Windsor image rather than
-              an empty slot. */}
+          {/* POLISH-9. The card's picture, from the admins' library.
+              Optional: without one the card gets a neutral picture. */}
           <div className="form-row">
-            <label htmlFor="category" className="label">
-              Kind of role <span className="help-text">(optional)</span>
-            </label>
-            <select
-              id="category"
-              {...register('category')}
-              className={`select ${errors.category ? 'input-invalid' : ''}`}
-              aria-invalid={!!errors.category}
-            >
-              <option value="">No preference (use a general photo)</option>
-              {OPPORTUNITY_CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-            {errors.category
-              ? <p className="error-text">{errors.category.message}</p>
-              : <p className="help-text">
-                  Chooses the photograph shown on your listing. You cannot
-                  upload your own picture yet.
-                </p>}
+            <RoleImagePicker value={imageId} onChange={setImageId} />
           </div>
 
           {/* Location — free text, the human-readable place */}
@@ -559,7 +529,7 @@ export default function PostOpportunity() {
             description: watch('description'),
             location: watch('location'),
             town: showPicker ? watch('town') : soleTown,
-            category: watch('category'),
+            ...imageFieldsFor(roleImages.find((i) => i.id === imageId)),
             requires_dbs: !!watch('requires_dbs'),
             generally_needed: !!watch('generally_needed'),
             volunteers_needed: Number(watch('volunteers_needed')) || 1,

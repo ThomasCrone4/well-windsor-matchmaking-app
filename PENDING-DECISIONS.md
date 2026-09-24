@@ -574,33 +574,51 @@ It proves the OR against the DATA rather than the control: it filters by each
 of two skills alone, then by both, and asserts the result is their **union**.
 An AND would be the intersection -- smaller than either.
 
-**POLISH-9 · An image on a role, and a preview** (decided 2026-09-24).
-The preview half is BUILT; the image half is **blocked** on the Supabase
-connector, which disconnected mid-session — a migration and an Edge Function
-cannot be applied without it, and only the anon key is available locally.
+**POLISH-9 · An image on a role, and a preview** (decided 2026-09-24,
+**revised the same day**). Both halves are BUILT, on branch
+`polish-role-images`.
 
-Decided with the user:
+**Revised: organisations do not upload at all.** The first version of this
+decision allowed organisation uploads and pasted URLs, with a safeguarding
+rule on the form. The user replaced it before any of that was built:
 
-- **Upload is allowed, with the rule on screen.** The form will say plainly
-  that photographs of identifiable children need written consent from a
-  parent or guardian, and that Well Windsor does not check images before they
-  appear; an admin can take one down. **This reverses the deliberate omission
-  recorded in `opportunityImages.js`**, which said upload was not built
-  because the safeguarding question had not been put to the charity. It has
-  been now, and this is the answer.
-- **A pasted URL is fetched once, server-side, and stored as our own copy.**
-  Not hotlinked: a hotlinked image can be swapped for anything after an admin
-  has looked at it, breaks silently when the source moves, and leaks every
-  visitor's IP to that host.
-- **The image appears on the BROWSE CARD only.** The role page stays as
-  POLISH-1 left it — one column, no photograph.
-- Stock images stay as the fallback when no image is chosen.
+- **Admins keep a library of stock pictures; organisations choose from it.**
+  No organisation upload, no URL fetch, no Edge Function, and no
+  safeguarding notice on the role form -- every picture on offer was put
+  there by the charity. The consent rule about identifiable children is
+  stated to the ADMIN, on the upload screen, instead.
+- **Hiding is soft, like skills (POLISH-4).** A hidden picture leaves the
+  picker and stays on every role that already chose it. There is no delete
+  path. Choosing a hidden picture is refused; re-saving a role that already
+  holds one is not (the towns rule, ADM-6).
+- **The built-in stock photos were seeded as the first library entries** and
+  the old in-schools / behind-the-scenes / one-off category picker is gone.
+  Seven were seeded, not nine: `unsplash-image-z-7yz6-f1zq` because the
+  charity asked for it to be removed on 2026-09-10, and
+  `wellwindsorshootstill037` (the home-page hero) because it shows
+  identifiable pupils, and nothing on a card had done that before. An admin
+  can upload it deliberately if the charity wants it on cards.
+- **Optional.** No choice means one of three neutral fallbacks, hashed off
+  the role id, as before.
+- **Browse card only.** The role page stays as POLISH-1 left it.
 
-**Still to build (needs the connector):** an image column + a storage bucket
-with size and type limits and its own RLS (**not** the shape of
-`enquiry_attachments`, which CLAUDE.md lists as accepting uploads of any size
-or type from any signed-in user), an Edge Function for the fetch-and-store
-path, the form control, and an admin take-down.
+Built: `role_images` + the public `role-images` bucket (5 MB; JPEG, PNG,
+WebP; admin INSERT only -- no UPDATE or DELETE policy, so a file cannot be
+swapped after it is on the list), `volunteer_opportunities.image_id`,
+`admin_add_role_image` / `admin_set_role_image_active` (audited),
+`RoleImagePicker` on both role forms, and a **Pictures** sub-tab on
+`/admin/manage`. The admin's browser resizes an upload to 1200px wide and
+re-encodes it, which also strips EXIF -- a phone photo's GPS position never
+leaves the machine (the walk proves it).
+
+**Held:** `supabase/pending/polish9_drop_category.sql` drops `category` once
+this client is live -- the deployed client still reads and writes it.
+
+> **Probes leave a file behind.** Storage refuses a direct SQL delete
+> (`storage.protect_delete`) and the bucket deliberately has no DELETE
+> policy, so each run of `probe_role_images` / `walk_role_images` leaves one
+> small unreferenced image in the bucket after its library row is removed.
+> Clear them from the Supabase dashboard's Storage page if they matter.
 
 **Built now:**
 
@@ -622,3 +640,6 @@ path, the form control, and an admin take-down.
 
 Re-runnable: `.scratch/walk_preview.py` (14 UI checks; it creates its own
 DRAFT fixture — invisible on the public browse — and sweeps it by `atexit`).
+`.scratch/probe_role_images.py` (39 cases, throwaway admin-a) and
+`.scratch/walk_role_images.py` (28 UI checks); both print the SQL that removes
+the picture they added.

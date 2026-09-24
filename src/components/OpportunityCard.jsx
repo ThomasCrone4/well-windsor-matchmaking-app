@@ -12,6 +12,7 @@
 // the role may not exist yet.
 import { Link } from 'react-router-dom';
 import OpportunityPhoto from './OpportunityPhoto';
+import { opportunityImage } from '../utils/opportunityImages';
 import { formatOpportunitySchedule } from '../utils/schedule';
 
 export default function OpportunityCard({
@@ -39,13 +40,11 @@ export default function OpportunityCard({
 
   return (
     <li className="card !p-0 flex flex-col overflow-hidden">
-      {/* Photograph chosen from the category. There is no image column and
-          no upload, so this is a fallback, not a picture of this role --
-          see utils/opportunityImages.js. */}
+      {/* POLISH-9. Chosen by the organisation from the admins' library, or
+          a neutral fallback when none was -- see utils/opportunityImages.js. */}
       <Wrap className="block h-40 sm:h-44 overflow-hidden" tabIndex={-1} aria-hidden="true">
         <OpportunityPhoto
-          category={op.category}
-          id={op.id}
+          image={opportunityImage(op)}
           sizes="(min-width: 1024px) 45vw, 100vw"
         />
       </Wrap>

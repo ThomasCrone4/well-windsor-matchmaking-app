@@ -119,7 +119,9 @@ export default function OpportunitiesPage() {
           status,
           org_id,
           org_name,
-          category,
+          image_path,
+          image_static,
+          image_alt,
           created_at
         `)
         .order('created_at', { ascending: false });

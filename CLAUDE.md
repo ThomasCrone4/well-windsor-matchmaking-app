@@ -1406,46 +1406,45 @@ app is consistent.
 Covered by `.scratch/test_date_range.mjs` (11 cases): a walk cannot reach all
 four range shapes, because the live roles' dates are whatever they are today.
 
-### Outstanding, and blocked: an image on a role (POLISH-9)
+### A picture on a role (POLISH-9, 2026-09-24, branch `polish-role-images`)
 
-**A role image is half built, and the missing half needs the Supabase
-connector.** The decisions are all made and recorded as POLISH-9 in
-`PENDING-DECISIONS.md` — do not re-ask them.
+**Organisations choose a picture; admins supply them. Nobody else uploads.**
+The first plan (organisation upload, URL fetch, an Edge Function) was
+replaced by the user before it was built -- do not revive it. Decisions are
+in `PENDING-DECISIONS.md` as POLISH-9.
 
-**Built and merged:** the Preview button on both role forms, and the two
-components it depends on. `OpportunityCard.jsx` (extracted from the browse)
-and `RoleDetailBody.jsx` (extracted from the role page) exist so the preview
-renders the real thing rather than a copy. **If you change how a card or the
-role page looks, change those components** — the browse, the role page and
-the preview all read them, which is the point.
+- **`role_images` is the library**; `volunteer_opportunities.image_id` points
+  at one row, nullable (no choice = a neutral fallback hashed off the id).
+  A row is either `static_base` (a stock photo shipped in `public/images/`)
+  or `storage_path` (a file in the public `role-images` bucket).
+- **Same shape as skills:** hiding is soft and nobody loses a picture they
+  already chose; there is no delete path; the only writers are
+  `admin_add_role_image` and `admin_set_role_image_active`, both audited.
+  The `image_rules` trigger refuses CHOOSING a hidden picture but lets a role
+  already holding one be re-saved (the towns rule).
+- **The bucket has an admin INSERT policy and nothing else.** No UPDATE or
+  DELETE, so an uploaded file cannot be swapped for something else after it
+  is on the list. 5 MB; JPEG, PNG, WebP.
+- **The admin's browser resizes (1200px) and re-encodes before upload**,
+  which strips EXIF -- including a phone photo's GPS position.
+- **`public_opportunities` carries the picture flattened** as `image_id`,
+  `image_path`, `image_static`, `image_alt`, so the browse needs no second
+  query. `imageFieldsFor()` builds the same shape from a library row for the
+  preview.
+- **`category` is dead but not dropped** -- the deployed client still reads
+  and writes it. `supabase/pending/polish9_drop_category.sql` waits for this
+  client to be live.
+- **Storage refuses `DELETE FROM storage.objects`** (`storage.protect_delete`,
+  42501), even as the owner. So a probe that uploads leaves a file in the
+  bucket for ever unless someone clears it in the dashboard; its library row
+  is deletable by SQL, and both scripts print that SQL.
+- **A component declared inside a render body remounts on every render.**
+  The picker's tiles were, at first, and every thumbnail reloaded on every
+  click. Declare it at module level.
+- **The preview** (merged earlier): `OpportunityCard.jsx` and
+  `RoleDetailBody.jsx` are what the browse, the role page and the preview
+  all render. **If you change how a card or the role page looks, change
+  those components.**
 
-**Not built, because it cannot be applied from here:**
-
-1. an image column on `volunteer_opportunities`;
-2. a storage bucket with size and type limits and its own RLS — **not** the
-   shape of `enquiry_attachments`, which accepts uploads of any size or type
-   from any signed-in user and is listed above as a known problem;
-3. an Edge Function that fetches a pasted URL **once**, server-side, and
-   stores our own copy (never a hotlink: a hotlinked image can be swapped for
-   anything after an admin has looked at it, breaks silently when the source
-   moves, and leaks every visitor's IP to that host);
-4. the form control — upload, paste a link, or pick one of the nine stock
-   images in `public/images/`;
-5. an admin take-down, which is what makes the on-screen safeguarding rule
-   enforceable rather than decorative.
-
-**Why it is blocked.** The `mcp__claude_ai_Supabase__*` tools disconnected
-mid-session on 2026-09-24. `.env.local` carries only `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_ANON_KEY` — no service-role key and no database password — and
-the Supabase CLI is installed but has no login token, so there is no fallback
-route for `apply_migration` or `deploy_edge_function`. Reconnect the
-connector (restarting the session reloads MCP servers) and check with
-`list_migrations` before starting.
-
-**The safeguarding note in `opportunityImages.js` is now out of date.** It
-says per-opportunity upload "is deliberately NOT built" pending a decision
-about photographs of identifiable children. That question has since been put
-to the user and answered: upload is allowed, the rule is stated on the form,
-and an admin can take an image down. Update that comment when the feature
-lands, or it will read as a live objection to something the charity has
-agreed to.
+Re-runnable: `.scratch/probe_role_images.py` (39) and
+`.scratch/walk_role_images.py` (28), both as the throwaway admin-a.

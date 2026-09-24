@@ -1,85 +1,49 @@
 /**
- * Fallback photography for an opportunity, chosen from its category.
+ * The picture on an opportunity card (POLISH-9).
  *
- * The approved design gives every role a picture. There is no image column
- * on volunteer_opportunities and no public storage bucket, and
- * per-opportunity upload is deliberately NOT built: it needs a safeguarding
- * decision about who may publish photographs of identifiable children, and
- * that question has not been put to the charity. So the organisation picks
- * one of three categories and the client maps it to a photograph that is
- * already in public/images/.
+ * Organisations CHOOSE a picture; admins SUPPLY them. There is no upload for
+ * organisations and never will be: the library is `role_images`, filled only
+ * by admin_add_role_image, and a role points at one row by `image_id`. So
+ * every picture a volunteer sees on a card was put there by the charity --
+ * which is why the role form carries no safeguarding notice about photographs
+ * of children. (An earlier note here said per-role upload was "deliberately
+ * NOT built" pending a safeguarding decision. The decision was made
+ * 2026-09-24: organisations do not upload at all.)
  *
- * `category` is nullable and most rows have none, so the null case is the
- * NORMAL case rather than an error path -- at launch it will be every row.
- * Putting a picture of children on a role that may involve no children
- * would be a claim, and the wrong one, so the fallbacks claim nothing: a
- * town, some pencils, four people from behind. No identifiable faces.
+ * A library row is one of two kinds:
+ *   - `static_base`: a stock photograph that ships with the site in
+ *     public/images/, at 480w and 800w as WebP and JPEG (scripts/prep-images.py);
+ *   - `storage_path`: a file an admin uploaded to the public `role-images`
+ *     bucket, already resized in the browser before upload (one width).
  *
- * There are three of them rather than one because one repeated down a
- * two-column grid stops reading as a deliberate choice and starts reading
- * as a broken image loop -- which is what a single castle on eleven of
- * fourteen cards actually looked like. The pick is derived from the
- * opportunity id, so it is stable: the same role keeps the same picture
- * across renders, reloads and sessions, and neighbouring cards differ.
+ * The image is OPTIONAL. With none chosen the card shows one of three neutral
+ * fallbacks that claim nothing -- a town, some pencils, four people from
+ * behind -- picked by hashing the role id, so the same role keeps the same
+ * picture and neighbouring cards differ. One picture repeated down the grid
+ * read as a broken image loop, which is what a single castle on eleven of
+ * fourteen cards actually looked like.
  *
- * Every file here exists at 480w and 800w as both WebP and JPEG, written by
- * scripts/prep-images.py. Cards render at roughly 300-520 CSS px, so those
- * two widths cover the range including 2x.
+ * The card shows it; the role page does not (POLISH-1: one column, no photo).
  */
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from './supabase';
 
-/** The choices offered when posting or editing. Values match the CHECK. */
-export const OPPORTUNITY_CATEGORIES = [
-  {
-    value: 'in_schools',
-    label: 'In schools, with children',
-    hint: 'Reading support, classroom help, lunchtime and playground roles.',
-  },
-  {
-    value: 'behind_scenes',
-    label: 'Behind the scenes',
-    hint: 'Admin, fundraising, research, web and social. Often remote.',
-  },
-  {
-    value: 'one_off',
-    label: 'A one-off event',
-    hint: 'A single day or evening, like sports days, fun runs and fetes.',
-  },
-];
+export const ROLE_IMAGE_BUCKET = 'role-images';
 
 const NEUTRAL = [
   {
-    base: 'image-asset-3',
+    static_base: 'image-asset-3',
     alt: 'Windsor Castle at the end of a busy Windsor street',
   },
   {
-    base: 'unsplash-image-l3n9q27zulw',
+    static_base: 'unsplash-image-l3n9q27zulw',
     alt: 'A row of sharpened colouring pencils against a white background',
   },
   {
-    base: 'image-asset-2',
+    static_base: 'image-asset-2',
     alt: 'Four people seen from behind, arms around each other, on a tree-lined road',
   },
 ];
-
-const BY_CATEGORY = {
-  // Was unsplash-image-z-7yz6-f1zq, a stock shot of a man reading to a
-  // boy. The charity asked for it to be removed from the approved design
-  // on 2026-09-10 and the same swap is made here, so the app and the
-  // stakeholder mockup show the same picture for the same kind of role.
-  // This one is the charity's own asset and shows no identifiable faces.
-  in_schools: {
-    base: 'image-asset-1',
-    alt: 'Many hands stacked together in the middle of a circle of people',
-  },
-  behind_scenes: {
-    base: 'unsplash-image-oycl7y4y0bk',
-    alt: 'A desk with a stack of books, an apple, pencils and alphabet blocks',
-  },
-  one_off: {
-    base: 'image-asset-4',
-    alt: 'Children in a field holding a play parachute above their heads',
-  },
-};
 
 /**
  * Stable index into NEUTRAL from an opportunity id. Deliberately not
@@ -96,23 +60,70 @@ function neutralFor(id) {
 }
 
 /**
- * @param {string|null|undefined} category
- * @param {string|null|undefined} id  opportunity id, only used to pick a
- *   stable fallback when there is no category
- * @returns {{srcSetWebp: string, srcSetJpeg: string, src: string, alt: string}}
- *
- * An unrecognised value falls through to a neutral image rather than
- * throwing or rendering an empty slot -- the CHECK constraint keeps the
- * column honest, but a stale client should still draw something.
+ * Where a library row's file is served from.
+ * @param {{storage_path?: string|null, static_base?: string|null, alt: string}} image
+ * @returns {{src: string, srcSetWebp?: string, srcSetJpeg?: string, alt: string}}
  */
-export function opportunityImage(category, id) {
-  const picked = BY_CATEGORY[category] ?? neutralFor(id);
-  const path = (w, ext) => `/images/${picked.base}-${w}.${ext}`;
-
+export function roleImageSources(image) {
+  if (image.storage_path) {
+    const { data } = supabase.storage
+      .from(ROLE_IMAGE_BUCKET)
+      .getPublicUrl(image.storage_path);
+    return { src: data.publicUrl, alt: image.alt };
+  }
+  const path = (w, ext) => `/images/${image.static_base}-${w}.${ext}`;
   return {
     srcSetWebp: `${path(480, 'webp')} 480w, ${path(800, 'webp')} 800w`,
     srcSetJpeg: `${path(480, 'jpg')} 480w, ${path(800, 'jpg')} 800w`,
     src: path(800, 'jpg'),
-    alt: picked.alt,
+    alt: image.alt,
   };
+}
+
+/**
+ * The picture for a role as `public_opportunities` returns it, whose image
+ * columns are flattened to image_path / image_static / image_alt.
+ * A role with no image -- or a stale client missing the columns -- gets a
+ * neutral fallback rather than an empty slot.
+ */
+export function opportunityImage(op) {
+  if (op?.image_path || op?.image_static) {
+    return roleImageSources({
+      storage_path: op.image_path,
+      static_base: op.image_static,
+      alt: op.image_alt ?? '',
+    });
+  }
+  return roleImageSources(neutralFor(op?.id));
+}
+
+/** The view's flattened image columns for a library row (or none). */
+export function imageFieldsFor(image) {
+  return {
+    image_id: image?.id ?? null,
+    image_path: image?.storage_path ?? null,
+    image_static: image?.static_base ?? null,
+    image_alt: image?.alt ?? null,
+  };
+}
+
+/**
+ * The whole library, hidden rows included: a role that holds a since-hidden
+ * picture must still be able to show it in its own form (the same rule as
+ * pickerOptions for skills). Pickers filter to active + the one held.
+ */
+export function useRoleImages() {
+  return useQuery({
+    queryKey: ['role-images'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('role_images')
+        .select('id, storage_path, static_base, alt, is_active, sort_order, created_at')
+        .order('sort_order')
+        .order('created_at');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 }
