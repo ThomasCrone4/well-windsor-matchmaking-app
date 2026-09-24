@@ -1405,3 +1405,47 @@ app is consistent.
 
 Covered by `.scratch/test_date_range.mjs` (11 cases): a walk cannot reach all
 four range shapes, because the live roles' dates are whatever they are today.
+
+### Outstanding, and blocked: an image on a role (POLISH-9)
+
+**A role image is half built, and the missing half needs the Supabase
+connector.** The decisions are all made and recorded as POLISH-9 in
+`PENDING-DECISIONS.md` — do not re-ask them.
+
+**Built and merged:** the Preview button on both role forms, and the two
+components it depends on. `OpportunityCard.jsx` (extracted from the browse)
+and `RoleDetailBody.jsx` (extracted from the role page) exist so the preview
+renders the real thing rather than a copy. **If you change how a card or the
+role page looks, change those components** — the browse, the role page and
+the preview all read them, which is the point.
+
+**Not built, because it cannot be applied from here:**
+
+1. an image column on `volunteer_opportunities`;
+2. a storage bucket with size and type limits and its own RLS — **not** the
+   shape of `enquiry_attachments`, which accepts uploads of any size or type
+   from any signed-in user and is listed above as a known problem;
+3. an Edge Function that fetches a pasted URL **once**, server-side, and
+   stores our own copy (never a hotlink: a hotlinked image can be swapped for
+   anything after an admin has looked at it, breaks silently when the source
+   moves, and leaks every visitor's IP to that host);
+4. the form control — upload, paste a link, or pick one of the nine stock
+   images in `public/images/`;
+5. an admin take-down, which is what makes the on-screen safeguarding rule
+   enforceable rather than decorative.
+
+**Why it is blocked.** The `mcp__claude_ai_Supabase__*` tools disconnected
+mid-session on 2026-09-24. `.env.local` carries only `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_ANON_KEY` — no service-role key and no database password — and
+the Supabase CLI is installed but has no login token, so there is no fallback
+route for `apply_migration` or `deploy_edge_function`. Reconnect the
+connector (restarting the session reloads MCP servers) and check with
+`list_migrations` before starting.
+
+**The safeguarding note in `opportunityImages.js` is now out of date.** It
+says per-opportunity upload "is deliberately NOT built" pending a decision
+about photographs of identifiable children. That question has since been put
+to the user and answered: upload is allowed, the rule is stated on the form,
+and an admin can take an image down. Update that comment when the feature
+lands, or it will read as a live objection to something the charity has
+agreed to.
