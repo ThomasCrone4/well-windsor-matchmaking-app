@@ -115,8 +115,13 @@ export default function SkillsPicker({
           >
             {groups.map(([category, rows]) => (
               <div key={category} className="mb-2 last:mb-0">
+                {/* text-[13px] overrides .section-kicker's 11px: the class is
+                    shared with the role page's WHEN/WHERE headings, which are
+                    sitting over body copy and want to stay small. In here
+                    they are the only thing separating four lists. Utilities
+                    come after components in the cascade, so this wins. */}
                 <p
-                  className="section-kicker px-2 py-1"
+                  className="section-kicker px-2 py-1 text-[13px]"
                   style={{ color: 'var(--color-text-muted)' }}
                 >
                   {category}
