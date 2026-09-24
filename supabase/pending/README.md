@@ -25,12 +25,15 @@ charity's go-ahead rather than a deploy.
 
 ## Currently held
 
-- **`polish9_drop_category.sql`** — drops `volunteer_opportunities.category`,
-  replaced by `image_id` (POLISH-9). Waits for the `polish-role-images`
-  client to be merged and live: the client deployed before it reads and
-  writes `category`.
+Nothing.
 
 ## Applied from here
+
+- **`polish9_drop_category.sql`** — applied 2026-09-24 as
+  `20260924144544_polish9_drop_category`, once the `polish-role-images`
+  client was merged and live. Verified on the published bundle
+  (`index-CKA3gybT.js`): every remaining `category` belongs to `skills`, and
+  `in_schools` and "Kind of role" are gone.
 
 - **`wf9_2_drop_availability.sql`** — applied 2026-09-19 as
   `20260919194219_wf9_drop_availability_matching`, once 9.2's client was

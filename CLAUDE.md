@@ -1431,9 +1431,10 @@ in `PENDING-DECISIONS.md` as POLISH-9.
   `image_path`, `image_static`, `image_alt`, so the browse needs no second
   query. `imageFieldsFor()` builds the same shape from a library row for the
   preview.
-- **`category` is dead but not dropped** -- the deployed client still reads
-  and writes it. `supabase/pending/polish9_drop_category.sql` waits for this
-  client to be live.
+- **`volunteer_opportunities.category` is dropped** (20260924144544), after
+  the client was verified live. Writing it is a `PGRST204`. (`skills.category`
+  is a different column and still in use -- a bundle grep for `category`
+  finds only that one now.)
 - **Storage refuses `DELETE FROM storage.objects`** (`storage.protect_delete`,
   42501), even as the owner. So a probe that uploads leaves a file in the
   bucket for ever unless someone clears it in the dashboard; its library row
